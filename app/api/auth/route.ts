@@ -13,7 +13,10 @@ export async function GET(req: NextRequest) {
 
   // Generate a random state nonce for CSRF protection
   const state = crypto.randomUUID().replace(/-/g, "");
-  const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`;
+  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+  const redirectUri = `${appUrl}/api/auth/callback`;
+
+  console.log("[auth/begin]", { shop: sanitizedShop, redirectUri, apiKey: process.env.SHOPIFY_API_KEY?.slice(0, 8) });
 
   const authUrl =
     `https://${sanitizedShop}/admin/oauth/authorize` +
