@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/jobs/evaluate-alerts",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/jobs/compute-baselines",
