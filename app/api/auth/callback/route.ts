@@ -25,11 +25,11 @@ export async function GET(req: NextRequest) {
     return new Response("Missing required OAuth params", { status: 400 });
   }
 
-  const secret = process.env.SHOPIFY_API_SECRET!;
+  const secretRaw = process.env.SHOPIFY_API_SECRET!;
 
-  // Build param string from the RAW query string to avoid URLSearchParams decoding issues
-  const rawSearch = req.nextUrl.search.slice(1); // remove leading ?
-  const rawPairs = rawSearch
+  // Build param string — sorted, decoded, hmac excluded
+  const rawSearch = req.nextUrl.search.slice(1);
+  const paramString = rawSearch
     .split("&")
     .map((pair) => pair.split("=") as [string, string])
     .filter(([key]) => decodeURIComponent(key) !== "hmac")
@@ -37,17 +37,26 @@ export async function GET(req: NextRequest) {
     .map(([k, v]) => `${decodeURIComponent(k)}=${decodeURIComponent(v ?? "")}`)
     .join("&");
 
-  const digest = createHmac("sha256", secret).update(rawPairs).digest("hex");
+  // Try both: full secret (with shpss_ prefix) and stripped (without prefix)
+  const secretStripped = secretRaw.replace(/^shpss_/, "");
+  const digestFull     = createHmac("sha256", secretRaw).update(paramString).digest("hex");
+  const digestStripped = createHmac("sha256", secretStripped).update(paramString).digest("hex");
 
-  console.log("[callback] HMAC check", {
-    paramString: rawPairs,
-    expected: digest.slice(0, 8) + "...",
-    received: hmac?.slice(0, 8) + "...",
-    match: digest === hmac,
+  console.log("[callback] HMAC debug", {
+    matchFull:     digestFull     === hmac,
+    matchStripped: digestStripped === hmac,
+    receivedPrefix: hmac?.slice(0, 8),
+    fullPrefix:     digestFull.slice(0, 8),
+    strippedPrefix: digestStripped.slice(0, 8),
+    secretLen: secretRaw.length,
+    strippedLen: secretStripped.length,
   });
 
+  const digest = digestFull === hmac ? digestFull : digestStripped;
+  const secret = digestFull === hmac ? secretRaw : secretStripped;
+
   if (digest !== hmac) {
-    return new Response("HMAC validation failed", { status: 403 });
+    return new Response("HMAC validation failed — check Vercel logs", { status: 403 });
   }
 
   // --- 3. Exchange code for access token ---
