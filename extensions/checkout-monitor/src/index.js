@@ -9,7 +9,7 @@ register(({ analytics, browser, init }) => {
   const INGEST_URL = "https://checkoutmaxx-rt55.vercel.app/api/pixel/ingest";
 
   const shopDomain =
-    init.context?.document?.location?.hostname ||
+    init.data?.shop?.myshopifyDomain ||
     init.data?.shop?.domain ||
     null;
 
