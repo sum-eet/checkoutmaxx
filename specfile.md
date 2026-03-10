@@ -961,68 +961,147 @@ export async function deregisterAppPixel(shop: string, accessToken: string, pixe
 
 ## Part 3: Build Phases (30-Day Roadmap)
 
-### Phase 1 — Days 1–7: Foundation
+> **Why this order matters:** The dashboard comes before the alert engine deliberately.
+> The dashboard is the QA tool for Phase 1. Until you can visually verify that funnel
+> data is correct — sessions correlating, drop-offs making sense, DISCOUNT_ERROR events
+> appearing — you cannot trust any threshold logic built on top of it. Building alerts
+> on unverified data produces false positives that destroy merchant trust on day one.
+> Verify data visually first. Build alerts on confirmed-clean data second.
+
+---
+
+### Phase 1 — Days 1–7: Foundation ✅ COMPLETE
 **Goal: Install flow works end to end. Events are being received and stored.**
 
-- [ ] Scaffold Next.js app with Shopify App Bridge 4.x
-- [ ] Implement OAuth install flow (`@shopify/shopify-app-next`)
-- [ ] Set up Supabase project + run Prisma migrations
-- [ ] Implement App Pixel registration on install (auto, no merchant action)
-- [ ] Build `/api/pixel/ingest` endpoint
-- [ ] Write pixel code (`checkout-monitor.js`), test all 7 event subscriptions
-- [ ] Deploy to Vercel, test against a real dev store
-- [ ] Confirm events are flowing into DB
+- [x] Scaffold Next.js app with Shopify App Bridge 4.x
+- [x] Implement OAuth install flow (`@shopify/shopify-app-next`)
+- [x] Set up Supabase project + run Prisma migrations
+- [x] Implement App Pixel registration on install (auto, no merchant action)
+- [x] Build `/api/pixel/ingest` endpoint
+- [x] Write pixel code (`checkout-monitor.js`), test all 7 event subscriptions
+- [x] Deploy to Vercel, test against a real dev store
+- [x] Confirm events are flowing into DB
 
-**Exit criteria:** Install a test app on a dev Shopify store, go through checkout, see 6 events in the DB.
-
----
-
-### Phase 2 — Days 8–14: Alert Engine
-**Goal: Alerts fire correctly. Email delivery works.**
-
-- [ ] Build `compute-baselines` job + wire to Vercel cron
-- [ ] Build `evaluate-alerts` job — all 4 alert types
-- [ ] Implement 2-hour cooldown logic
-- [ ] Implement 48h silent learning period
-- [ ] Set up Resend account, build email templates (plain text first, styled later)
-- [ ] Build Slack webhook sender + test button in settings UI
-- [ ] Write unit tests for alert threshold logic (Jest)
-- [ ] Manually trigger each alert type against test data
-
-**Exit criteria:** Seed DB with fake events that breach each threshold. Receive all 4 alert types via email.
+**Exit criteria met:** Events flowing into CheckoutEvent table confirmed.
 
 ---
 
-### Phase 3 — Days 15–21: Dashboard
-**Goal: The funnel view is live and accurate.**
+### Phase 2 — Days 8–14: Dashboard + Data Verification
+**Goal: The funnel view is live, accurate, and used to verify Phase 1 data is correct.
+Do not proceed to Phase 3 until you can look at this dashboard with real checkout data
+and confirm the numbers make sense.**
 
-- [ ] Build funnel metrics query in `lib/metrics.ts`
-- [ ] Build `FunnelChart` component (Recharts or Chart.js — keep it simple)
-- [ ] Add time range filter (24h / 7d / 30d)
-- [ ] Add device type filter (mobile / desktop)
-- [ ] Add country filter
-- [ ] Build alert history page (list of past alerts, status, metadata)
-- [ ] Build settings page (email, Slack, alert toggles)
-- [ ] Implement weekly digest email job
+**Build in this exact order:**
 
-**Exit criteria:** Dashboard accurately shows funnel from real test checkout sessions. Filters work.
+**Step 1 — Metrics query layer (`lib/metrics.ts`)**
+All DB queries that power the dashboard. Build and test these functions in isolation first.
+
+```typescript
+// Functions to implement:
+getFunnelMetrics(shopId, dateRange, device?, country?)
+  → { step, sessions, dropCount, dropPct, vsBaseline }[]
+
+getKpiMetrics(shopId, dateRange)
+  → { checkoutsStarted, ordersCompleted, cvr, cvrDelta, revenueAtRisk }
+
+getLiveEventFeed(shopId, limit: 50)
+  → { occurredAt, eventType, discountCode?, country, deviceType, totalPrice? }[]
+
+getTopErrors(shopId, dateRange)
+  → { errorType, count, trend }[]
+
+getDroppedProducts(shopId, dateRange)
+  → { productTitle, variant, droppedCartCount, pctOfDrops }[]
+
+getStatusBannerState(shopId)
+  → { state: 'healthy'|'alert'|'learning'|'no_data', message, activeAlert? }
+```
+
+For `getDroppedProducts`: join `checkout_started` events (which contain line items in
+`rawPayload`) against sessions that never produced a `checkout_completed`. Extract and
+aggregate product title + variant from those sessions' rawPayload line items.
+
+**Step 2 — Date range selector component**
+Polaris `ButtonGroup` presets: `1h` | `24h` | `7d` | `30d` | `Custom`.
+Custom opens Polaris `Modal` with `DatePicker` (from/to). Persists selection in
+React state, passes `{ start: Date, end: Date }` down to all child components.
+
+**Step 3 — Monitor page, top to bottom:**
+- `StatusBanner` — green/red/yellow Polaris `Banner`, calls `getStatusBannerState`
+- `KpiCards` — 4 Polaris `Card` components in a grid
+- `CheckoutFunnel` — horizontal bars (plain divs + inline styles, no chart lib)
+  with Polaris `Filters` for device + country
+- `ErrorsTable` — Polaris `IndexTable`, clicking a row opens drill-down `Modal`
+- `DroppedProductsTable` — Polaris `IndexTable`
+- `LiveEventFeed` — list with 30-second auto-refresh via `setInterval` + SWR
+
+**Step 4 — Settings page (persistence only, no alert logic yet)**
+Wire the notification settings form (email, Slack URL, alert toggles, thresholds)
+to actually save to the DB via a `/api/settings` PATCH endpoint.
+Currently these are local state only — they need to persist.
+
+**Step 5 — Alerts page shell (structure only)**
+Build the Alerts page with Active + History tabs using Polaris `Tabs`.
+Active tab: `EmptyState` ("No active alerts") — will be populated in Phase 3.
+History tab: empty `IndexTable` with correct columns — will be populated in Phase 3.
+Do NOT wire any alert logic yet. Just the UI shell.
+
+**Data verification checklist (must complete before moving to Phase 3):**
+- [ ] Go through 5+ test checkouts on dev store, including: one normal completion,
+      one abandonment at shipping step, one with a bad discount code, one on mobile
+- [ ] Confirm funnel percentages reflect what actually happened
+- [ ] Confirm `DISCOUNT_ERROR` events appear in the live feed and errors table
+- [ ] Confirm dropped products table shows the correct product from abandoned sessions
+- [ ] Confirm date range switching updates all data correctly
+- [ ] Confirm device filter correctly splits mobile vs desktop sessions
+
+**Exit criteria:** Open the dashboard. Go through test checkouts. Confirm every number
+on screen is explainable by what you actually did during those checkouts.
+
+---
+
+### Phase 3 — Days 15–21: Alert Engine
+**Goal: Alerts fire correctly. Email delivery works. Built on verified data.**
+
+**Only start this phase once Phase 2 exit criteria is confirmed.**
+
+- [ ] Build `compute-baselines` job (`/api/jobs/compute-baselines`) + wire to Vercel cron
+  - Vercel Hobby plan = daily cron only. That is acceptable for baseline computation.
+  - Requires ≥20 `checkout_started` events AND ≥48h of data before computing
+- [ ] Build `evaluate-alerts` job (`/api/jobs/evaluate-alerts`) + wire to Vercel cron
+  - Runs all 4 alert checks: abandonment spike, failed discount, extension error, payment failure
+  - 2-hour cooldown per alert type per shop (check BEFORE evaluating, not after)
+  - 48h silent period enforced: if no baseline exists, skip all abandonment checks
+- [ ] Set up Resend, build plain-text email templates
+  - Every email: what broke + probable cause + action deep-link into Shopify admin
+- [ ] Build Slack webhook sender + Test button in Settings (already has the UI shell)
+- [ ] Wire `AlertLog` ROI fields: snapshot CVR/AOV/sessions at time of alert
+- [ ] Wire "Mark resolved" button on Active Alerts tab → sets `resolvedAt`, computes ROI estimate
+- [ ] Populate Alert History table with real data from `AlertLog`
+- [ ] Write unit tests for all 4 alert threshold functions (Jest)
+- [ ] Seed DB with fake events breaching each threshold, confirm all 4 alert emails arrive
+
+**Exit criteria:** Seed DB with fake events that breach each threshold.
+Receive all 4 alert types via email. Confirm cooldown prevents repeat alerts.
+Confirm 48h learning period shows correct UI state on new install.
 
 ---
 
 ### Phase 4 — Days 22–28: Polish + App Store Prep
 **Goal: Ready for Shopify App Store submission.**
 
-- [ ] Post-install welcome screen with "Your store is now being monitored" confirmation
-- [ ] 48h learning period banner shown in UI when baseline not yet available
-- [ ] Error handling on all API routes (graceful failures, no 500s shown to merchant)
+- [ ] Post-install welcome screen ("Your store is now being monitored")
+- [ ] Weekly digest email job (`/api/jobs/weekly-digest`, cron Monday 9am)
+- [ ] ROI summary card in Settings page (total recovered this month/year, multiplier vs plan cost)
+- [ ] Error handling on all API routes (graceful failures, no 500s to merchant)
 - [ ] Shopify App Store listing: screenshots, description, privacy policy page
 - [ ] GDPR webhooks: `customers/data_request`, `customers/redact`, `shop/redact`
 - [ ] App uninstall webhook: deregister pixel, mark shop inactive
-- [ ] Rate limiting on `/api/pixel/ingest` (protect against pixel spam)
-- [ ] Load test ingest endpoint with 1000 events/minute
+- [ ] Rate limiting on `/api/pixel/ingest`
+- [ ] Load test ingest endpoint (1000 events/minute)
 - [ ] Submit to Shopify App Store review
 
-**Exit criteria:** App passes Shopify's review checklist. Installs cleanly on 3 different test stores.
+**Exit criteria:** App passes Shopify's review checklist. Installs cleanly on 3 test stores.
 
 ---
 
@@ -1500,4 +1579,4 @@ ROI estimates are always labeled "estimated" — never "saved" or "earned." The 
 
 ---
 
-*End of specification. Version 1.2 — final for Claude Code handoff.*
+*End of specification. Version 1.3 — Phase order corrected. Dashboard before alert engine.*

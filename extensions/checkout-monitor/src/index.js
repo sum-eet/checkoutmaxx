@@ -5,6 +5,8 @@
 // - No localStorage or sessionStorage
 // - No external scripts
 
+import { register } from "@shopify/web-pixels-extension";
+
 register(({ analytics, browser, init }) => {
   const INGEST_URL = "https://checkoutmaxx-rt55.vercel.app/api/pixel/ingest";
 
