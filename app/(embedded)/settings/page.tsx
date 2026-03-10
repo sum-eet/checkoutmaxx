@@ -53,6 +53,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [testingSlack, setTestingSlack] = useState(false);
+  const [slackTestResult, setSlackTestResult] = useState<"ok" | "fail" | null>(null);
 
   useEffect(() => {
     if (!shop) return;
@@ -160,11 +162,41 @@ export default function SettingsPage() {
                 <TextField
                   label="Slack webhook URL"
                   value={settings.slackWebhookUrl}
-                  onChange={(v) => set("slackWebhookUrl", v)}
+                  onChange={(v) => { set("slackWebhookUrl", v); setSlackTestResult(null); }}
                   placeholder="https://hooks.slack.com/services/..."
                   autoComplete="off"
                   helpText="Create an Incoming Webhook in your Slack app settings."
+                  connectedRight={
+                    <Button
+                      loading={testingSlack}
+                      disabled={!settings.slackWebhookUrl}
+                      onClick={async () => {
+                        setTestingSlack(true);
+                        setSlackTestResult(null);
+                        try {
+                          const res = await fetch("/api/settings/test-slack", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ shop, webhookUrl: settings.slackWebhookUrl }),
+                          });
+                          setSlackTestResult(res.ok ? "ok" : "fail");
+                        } catch {
+                          setSlackTestResult("fail");
+                        } finally {
+                          setTestingSlack(false);
+                        }
+                      }}
+                    >
+                      Test
+                    </Button>
+                  }
                 />
+                {slackTestResult === "ok" && (
+                  <Text as="p" tone="success">Test message sent successfully.</Text>
+                )}
+                {slackTestResult === "fail" && (
+                  <Text as="p" tone="critical">Test failed. Check your webhook URL.</Text>
+                )}
                 <SettingToggle
                   enabled={settings.alertSlackEnabled}
                   action={{

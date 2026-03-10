@@ -1,4 +1,6 @@
 import prisma from "./prisma";
+import { sendAlertEmail } from "./send-email";
+import { sendSlackMessage } from "./send-slack";
 
 const ALERT_COOLDOWN_MINUTES = 120;
 const ABANDONMENT_THRESHOLD = 0.20;
@@ -7,8 +9,17 @@ const DISCOUNT_FAILURE_MIN_COUNT = 3;
 
 export async function evaluateAlerts() {
   const shops = await prisma.shop.findMany({ where: { isActive: true } });
+  const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
   for (const shop of shops) {
+    // Silent learning period: skip shops with < 48h of data
+    const firstEvent = await prisma.checkoutEvent.findFirst({
+      where: { shopId: shop.id },
+      orderBy: { occurredAt: "asc" },
+      select: { occurredAt: true },
+    });
+    if (!firstEvent || firstEvent.occurredAt > fortyEightHoursAgo) continue;
+
     await Promise.allSettled([
       checkAbandonmentSpike(shop),
       checkFailedDiscounts(shop),
@@ -231,7 +242,43 @@ async function fireAlert(
     sessionsPerHourAtAlert?: number;
   }
 ) {
-  // Cooldown already checked for most alert types; extension errors check per-extension above
+  let sentEmail = false;
+  let sentSlack = false;
+
+  // Send email
+  if (shop.alertEmailEnabled && shop.alertEmail) {
+    try {
+      await sendAlertEmail({
+        to: shop.alertEmail,
+        title: alert.title,
+        body: alert.body,
+        actionUrl: alert.actionUrl,
+        actionLabel: alert.actionLabel,
+        shopDomain: shop.shopDomain,
+      });
+      sentEmail = true;
+    } catch (err) {
+      console.error(`[alert] Email send failed for ${shop.shopDomain}:`, err);
+    }
+  }
+
+  // Send Slack
+  if (shop.alertSlackEnabled && shop.slackWebhookUrl) {
+    try {
+      await sendSlackMessage({
+        webhookUrl: shop.slackWebhookUrl,
+        title: alert.title,
+        body: alert.body,
+        actionUrl: alert.actionUrl,
+        actionLabel: alert.actionLabel,
+        shopDomain: shop.shopDomain,
+      });
+      sentSlack = true;
+    } catch (err) {
+      console.error(`[alert] Slack send failed for ${shop.shopDomain}:`, err);
+    }
+  }
+
   await prisma.alertLog.create({
     data: {
       shopId: shop.id,
@@ -242,8 +289,8 @@ async function fireAlert(
       metadata: alert.metadata,
       actionUrl: alert.actionUrl,
       actionLabel: alert.actionLabel,
-      sentEmail: false,
-      sentSlack: false,
+      sentEmail,
+      sentSlack,
       cvrAtAlert: alert.cvrAtAlert,
       baselineCvrAtAlert: alert.baselineCvrAtAlert,
       aovAtAlert: alert.aovAtAlert,
@@ -251,8 +298,7 @@ async function fireAlert(
     },
   });
 
-  // Notification delivery is Phase 2 — stubs prevent import errors
-  console.log(`[alert] Fired ${alert.alertType} for ${shop.shopDomain}: ${alert.title}`);
+  console.log(`[alert] Fired ${alert.alertType} for ${shop.shopDomain} | email:${sentEmail} slack:${sentSlack}`);
 }
 
 function getMostCommonGateway(sessions: { gatewayName: string | null }[]): string {
