@@ -10,25 +10,23 @@ export async function GET(req: NextRequest) {
   let session;
 
   try {
+    // web-api adapter: callback returns a Response on redirect, or throws on error
     const callbackResponse = await shopify.auth.callback({
       rawRequest: req,
-      rawResponse: new Response(),
     });
     session = callbackResponse.session;
-
-    // Persist session
     await sessionStorage.storeSession(session);
   } catch (err: any) {
     console.error("[auth/callback] OAuth failed:", err.message);
-    return NextResponse.json({ error: "OAuth failed" }, { status: 500 });
+    return new Response(`OAuth failed: ${err.message}`, { status: 500 });
   }
 
-  // Register webhooks (fire and forget — don't block redirect)
+  // Register webhooks — fire and forget
   registerWebhooks(session).catch((err) =>
     console.error("[auth/callback] Webhook registration failed:", err)
   );
 
-  // Deregister old pixel if one exists (one pixel per shop — Guardrail #9)
+  // Deregister old pixel (one pixel per shop — Guardrail #9)
   const existingShop = await prisma.shop.findUnique({
     where: { shopDomain: session.shop },
   });
@@ -45,6 +43,7 @@ export async function GET(req: NextRequest) {
   let pixelId: string | undefined;
   try {
     pixelId = await registerAppPixel(session.shop, session.accessToken!);
+    console.log(`[auth/callback] Pixel registered: ${pixelId}`);
   } catch (err) {
     console.error("[auth/callback] Pixel registration failed:", err);
   }
@@ -65,8 +64,8 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Redirect to install confirmation screen
-  const appUrl = process.env.SHOPIFY_APP_URL || "";
+  // Redirect to install confirmation
   const host = req.nextUrl.searchParams.get("host") || "";
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
   return NextResponse.redirect(`${appUrl}/install?shop=${session.shop}&host=${host}`);
 }

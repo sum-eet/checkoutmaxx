@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
     const result = await shopify.webhooks.validate({
       rawBody: await req.text(),
       rawRequest: req,
-      rawResponse: new Response(),
     });
 
     if (!result.valid) {
