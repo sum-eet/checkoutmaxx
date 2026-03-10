@@ -251,6 +251,45 @@ export async function getStatusBannerState(shopId: string): Promise<StatusResult
   return { state: "healthy" };
 }
 
+export type FailedDiscount = {
+  code: string;
+  count: number;
+  lastSeen: Date;
+  errorMessage: string | null;
+};
+
+export async function getFailedDiscounts(
+  shopId: string,
+  range: DateRange
+): Promise<FailedDiscount[]> {
+  const events = await prisma.checkoutEvent.findMany({
+    where: {
+      shopId,
+      eventType: "alert_displayed",
+      occurredAt: { gte: range.start, lte: range.end },
+      discountCode: { not: null },
+    },
+    select: { discountCode: true, errorMessage: true, occurredAt: true },
+    orderBy: { occurredAt: "desc" },
+  });
+
+  const map = new Map<string, { count: number; lastSeen: Date; errorMessage: string | null }>();
+  for (const e of events) {
+    const code = e.discountCode!;
+    const existing = map.get(code);
+    if (existing) {
+      existing.count++;
+      if (e.occurredAt > existing.lastSeen) existing.lastSeen = e.occurredAt;
+    } else {
+      map.set(code, { count: 1, lastSeen: e.occurredAt, errorMessage: e.errorMessage });
+    }
+  }
+
+  return Array.from(map.entries())
+    .map(([code, v]) => ({ code, ...v }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export async function getDistinctCountries(shopId: string, range: DateRange): Promise<string[]> {
   const rows = await prisma.checkoutEvent.findMany({
     where: { shopId, occurredAt: { gte: range.start, lte: range.end }, country: { not: null } },

@@ -11,6 +11,7 @@ import { CheckoutFunnel } from "@/components/monitor/CheckoutFunnel";
 import { ErrorsTable } from "@/components/monitor/ErrorsTable";
 import { DroppedProductsTable } from "@/components/monitor/DroppedProductsTable";
 import { LiveEventFeed } from "@/components/monitor/LiveEventFeed";
+import { FailedDiscountsTable } from "@/components/monitor/FailedDiscountsTable";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -53,6 +54,10 @@ function DashboardContent() {
   const { data: errors } = useSWR(baseUrl ? `${baseUrl}&metric=errors&${rp}` : null, fetcher);
   const { data: dropped } = useSWR(
     baseUrl ? `${baseUrl}&metric=dropped-products&${rp}` : null,
+    fetcher
+  );
+  const { data: failedDiscounts = [] } = useSWR(
+    baseUrl ? `${baseUrl}&metric=failed-discounts&${rp}` : null,
     fetcher
   );
   const { data: countries = [] } = useSWR(
@@ -122,6 +127,13 @@ function DashboardContent() {
         {errors ? <ErrorsTable errors={errors} /> : <LoadingCard />}
         {dropped ? <DroppedProductsTable products={dropped} /> : <LoadingCard />}
       </div>
+
+      {/* Failed Discount Codes */}
+      {failedDiscounts ? (
+        <FailedDiscountsTable discounts={failedDiscounts} />
+      ) : (
+        <LoadingCard />
+      )}
 
       {/* Live Event Feed */}
       <LiveEventFeed shop={shop} />

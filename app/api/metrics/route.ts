@@ -9,6 +9,7 @@ import {
   getDroppedProducts,
   getStatusBannerState,
   getDistinctCountries,
+  getFailedDiscounts,
 } from "@/lib/metrics";
 
 function rangeFromParams(params: URLSearchParams): { start: Date; end: Date } {
@@ -61,6 +62,9 @@ export async function GET(req: NextRequest) {
 
       case "countries":
         return NextResponse.json(await getDistinctCountries(shop.id, range));
+
+      case "failed-discounts":
+        return NextResponse.json(await getFailedDiscounts(shop.id, range));
 
       default:
         return NextResponse.json({ error: "Unknown metric" }, { status: 400 });

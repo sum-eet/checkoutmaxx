@@ -70,15 +70,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (eventType === "alert_displayed") {
-    const msg = (data as any)?.message || (data as any)?.alert?.message || null;
-    errorMessage = msg;
-    if (
-      typeof msg === "string" &&
-      (msg.toLowerCase().includes("discount") ||
-        msg.toLowerCase().includes("coupon") ||
-        msg.toLowerCase().includes("promo"))
-    ) {
-      discountCode = (data as any)?.checkout?.discountCode ?? null;
+    const alert = (data as any)?.alert;
+    errorMessage = alert?.message || (data as any)?.message || null;
+    // alert.value contains the actual code the user typed when target is cart.discountCode
+    if (alert?.target === "cart.discountCode" && alert?.value) {
+      discountCode = alert.value as string;
     }
   }
 
