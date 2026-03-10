@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = "CheckoutMaxx Alerts <alerts@checkoutmaxx.app>";
+const FROM = "CheckoutMaxx Alerts <onboarding@resend.dev>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
 
 export async function sendAlertEmail({
