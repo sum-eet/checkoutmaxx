@@ -8,7 +8,7 @@
 import { register } from "@shopify/web-pixels-extension";
 
 register(({ analytics, browser, init }) => {
-  const INGEST_URL = "__INGEST_URL__"; // Replaced at build time or hardcoded to your Vercel URL
+  const INGEST_URL = "https://checkoutmaxx-rt55.vercel.app/api/pixel/ingest";
 
   const shopDomain =
     init.context?.document?.location?.hostname ||
