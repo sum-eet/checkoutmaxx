@@ -1,4 +1,6 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sanitizePayload } from "@/lib/sanitize";
 
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
         gatewayName,
         errorMessage,
         extensionId,
-        rawPayload: safePayload,
+        rawPayload: safePayload as Prisma.InputJsonValue,
         occurredAt: new Date(occurredAt),
       },
     });

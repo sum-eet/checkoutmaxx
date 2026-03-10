@@ -12,11 +12,10 @@
     "db:migrate": "prisma migrate deploy"
   },
   "dependencies": {
-    "@prisma/client": "^5.11.0",
+    "@prisma/client": "5.22.0",
     "@shopify/app-bridge-react": "^4.1.6",
     "@shopify/polaris": "^12.9.0",
     "@shopify/shopify-api": "^12.3.0",
-    "@shopify/shopify-app-session-storage-prisma": "^8.0.1",
     "next": "^14.2.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -26,7 +25,7 @@
     "@types/node": "^20.12.7",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
-    "prisma": "^5.11.0",
+    "prisma": "5.22.0",
     "typescript": "^5.4.5"
   }
 }

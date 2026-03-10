@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 
 // Cron endpoint — protected by CRON_SECRET (Guardrail #10)
