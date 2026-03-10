@@ -267,15 +267,22 @@ export async function getFailedDiscounts(
       shopId,
       eventType: "alert_displayed",
       occurredAt: { gte: range.start, lte: range.end },
-      discountCode: { not: null },
     },
-    select: { discountCode: true, errorMessage: true, occurredAt: true },
+    select: { discountCode: true, errorMessage: true, occurredAt: true, rawPayload: true },
     orderBy: { occurredAt: "desc" },
   });
 
   const map = new Map<string, { count: number; lastSeen: Date; errorMessage: string | null }>();
   for (const e of events) {
-    const code = e.discountCode!;
+    // Use stored discountCode, or extract from rawPayload.alert.value for older events
+    const payload = e.rawPayload as Record<string, unknown>;
+    const alert = payload?.alert as Record<string, unknown> | undefined;
+    const code =
+      e.discountCode ||
+      (alert?.target === "cart.discountCode" && alert?.value ? String(alert.value) : null);
+
+    if (!code) continue;
+
     const existing = map.get(code);
     if (existing) {
       existing.count++;
