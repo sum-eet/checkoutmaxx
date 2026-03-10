@@ -1,0 +1,18 @@
+name = "checkoutmaxx"
+client_id = "0a60bbe935cef2f46838acec2b3918d8"
+application_url = "https://checkoutmaxx-rt55.vercel.app"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics"
+
+[auth]
+redirect_urls = [
+  "https://checkoutmaxx-rt55.vercel.app/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2025-04"
+
+[pos]
+embedded = false

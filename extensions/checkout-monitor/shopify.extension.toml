@@ -1,0 +1,15 @@
+api_version = "2025-04"
+
+[[extensions]]
+uid = "ea3aa68d-48c5-c2f8-21e0-e59cdc09a74642fa7f8f"
+type = "web_pixel"
+name = "checkout-monitor"
+handle = "checkout-monitor"
+runtime_context = "strict"
+
+[extensions.settings]
+type = "object"
+
+[extensions.settings.fields.shopDomain]
+name = "shopDomain"
+type = "single_line_text_field"

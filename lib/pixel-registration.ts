@@ -44,10 +44,7 @@ export async function registerAppPixel(
   const response = await client.request(WEB_PIXEL_CREATE, {
     variables: {
       webPixel: {
-        settings: JSON.stringify({
-          shopDomain: shop,
-          ingestUrl: INGEST_URL,
-        }),
+        settings: JSON.stringify({ shopDomain: shop }),
       },
     },
   });
