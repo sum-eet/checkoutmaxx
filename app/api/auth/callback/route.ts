@@ -26,21 +26,27 @@ export async function GET(req: NextRequest) {
   }
 
   const secret = process.env.SHOPIFY_API_SECRET!;
-  const paramPairs = Array.from(params.entries())
-    .filter(([key]) => key !== "hmac")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
+
+  // Build param string from the RAW query string to avoid URLSearchParams decoding issues
+  const rawSearch = req.nextUrl.search.slice(1); // remove leading ?
+  const rawPairs = rawSearch
+    .split("&")
+    .map((pair) => pair.split("=") as [string, string])
+    .filter(([key]) => decodeURIComponent(key) !== "hmac")
+    .sort(([a], [b]) => decodeURIComponent(a).localeCompare(decodeURIComponent(b)))
+    .map(([k, v]) => `${decodeURIComponent(k)}=${decodeURIComponent(v ?? "")}`)
     .join("&");
 
-  const digest = createHmac("sha256", secret).update(paramPairs).digest("hex");
+  const digest = createHmac("sha256", secret).update(rawPairs).digest("hex");
+
+  console.log("[callback] HMAC check", {
+    paramString: rawPairs,
+    expected: digest.slice(0, 8) + "...",
+    received: hmac?.slice(0, 8) + "...",
+    match: digest === hmac,
+  });
 
   if (digest !== hmac) {
-    console.error("[callback] HMAC mismatch", {
-      expected: digest.slice(0, 8) + "...",
-      received: hmac.slice(0, 8) + "...",
-      secretSet: !!secret,
-      secretPrefix: secret.slice(0, 8) + "...",
-    });
     return new Response("HMAC validation failed", { status: 403 });
   }
 

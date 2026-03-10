@@ -13,8 +13,9 @@ export async function GET(req: NextRequest) {
 
   // Generate a random state nonce for CSRF protection
   const state = crypto.randomUUID().replace(/-/g, "");
-  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-  const redirectUri = `${appUrl}/api/auth/callback`;
+  // Derive host from the actual request — never trust env var for redirect_uri
+  const host = req.nextUrl.host; // e.g. checkoutmaxx-rt55.vercel.app
+  const redirectUri = `https://${host}/api/auth/callback`;
 
   console.log("[auth/begin]", { shop: sanitizedShop, redirectUri, apiKey: process.env.SHOPIFY_API_KEY?.slice(0, 8) });
 
