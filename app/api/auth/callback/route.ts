@@ -17,7 +17,13 @@ export async function GET(req: NextRequest) {
     session = callbackResponse.session;
     await sessionStorage.storeSession(session);
   } catch (err: any) {
-    console.error("[auth/callback] OAuth failed:", err.message);
+    console.error("[auth/callback] OAuth failed:", {
+      message: err.message,
+      name: err.constructor?.name,
+      url: req.url,
+      apiKey: process.env.SHOPIFY_API_KEY?.slice(0, 8) + "...",
+      secretSet: !!process.env.SHOPIFY_API_SECRET,
+    });
     return new Response(`OAuth failed: ${err.message}`, { status: 500 });
   }
 
