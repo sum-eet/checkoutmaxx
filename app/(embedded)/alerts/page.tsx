@@ -13,13 +13,6 @@ import {
 } from "@shopify/polaris";
 import { useState } from "react";
 
-const HISTORY_HEADINGS = [
-  { title: "Alert" },
-  { title: "Fired" },
-  { title: "Resolved" },
-  { title: "Sent via" },
-  { title: "ROI Saved" },
-] as const;
 
 export default function AlertsPage() {
   const [selected, setSelected] = useState(0);
@@ -56,7 +49,13 @@ export default function AlertsPage() {
                     <IndexTable
                       resourceName={{ singular: "alert", plural: "alerts" }}
                       itemCount={0}
-                      headings={HISTORY_HEADINGS}
+                      headings={[
+                        { title: "Alert" },
+                        { title: "Fired" },
+                        { title: "Resolved" },
+                        { title: "Sent via" },
+                        { title: "ROI Saved" },
+                      ]}
                       selectable={false}
                       emptyState={
                         <Text as="p" tone="subdued">
