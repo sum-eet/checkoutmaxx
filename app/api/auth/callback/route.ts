@@ -1,77 +1,117 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { shopify, sessionStorage, registerWebhooks } from "@/lib/shopify";
+import { createHmac } from "crypto";
+import { sessionStorage, registerWebhooks } from "@/lib/shopify";
+import { Session } from "@shopify/shopify-api";
 import prisma from "@/lib/prisma";
 import { registerAppPixel, deregisterAppPixel } from "@/lib/pixel-registration";
 
-// GET /api/auth/callback
-// Shopify redirects here after merchant grants permissions
 export async function GET(req: NextRequest) {
-  let session;
+  const params = req.nextUrl.searchParams;
+  const shop = params.get("shop");
+  const code = params.get("code");
+  const state = params.get("state");
+  const hmac = params.get("hmac");
 
-  try {
-    // web-api adapter: callback returns a Response on redirect, or throws on error
-    const callbackResponse = await shopify.auth.callback({
-      rawRequest: req,
-    });
-    session = callbackResponse.session;
-    await sessionStorage.storeSession(session);
-  } catch (err: any) {
-    console.error("[auth/callback] OAuth failed:", {
-      message: err.message,
-      name: err.constructor?.name,
-      url: req.url,
-      apiKey: process.env.SHOPIFY_API_KEY?.slice(0, 8) + "...",
-      secretSet: !!process.env.SHOPIFY_API_SECRET,
-    });
-    return new Response(`OAuth failed: ${err.message}`, { status: 500 });
+  // --- 1. Validate state (CSRF) ---
+  const storedState = req.cookies.get("shopify_oauth_state")?.value;
+  if (!state || state !== storedState) {
+    console.error("[callback] State mismatch", { state, storedState });
+    return new Response("State mismatch — possible CSRF", { status: 403 });
   }
 
-  // Register webhooks — fire and forget
+  // --- 2. Validate HMAC ---
+  if (!hmac || !shop || !code) {
+    return new Response("Missing required OAuth params", { status: 400 });
+  }
+
+  const secret = process.env.SHOPIFY_API_SECRET!;
+  const paramPairs = Array.from(params.entries())
+    .filter(([key]) => key !== "hmac")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("&");
+
+  const digest = createHmac("sha256", secret).update(paramPairs).digest("hex");
+
+  if (digest !== hmac) {
+    console.error("[callback] HMAC mismatch", {
+      expected: digest.slice(0, 8) + "...",
+      received: hmac.slice(0, 8) + "...",
+      secretSet: !!secret,
+      secretPrefix: secret.slice(0, 8) + "...",
+    });
+    return new Response("HMAC validation failed", { status: 403 });
+  }
+
+  // --- 3. Exchange code for access token ---
+  let accessToken: string;
+  try {
+    const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: process.env.SHOPIFY_API_KEY,
+        client_secret: process.env.SHOPIFY_API_SECRET,
+        code,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      console.error("[callback] Token exchange failed:", body);
+      return new Response(`Token exchange failed: ${body}`, { status: 500 });
+    }
+
+    const data = await tokenRes.json() as { access_token: string };
+    accessToken = data.access_token;
+  } catch (err: any) {
+    console.error("[callback] Token exchange error:", err.message);
+    return new Response("Token exchange error", { status: 500 });
+  }
+
+  // --- 4. Store session ---
+  const sessionId = `offline_${shop}`;
+  const session = new Session({ id: sessionId, shop, state: state!, isOnline: false });
+  session.accessToken = accessToken;
+  session.scope = "read_orders,read_checkouts,write_pixels,read_analytics";
+  await sessionStorage.storeSession(session);
+
+  // --- 5. Register webhooks (fire and forget) ---
   registerWebhooks(session).catch((err) =>
-    console.error("[auth/callback] Webhook registration failed:", err)
+    console.error("[callback] Webhook registration failed:", err)
   );
 
-  // Deregister old pixel (one pixel per shop — Guardrail #9)
-  const existingShop = await prisma.shop.findUnique({
-    where: { shopDomain: session.shop },
-  });
+  // --- 6. Register pixel (one per shop) ---
+  const existingShop = await prisma.shop.findUnique({ where: { shopDomain: shop } });
 
   if (existingShop?.pixelId) {
     try {
-      await deregisterAppPixel(session.shop, session.accessToken!, existingShop.pixelId);
+      await deregisterAppPixel(shop, accessToken, existingShop.pixelId);
     } catch (err) {
-      console.error("[auth/callback] Failed to deregister old pixel:", err);
+      console.error("[callback] Failed to deregister old pixel:", err);
     }
   }
 
-  // Register new pixel
   let pixelId: string | undefined;
   try {
-    pixelId = await registerAppPixel(session.shop, session.accessToken!);
-    console.log(`[auth/callback] Pixel registered: ${pixelId}`);
+    pixelId = await registerAppPixel(shop, accessToken);
+    console.log(`[callback] Pixel registered: ${pixelId}`);
   } catch (err) {
-    console.error("[auth/callback] Pixel registration failed:", err);
+    console.error("[callback] Pixel registration failed:", err);
   }
 
-  // Upsert Shop record
+  // --- 7. Upsert Shop record ---
   await prisma.shop.upsert({
-    where: { shopDomain: session.shop },
-    update: {
-      accessToken: session.accessToken!,
-      isActive: true,
-      ...(pixelId ? { pixelId } : {}),
-    },
-    create: {
-      shopDomain: session.shop,
-      accessToken: session.accessToken!,
-      isActive: true,
-      ...(pixelId ? { pixelId } : {}),
-    },
+    where: { shopDomain: shop },
+    update: { accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
+    create: { shopDomain: shop, accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
   });
 
-  // Redirect to install confirmation
-  const host = req.nextUrl.searchParams.get("host") || "";
+  // --- 8. Clear state cookie and redirect to install screen ---
+  const host = params.get("host") || "";
   const appUrl = process.env.SHOPIFY_APP_URL || "";
-  return NextResponse.redirect(`${appUrl}/install?shop=${session.shop}&host=${host}`);
+  const response = NextResponse.redirect(`${appUrl}/install?shop=${shop}&host=${host}`);
+  response.cookies.set("shopify_oauth_state", "", { maxAge: 0 });
+  return response;
 }
