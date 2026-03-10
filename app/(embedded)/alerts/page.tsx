@@ -19,7 +19,7 @@ const HISTORY_HEADINGS = [
   { title: "Resolved" },
   { title: "Sent via" },
   { title: "ROI Saved" },
-];
+] as const;
 
 export default function AlertsPage() {
   const [selected, setSelected] = useState(0);
