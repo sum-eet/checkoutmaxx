@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Required by @shopify/shopify-app-session-storage-prisma
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+}
+
+model Shop {
+  id         String  @id @default(cuid())
+  shopDomain String  @unique
+  accessToken String
+  pixelId    String? // Shopify pixel ID once registered
+  isActive   Boolean  @default(true)
+
+  installedAt DateTime @default(now())
+  timezone    String   @default("UTC")
+
+  // Notification config
+  alertEmail        String?
+  slackWebhookUrl   String?
+  alertEmailEnabled Boolean @default(true)
+  alertSlackEnabled Boolean @default(false)
+
+  // Alert type toggles
+  alertAbandonmentEnabled Boolean @default(true)
+  alertDiscountEnabled    Boolean @default(true)
+  alertExtensionEnabled   Boolean @default(true)
+  alertPaymentEnabled     Boolean @default(true)
+
+  // Alert sensitivity thresholds (overrides from settings page)
+  abandonmentThreshold  Float @default(0.20) // 20%
+  discountFailureMin    Int   @default(3)
+  paymentFailureRate    Float @default(0.15) // 15%
+
+  checkoutEvents CheckoutEvent[]
+  alertLogs      AlertLog[]
+  baselines      Baseline[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CheckoutEvent {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id])
+
+  sessionId String // client-side checkout token
+  eventType String // checkout_started | checkout_contact_info_submitted |
+                   // checkout_address_info_submitted | checkout_shipping_info_submitted |
+                   // payment_info_submitted | checkout_completed |
+                   // alert_displayed | ui_extension_errored
+
+  // Enrichment fields
+  deviceType   String? // mobile | desktop | tablet
+  country      String?
+  discountCode String? // extracted from alert_displayed or checkout_completed
+  totalPrice   Float?
+  currency     String?
+  gatewayName  String? // payment gateway from checkout_completed
+  errorMessage String? // from ui_extension_errored
+  extensionId  String? // from ui_extension_errored
+
+  rawPayload Json     // full event payload (PII-stripped before storage)
+  occurredAt DateTime // client-side timestamp from pixel event
+  receivedAt DateTime @default(now())
+
+  @@index([shopId, eventType, occurredAt])
+  @@index([shopId, sessionId])
+  @@index([shopId, occurredAt])
+}
+
+model Baseline {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id])
+
+  metricName  String   // checkout_cvr | payment_failure_rate
+  value       Float    // rolling 7-day average
+  windowStart DateTime
+  windowEnd   DateTime
+  computedAt  DateTime @default(now())
+
+  @@index([shopId, metricName])
+}
+
+model AlertLog {
+  id     String @id @default(cuid())
+  shopId String
+  shop   Shop   @relation(fields: [shopId], references: [id])
+
+  alertType String // abandonment_spike | failed_discount | extension_error | payment_failure
+  severity  String // critical | warning | info
+  title     String
+  body      String // full alert message
+  metadata  Json   // structured data: cvr, baseline, discount_code, etc.
+
+  actionUrl   String? // deep link into Shopify admin
+  actionLabel String?
+
+  sentEmail Boolean @default(false)
+  sentSlack Boolean @default(false)
+
+  firedAt    DateTime  @default(now())
+  resolvedAt DateTime?
+  resolvedBy String? // 'merchant' | 'auto'
+
+  // ROI tracking fields (Part 9)
+  roiEstimatedUsd       Float?
+  roiMethodology        String? // human-readable explanation
+  cvrAtAlert            Float?
+  baselineCvrAtAlert    Float?
+  aovAtAlert            Float?
+  sessionsPerHourAtAlert Int?
+
+  @@index([shopId, firedAt])
+  @@index([shopId, alertType, firedAt])
+}
