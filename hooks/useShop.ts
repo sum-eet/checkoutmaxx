@@ -1,28 +1,22 @@
 "use client";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "cm_shop";
 
 export function useShop(): string {
-  const params = useSearchParams();
-  const shopFromUrl = params.get("shop");
-  const [shop, setShop] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return shopFromUrl || localStorage.getItem(STORAGE_KEY) || "";
-    }
-    return shopFromUrl || "";
-  });
+  const [shop, setShop] = useState("");
 
   useEffect(() => {
-    if (shopFromUrl) {
-      localStorage.setItem(STORAGE_KEY, shopFromUrl);
-      setShop(shopFromUrl);
-    } else if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get("shop");
+    if (fromUrl) {
+      localStorage.setItem(STORAGE_KEY, fromUrl);
+      setShop(fromUrl);
+    } else {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) setShop(stored);
     }
-  }, [shopFromUrl]);
+  }, []);
 
   return shop;
 }

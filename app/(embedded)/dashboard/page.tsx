@@ -1,7 +1,7 @@
 "use client";
 
 import { Page, Layout, BlockStack, InlineStack, SkeletonBodyText, Card, Text } from "@shopify/polaris";
-import { useState, Suspense } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { useShop } from "@/hooks/useShop";
 import { DateRangeSelector, type DateRange } from "@/components/monitor/DateRangeSelector";
@@ -134,9 +134,7 @@ export default function MonitorPage() {
     <Page title="Monitor">
       <Layout>
         <Layout.Section>
-          <Suspense fallback={<SkeletonBodyText lines={10} />}>
-            <DashboardContent />
-          </Suspense>
+          <DashboardContent />
         </Layout.Section>
       </Layout>
     </Page>

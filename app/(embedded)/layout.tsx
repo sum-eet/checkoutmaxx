@@ -5,7 +5,6 @@ import en from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { usePathname, useRouter } from "next/navigation";
 import { useShop } from "@/hooks/useShop";
-import { Suspense } from "react";
 
 function NavWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -50,9 +49,7 @@ function NavWrapper({ children }: { children: React.ReactNode }) {
 export default function EmbeddedLayout({ children }: { children: React.ReactNode }) {
   return (
     <AppProvider i18n={en}>
-      <Suspense fallback={<div />}>
-        <NavWrapper>{children}</NavWrapper>
-      </Suspense>
+      <NavWrapper>{children}</NavWrapper>
     </AppProvider>
   );
 }
