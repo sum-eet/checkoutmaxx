@@ -52,7 +52,7 @@ export function FailedDiscountsTable({ discounts }: Props) {
                 </IndexTable.Cell>
                 <IndexTable.Cell>
                   <Badge tone={d.count >= 3 ? "critical" : "warning"}>
-                    {d.count}×
+                    {String(d.count)}×
                   </Badge>
                 </IndexTable.Cell>
                 <IndexTable.Cell>
