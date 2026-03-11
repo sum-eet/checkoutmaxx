@@ -14,5 +14,10 @@ redirect_urls = [
 [webhooks]
 api_version = "2025-04"
 
+[webhooks.privacy_compliance]
+customer_data_request_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/data-request"
+customer_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/redact"
+shop_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/shop/redact"
+
 [pos]
 embedded = false

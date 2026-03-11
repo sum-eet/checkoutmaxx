@@ -24,23 +24,26 @@ export const sessionStorage = new PrismaSessionStorage();
  */
 export async function registerWebhooks(session: Session) {
   const client = new shopify.clients.Rest({ session });
-  const webhookUrl = `${process.env.SHOPIFY_APP_URL}/api/webhooks/app-uninstalled`;
+  const base = process.env.SHOPIFY_APP_URL;
 
-  try {
-    await client.post({
-      path: "webhooks",
-      data: {
-        webhook: {
-          topic: "app/uninstalled",
-          address: webhookUrl,
-          format: "json",
-        },
-      },
-    });
-  } catch (err: any) {
-    const msg = JSON.stringify(err?.response?.body || err?.message || "");
-    if (!msg.includes("already been taken")) {
-      console.error("[registerWebhooks] Failed:", msg);
+  const topics = [
+    { topic: "app/uninstalled", address: `${base}/api/webhooks/app-uninstalled` },
+    { topic: "customers/data_request", address: `${base}/api/webhooks/customers/data-request` },
+    { topic: "customers/redact", address: `${base}/api/webhooks/customers/redact` },
+    { topic: "shop/redact", address: `${base}/api/webhooks/shop/redact` },
+  ];
+
+  for (const { topic, address } of topics) {
+    try {
+      await client.post({
+        path: "webhooks",
+        data: { webhook: { topic, address, format: "json" } },
+      });
+    } catch (err: any) {
+      const msg = JSON.stringify(err?.response?.body || err?.message || "");
+      if (!msg.includes("already been taken")) {
+        console.error(`[registerWebhooks] Failed ${topic}:`, msg);
+      }
     }
   }
 }
