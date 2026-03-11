@@ -66,73 +66,80 @@ type FailedDiscount = {
 
 function FunnelViz({ steps }: { steps: FunnelStep[] }) {
   if (!steps || steps.length === 0) return null;
-  const started = steps[0].sessions;
-  const completed = steps[steps.length - 1].sessions;
-  const totalLost = steps.reduce((sum, s, i) => {
-    if (i === 0) return sum;
-    return sum + (steps[i - 1].sessions - s.sessions);
-  }, 0);
+  const baseline = steps[0].sessions || 1;
 
   return (
-    <BlockStack gap="0">
+    <div style={{ fontFamily: "inherit" }}>
       {steps.map((step, i) => {
-        const width = started > 0 ? (step.sessions / started) * 100 : 0;
+        const barPct = Math.max((step.sessions / baseline) * 100, 0);
         const isLast = i === steps.length - 1;
         const dropped = i > 0 ? steps[i - 1].sessions - step.sessions : 0;
-        const dropPct = started > 0 ? ((dropped / started) * 100).toFixed(1) : "0";
-        const isHighDrop = step.dropPct > 15;
-        const bg = isLast ? "#e3f1df" : isHighDrop ? "#fdf1f1" : "#f4f6fe";
+        const dropPct = steps[i - 1]?.sessions > 0
+          ? Math.round((dropped / steps[i - 1].sessions) * 100)
+          : 0;
+        const isHighDrop = dropPct >= 30;
 
         return (
           <div key={step.step}>
-            <div
-              style={{
-                width: `${width}%`,
-                minWidth: 120,
-                background: bg,
-                padding: "12px 16px",
-                borderRadius: 8,
-                minHeight: 44,
-                marginBottom: 0,
-              }}
-            >
-              <InlineStack align="space-between" blockAlign="center">
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" fontWeight="semibold">
-                    {step.label}
-                  </Text>
-                  {isHighDrop && !isLast && (
-                    <Badge tone="critical">High drop-off</Badge>
-                  )}
-                </InlineStack>
-                <Text as="span" tone="subdued">
-                  {step.sessions.toLocaleString()}
-                </Text>
-              </InlineStack>
-            </div>
-            {i < steps.length - 1 && dropped > 0 && (
-              <div style={{ padding: "4px 16px" }}>
-                <InlineStack align="center">
-                  <Badge tone={isHighDrop ? "critical" : "attention"}>
-                    {`-${dropped.toLocaleString()} dropped · ${dropPct}%`}
-                  </Badge>
-                </InlineStack>
+            {/* Drop connector */}
+            {i > 0 && dropped > 0 && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 0 6px 16px", color: isHighDrop ? "#d72c0d" : "#8c9196",
+                fontSize: 12,
+              }}>
+                <span style={{ fontSize: 10 }}>▼</span>
+                <span>
+                  <strong>{dropped.toLocaleString()}</strong> dropped here
+                  {" "}
+                  <span style={{
+                    background: isHighDrop ? "#fff4f4" : "#f4f6f8",
+                    border: `1px solid ${isHighDrop ? "#ffc9c9" : "#e1e3e5"}`,
+                    borderRadius: 4, padding: "1px 6px", fontWeight: 600,
+                    color: isHighDrop ? "#d72c0d" : "#6d7175",
+                  }}>
+                    -{dropPct}%
+                  </span>
+                </span>
               </div>
             )}
+            {i > 0 && dropped === 0 && <div style={{ height: 4 }} />}
+
+            {/* Step row */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "8px 0",
+            }}>
+              {/* Label */}
+              <div style={{ width: 110, flexShrink: 0, fontSize: 13, color: "#202223", fontWeight: isLast ? 600 : 400 }}>
+                {step.label}
+              </div>
+
+              {/* Bar track */}
+              <div style={{ flex: 1, background: "#f4f6f8", borderRadius: 4, height: 28, position: "relative", overflow: "hidden" }}>
+                <div style={{
+                  width: `${barPct}%`,
+                  height: "100%",
+                  background: isLast
+                    ? "linear-gradient(90deg,#007f5f,#00a47a)"
+                    : isHighDrop
+                    ? "linear-gradient(90deg,#d72c0d,#e85d3a)"
+                    : "linear-gradient(90deg,#4f7fff,#6b8fff)",
+                  borderRadius: 4,
+                  transition: "width 0.3s",
+                }} />
+              </div>
+
+              {/* Count + pct */}
+              <div style={{ width: 80, flexShrink: 0, textAlign: "right", fontSize: 13 }}>
+                <span style={{ fontWeight: 600, color: "#202223" }}>{step.sessions.toLocaleString()}</span>
+                <span style={{ color: "#8c9196", marginLeft: 4 }}>{step.pct}%</span>
+              </div>
+            </div>
           </div>
         );
       })}
-      <div style={{ marginTop: 12 }}>
-        <InlineStack align="space-between">
-          <Text as="p" tone="subdued" variant="bodySm">
-            {(started - completed).toLocaleString()} sessions never completed
-          </Text>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Total dropped: {totalLost.toLocaleString()} sessions
-          </Text>
-        </InlineStack>
-      </div>
-    </BlockStack>
+    </div>
   );
 }
 

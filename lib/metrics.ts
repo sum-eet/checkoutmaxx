@@ -110,22 +110,44 @@ export async function getFunnelMetrics(
   if (device) baseWhere.deviceType = device;
   if (country) baseWhere.country = country;
 
-  const counts = await Promise.all(
-    FUNNEL_STEPS.map((s) =>
-      prisma.checkoutEvent
-        .findMany({
-          where: { ...baseWhere, eventType: s.step },
-          select: { sessionId: true },
-          distinct: ["sessionId"],
-        })
-        .then((rows) => rows.length)
-    )
-  );
+  const [stepResults, startedRows, completedRows] = await Promise.all([
+    Promise.all(
+      FUNNEL_STEPS.map((s) =>
+        prisma.checkoutEvent
+          .findMany({
+            where: { ...baseWhere, eventType: s.step },
+            select: { sessionId: true },
+            distinct: ["sessionId"],
+          })
+          .then((rows) => rows.length)
+      )
+    ),
+    prisma.checkoutEvent.findMany({
+      where: { ...baseWhere, eventType: "checkout_started" },
+      select: { sessionId: true },
+      distinct: ["sessionId"],
+    }),
+    prisma.checkoutEvent.findMany({
+      where: { ...baseWhere, eventType: "checkout_completed" },
+      select: { sessionId: true },
+      distinct: ["sessionId"],
+    }),
+  ]);
 
-  // Cap each step at the previous step's count — a later step can never
-  // exceed an earlier one (avoids impossible funnel shapes from partial tracking).
-  const capped = counts.map((c, i) => (i === 0 ? c : Math.min(c, counts[i - 1])));
-  const baseline = capped[0] || 1;
+  // Step[0]: union of started+completed sessions (same logic as KPI so numbers match)
+  const startedSet = new Set(startedRows.map((r) => r.sessionId));
+  completedRows.forEach((r) => startedSet.add(r.sessionId));
+  const unionTotal = startedSet.size;
+
+  // Build counts with accurate step[0] and step[last], cap intermediates at total
+  const counts = [...stepResults];
+  counts[0] = unionTotal;
+  counts[counts.length - 1] = completedRows.length;
+
+  // Cap each intermediate step at total sessions (never exceed step[0])
+  const baseline = counts[0] || 1;
+  const capped = counts.map((c) => Math.min(c, baseline));
+
   return FUNNEL_STEPS.map((s, i) => ({
     step: s.step,
     label: s.label,

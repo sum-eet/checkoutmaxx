@@ -162,15 +162,6 @@ function ConvertedContent() {
 
   const baselineCvr = kpiValid ? (kpi!.baselineCvr ?? 0) : 0;
   const currentCvr = kpiValid ? (kpi!.cvr ?? 0) : 0;
-  const cvrOverTime =
-    funnelArr.length > 1
-      ? funnelArr.slice(0, 7).map((f, i) => ({
-          date: `Step ${i + 1}`,
-          cvr: parseFloat(((f.sessions / (funnelArr[0].sessions || 1)) * 100).toFixed(1)),
-          baseline: parseFloat((baselineCvr * 100).toFixed(1)),
-        }))
-      : [{ date: "Now", cvr: parseFloat((currentCvr * 100).toFixed(1)), baseline: parseFloat((baselineCvr * 100).toFixed(1)) }];
-
   const cvrPct = parseFloat((currentCvr * 100).toFixed(1));
   const cvrDeltaForBadge = kpi?.cvrDelta ?? null;
 
@@ -222,79 +213,53 @@ function ConvertedContent() {
         <LoadingCard />
       )}
 
-      {/* KPI Row 2 */}
-      {kpiValid ? (
-        <InlineGrid columns={2} gap="400">
-          <KpiCard
-            label="Checkouts Started"
-            value={kpi!.checkoutsStarted.toLocaleString()}
-            delta={null}
-            sparkData={sparkPoints}
-            color="#f59e0b"
-          />
-          <KpiCard
-            label="Completed Orders"
-            value={kpi!.completedOrders.toLocaleString()}
-            delta={null}
-            sparkData={sparkPoints.slice().reverse()}
-            color="#8b5cf6"
-          />
-        </InlineGrid>
-      ) : (
-        <LoadingCard />
-      )}
-
-      {/* CVR Over Time */}
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">
-            CVR Over Time
-          </Text>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart
-              data={cvrOverTime}
-              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-            >
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 11, fill: "#8c9196" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "#8c9196" }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `${v}%`}
-              />
-              <Tooltip formatter={(v: unknown) => `${v}%`} />
-              {baselineCvr > 0 && (
-                <ReferenceLine
-                  y={parseFloat((baselineCvr * 100).toFixed(1))}
-                  stroke="#8c9196"
-                  strokeDasharray="4 2"
-                  label={{
-                    value: `Baseline ${(baselineCvr * 100).toFixed(1)}%`,
-                    fontSize: 10,
-                    fill: "#8c9196",
-                  }}
+      {/* Funnel drop-off */}
+      {funnelArr.length > 0 && (
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">
+              Funnel Conversion by Step
+            </Text>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart
+                data={funnelArr.map((f, i) => ({ label: f.label.split(" ")[0], pct: f.pct, i }))}
+                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+              >
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 11, fill: "#8c9196" }}
+                  axisLine={false}
+                  tickLine={false}
                 />
-              )}
-              <Line
-                type="monotone"
-                dataKey="cvr"
-                stroke="#4F7FFF"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Red dots = days when an abandonment alert fired
-          </Text>
-        </BlockStack>
-      </Card>
+                <YAxis
+                  domain={[0, 100]}
+                  tick={{ fontSize: 11, fill: "#8c9196" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip formatter={(v: unknown) => `${v}%`} labelFormatter={(l) => `Step: ${l}`} />
+                {baselineCvr > 0 && (
+                  <ReferenceLine
+                    y={parseFloat((baselineCvr * 100).toFixed(1))}
+                    stroke="#8c9196"
+                    strokeDasharray="4 2"
+                    label={{ value: `Baseline`, fontSize: 10, fill: "#8c9196" }}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="pct"
+                  stroke="#4F7FFF"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#4F7FFF" }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </BlockStack>
+        </Card>
+      )}
 
       {/* Funnel + KPI tables */}
       <InlineGrid columns={2} gap="400">
