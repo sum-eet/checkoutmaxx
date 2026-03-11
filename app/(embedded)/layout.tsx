@@ -37,6 +37,9 @@ function LiveBanner() {
       }}>
         <span className="live-dot" />
         <span>Live · {displayName}</span>
+        <span style={{ marginLeft: "auto", opacity: 0.5, fontFamily: "monospace" }}>
+          v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}
+        </span>
       </div>
     </>
   );
