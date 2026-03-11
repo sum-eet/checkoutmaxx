@@ -83,8 +83,13 @@ export async function getKpiMetrics(shopId: string, range: DateRange): Promise<K
     }),
   ]);
 
-  const checkoutsStarted = started.length;
-  const completedOrders = completed.length;
+  // Union: a session that completed without a tracked start still counts as started
+  const startedSet = new Set(started.map((r) => r.sessionId));
+  const completedSet = new Set(completed.map((r) => r.sessionId));
+  completed.forEach((r) => startedSet.add(r.sessionId));
+
+  const checkoutsStarted = startedSet.size;
+  const completedOrders = completedSet.size;
   const cvr = checkoutsStarted > 0 ? completedOrders / checkoutsStarted : 0;
   const baselineCvr = baseline?.value ?? null;
   const cvrDelta = baselineCvr !== null ? cvr - baselineCvr : null;
