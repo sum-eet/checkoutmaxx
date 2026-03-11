@@ -1,10 +1,12 @@
 "use client";
 
-import { AppProvider } from "@shopify/polaris";
-import { NavMenu } from "@shopify/app-bridge-react";
+import { AppProvider as PolarisProvider } from "@shopify/polaris";
+import { AppProvider as AppBridgeProvider, NavMenu } from "@shopify/app-bridge-react";
 import en from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { useShop } from "@/hooks/useShop";
+
+const SHOPIFY_API_KEY = "0a60bbe935cef2f46838acec2b3918d8";
 
 function LiveBanner() {
   const shop = useShop();
@@ -43,15 +45,17 @@ function LiveBanner() {
 
 export default function EmbeddedLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AppProvider i18n={en}>
-      <NavMenu>
-        <a href="/dashboard/converted" rel="home">Converted Carts</a>
-        <a href="/dashboard/abandoned">Abandoned Carts</a>
-        <a href="/alerts">Notifications</a>
-        <a href="/settings">Settings</a>
-      </NavMenu>
-      <LiveBanner />
-      {children}
-    </AppProvider>
+    <AppBridgeProvider apiKey={SHOPIFY_API_KEY} isEmbeddedApp>
+      <PolarisProvider i18n={en}>
+        <NavMenu>
+          <a href="/dashboard/converted" rel="home">Converted Carts</a>
+          <a href="/dashboard/abandoned">Abandoned Carts</a>
+          <a href="/alerts">Notifications</a>
+          <a href="/settings">Settings</a>
+        </NavMenu>
+        <LiveBanner />
+        {children}
+      </PolarisProvider>
+    </AppBridgeProvider>
   );
 }

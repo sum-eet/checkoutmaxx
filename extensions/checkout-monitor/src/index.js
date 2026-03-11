@@ -15,6 +15,10 @@ register(({ analytics, browser, init }) => {
     init.data?.shop?.domain ||
     null;
 
+  // Track the current checkout token globally so all events (including
+  // alert_displayed which has no checkout in its payload) share the same sessionId.
+  let currentCheckoutToken = null;
+
   function getDeviceType() {
     const ua = init.context?.navigator?.userAgent || "";
     if (/Mobi|Android/i.test(ua)) return "mobile";
@@ -30,6 +34,7 @@ register(({ analytics, browser, init }) => {
         payload?.checkout?.token ||
         payload?.checkout?.id ||
         payload?.cartId ||
+        currentCheckoutToken ||
         null,
       occurredAt: new Date().toISOString(),
       deviceType: getDeviceType(),
@@ -44,6 +49,7 @@ register(({ analytics, browser, init }) => {
   }
 
   analytics.subscribe("checkout_started", (event) => {
+    currentCheckoutToken = event.data?.checkout?.token || event.data?.checkout?.id || null;
     send("checkout_started", event.data);
   });
 
