@@ -151,23 +151,22 @@ function ConvertedContent() {
     );
   }
 
+  const funnelArr = Array.isArray(funnel) ? funnel : [];
+  const kpiValid = kpi != null && "checkoutsStarted" in kpi;
+
   const sparkPoints =
-    funnel && funnel.length > 0
-      ? funnel.map((f) => f.sessions)
-      : [0, 0, 0, 0, 0];
+    funnelArr.length > 0 ? funnelArr.map((f) => f.sessions) : [0, 0, 0, 0, 0];
 
   const cvrSpark =
-    funnel && funnel.length > 0
-      ? funnel.map((f) => f.pct)
-      : [0, 0, 0, 0, 0];
+    funnelArr.length > 0 ? funnelArr.map((f) => f.pct) : [0, 0, 0, 0, 0];
 
-  const baselineCvr = kpi?.baselineCvr ?? 0;
-  const currentCvr = kpi?.cvr ?? 0;
+  const baselineCvr = kpiValid ? (kpi!.baselineCvr ?? 0) : 0;
+  const currentCvr = kpiValid ? (kpi!.cvr ?? 0) : 0;
   const cvrOverTime =
-    funnel && funnel.length > 1
-      ? funnel.slice(0, 7).map((f, i) => ({
+    funnelArr.length > 1
+      ? funnelArr.slice(0, 7).map((f, i) => ({
           date: `Step ${i + 1}`,
-          cvr: parseFloat(((f.sessions / (funnel[0].sessions || 1)) * 100).toFixed(1)),
+          cvr: parseFloat(((f.sessions / (funnelArr[0].sessions || 1)) * 100).toFixed(1)),
           baseline: parseFloat((baselineCvr * 100).toFixed(1)),
         }))
       : [{ date: "Now", cvr: parseFloat((currentCvr * 100).toFixed(1)), baseline: parseFloat((baselineCvr * 100).toFixed(1)) }];
@@ -176,15 +175,15 @@ function ConvertedContent() {
   const cvrDeltaForBadge = kpi?.cvrDelta ?? null;
 
   const funnelRows =
-    funnel?.map((f) => [f.label, String(f.sessions), `${f.pct}%`]) ?? [];
+    funnelArr.map((f) => [f.label, String(f.sessions), `${f.pct}%`]);
 
-  const kpiRows = kpi
+  const kpiRows = kpiValid
     ? [
-        ["Checkouts Started", String(kpi.checkoutsStarted)],
-        ["Completed Orders", String(kpi.completedOrders)],
-        ["CVR", `${(kpi.cvr * 100).toFixed(1)}%`],
-        ["Baseline CVR", kpi.baselineCvr !== null ? `${(kpi.baselineCvr * 100).toFixed(1)}%` : "—"],
-        ["CVR Delta", kpi.cvrDelta !== null ? `${(kpi.cvrDelta * 100).toFixed(2)}pts` : "—"],
+        ["Checkouts Started", String(kpi!.checkoutsStarted)],
+        ["Completed Orders", String(kpi!.completedOrders)],
+        ["CVR", `${(kpi!.cvr * 100).toFixed(1)}%`],
+        ["Baseline CVR", kpi!.baselineCvr !== null ? `${(kpi!.baselineCvr * 100).toFixed(1)}%` : "—"],
+        ["CVR Delta", kpi!.cvrDelta !== null ? `${(kpi!.cvrDelta * 100).toFixed(2)}pts` : "—"],
       ]
     : [];
 
@@ -195,18 +194,18 @@ function ConvertedContent() {
       </InlineStack>
 
       {/* KPI Row 1 */}
-      {kpi && funnel ? (
+      {kpiValid ? (
         <InlineGrid columns={3} gap="400">
           <KpiCard
             label="Checkouts Started"
-            value={kpi.checkoutsStarted.toLocaleString()}
+            value={kpi!.checkoutsStarted.toLocaleString()}
             delta={null}
             sparkData={sparkPoints}
             color="#4F7FFF"
           />
           <KpiCard
             label="Completed Orders"
-            value={kpi.completedOrders.toLocaleString()}
+            value={kpi!.completedOrders.toLocaleString()}
             delta={null}
             sparkData={sparkPoints.slice().reverse()}
             color="#007f5f"
@@ -224,18 +223,18 @@ function ConvertedContent() {
       )}
 
       {/* KPI Row 2 */}
-      {kpi ? (
+      {kpiValid ? (
         <InlineGrid columns={2} gap="400">
           <KpiCard
             label="Checkouts Started"
-            value={kpi.checkoutsStarted.toLocaleString()}
+            value={kpi!.checkoutsStarted.toLocaleString()}
             delta={null}
             sparkData={sparkPoints}
             color="#f59e0b"
           />
           <KpiCard
             label="Completed Orders"
-            value={kpi.completedOrders.toLocaleString()}
+            value={kpi!.completedOrders.toLocaleString()}
             delta={null}
             sparkData={sparkPoints.slice().reverse()}
             color="#8b5cf6"
@@ -304,7 +303,7 @@ function ConvertedContent() {
             <Text as="h2" variant="headingMd">
               Funnel Steps
             </Text>
-            {funnel ? (
+            {Array.isArray(funnel) ? (
               <DataTable
                 columnContentTypes={["text", "numeric", "numeric"]}
                 headings={["Step", "Sessions", "Pct"]}
@@ -320,7 +319,7 @@ function ConvertedContent() {
             <Text as="h2" variant="headingMd">
               Checkout CVR
             </Text>
-            {kpi ? (
+            {kpiValid ? (
               <DataTable
                 columnContentTypes={["text", "text"]}
                 headings={["Metric", "Value"]}

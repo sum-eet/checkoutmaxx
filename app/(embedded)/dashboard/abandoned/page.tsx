@@ -170,8 +170,9 @@ function AbandonedContent() {
     );
   }
 
-  const started = funnel?.[0]?.sessions ?? 0;
-  const completed = funnel?.[funnel.length - 1]?.sessions ?? 0;
+  const funnelArr = Array.isArray(funnel) ? funnel : [];
+  const started = funnelArr[0]?.sessions ?? 0;
+  const completed = funnelArr[funnelArr.length - 1]?.sessions ?? 0;
   const dropped_count = started - completed;
   const dropRate = started > 0 ? ((dropped_count / started) * 100).toFixed(1) : "0";
 
@@ -188,7 +189,7 @@ function AbandonedContent() {
       </InlineStack>
 
       {/* KPI Row */}
-      {funnel ? (
+      {Array.isArray(funnel) ? (
         <InlineGrid columns={4} gap="400">
           <Card>
             <BlockStack gap="100">
@@ -241,8 +242,8 @@ function AbandonedContent() {
           <Text as="h2" variant="headingMd">
             Checkout Funnel
           </Text>
-          {funnel ? (
-            <FunnelViz steps={funnel} />
+          {Array.isArray(funnel) ? (
+            <FunnelViz steps={funnelArr} />
           ) : (
             <SkeletonBodyText lines={6} />
           )}

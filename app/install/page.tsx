@@ -1,15 +1,14 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useEffect } from "react";
-
-export default function InstallPage() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shop = params.get("shop");
-    if (shop) {
-      window.location.href = `/api/auth?shop=${shop}`;
-    }
-  }, []);
-
-  return null;
+// Server component — immediate server-side redirect, no JS required
+export default function InstallPage({
+  searchParams,
+}: {
+  searchParams: { shop?: string };
+}) {
+  const shop = searchParams.shop;
+  if (shop) {
+    redirect(`/api/auth?shop=${encodeURIComponent(shop)}`);
+  }
+  return <p>Missing shop parameter.</p>;
 }
