@@ -34,9 +34,9 @@ export async function GET(req: NextRequest) {
   }
 
   const pairs: string[] = [];
-  for (const [k, v] of params) {
+  params.forEach((v, k) => {
     if (k !== "hmac") pairs.push(`${k}=${v}`);
-  }
+  });
   pairs.sort();
   const message = pairs.join("&");
   const expected = createHmac("sha256", secret).update(message).digest("hex");

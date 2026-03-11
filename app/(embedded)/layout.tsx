@@ -8,7 +8,12 @@ import { useShop } from "@/hooks/useShop";
 
 function LiveBanner() {
   const shop = useShop();
-  const displayName = shop ? shop.replace(".myshopify.com", "") : "…";
+  const customDomains: Record<string, string> = {
+    "jg2svv-pc.myshopify.com": "drwater.store",
+  };
+  const displayName = shop
+    ? (customDomains[shop] ?? shop.replace(".myshopify.com", ""))
+    : "…";
 
   return (
     <>

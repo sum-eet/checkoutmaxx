@@ -117,13 +117,16 @@ export async function getFunnelMetrics(
     )
   );
 
-  const baseline = counts[0] || 1;
+  // Cap each step at the previous step's count — a later step can never
+  // exceed an earlier one (avoids impossible funnel shapes from partial tracking).
+  const capped = counts.map((c, i) => (i === 0 ? c : Math.min(c, counts[i - 1])));
+  const baseline = capped[0] || 1;
   return FUNNEL_STEPS.map((s, i) => ({
     step: s.step,
     label: s.label,
-    sessions: counts[i],
-    pct: Math.round((counts[i] / baseline) * 100),
-    dropPct: i > 0 ? Math.round(((counts[i - 1] - counts[i]) / baseline) * 100) : 0,
+    sessions: capped[i],
+    pct: Math.round((capped[i] / baseline) * 100),
+    dropPct: i > 0 ? Math.round(((capped[i - 1] - capped[i]) / baseline) * 100) : 0,
   }));
 }
 
