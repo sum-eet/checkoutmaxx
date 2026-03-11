@@ -41,5 +41,5 @@ export async function GET(req: NextRequest) {
 
   const host = req.nextUrl.searchParams.get("host") || "";
   const appUrl = process.env.SHOPIFY_APP_URL || `https://${req.nextUrl.host}`;
-  return NextResponse.redirect(`${appUrl}/install?shop=${session.shop}&host=${host}`);
+  return NextResponse.redirect(`${appUrl}/welcome?shop=${session.shop}&host=${host}`);
 }

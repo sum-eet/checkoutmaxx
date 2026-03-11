@@ -54,6 +54,12 @@ model Shop {
   discountFailureMin    Int   @default(3)
   paymentFailureRate    Float @default(0.15) // 15%
 
+  // Billing
+  subscriptionId     String?
+  subscriptionStatus String?
+  trialEndsAt        DateTime?
+  billingPlan        String    @default("free")
+
   checkoutEvents CheckoutEvent[]
   alertLogs      AlertLog[]
   baselines      Baseline[]

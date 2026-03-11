@@ -11,11 +11,14 @@ import {
   Banner,
   BlockStack,
   InlineStack,
+  InlineGrid,
   Divider,
   RangeSlider,
   Spinner,
+  Box,
 } from "@shopify/polaris";
 import { useState, useEffect } from "react";
+import useSWR from "swr";
 import { useShop } from "@/hooks/useShop";
 
 interface Settings {
@@ -46,6 +49,12 @@ const DEFAULTS: Settings = {
   paymentFailureRate: 0.15,
 };
 
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+type KpiData = { checkoutsStarted: number };
+type AlertsData = { active: unknown[]; history: unknown[] } | unknown[];
+type StatusData = { state: string };
+
 export default function SettingsPage() {
   const shop = useShop();
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
@@ -55,6 +64,39 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [testingSlack, setTestingSlack] = useState(false);
   const [slackTestResult, setSlackTestResult] = useState<"ok" | "fail" | null>(null);
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const baseUrl = shop ? `/api/metrics?shop=${shop}` : null;
+  const alertsUrl = shop ? `/api/alerts?shop=${shop}` : null;
+
+  const { data: kpiData } = useSWR<KpiData>(
+    baseUrl
+      ? `${baseUrl}&metric=kpi&start=${thirtyDaysAgo.toISOString()}&end=${now.toISOString()}`
+      : null,
+    fetcher
+  );
+
+  const { data: alertsActiveRaw } = useSWR<unknown[]>(
+    alertsUrl ? `${alertsUrl}&tab=active` : null,
+    fetcher
+  );
+
+  const { data: alertsHistoryRaw } = useSWR<unknown[]>(
+    alertsUrl ? `${alertsUrl}&tab=history` : null,
+    fetcher
+  );
+
+  const { data: statusData } = useSWR<StatusData>(
+    baseUrl ? `${baseUrl}&metric=status` : null,
+    fetcher
+  );
+
+  const issuesCaught = (Array.isArray(alertsActiveRaw) ? alertsActiveRaw.length : 0) +
+    (Array.isArray(alertsHistoryRaw) ? alertsHistoryRaw.length : 0);
+  const alertsResolved = Array.isArray(alertsHistoryRaw)
+    ? alertsHistoryRaw.filter((a) => (a as { resolvedAt?: string | null }).resolvedAt).length
+    : 0;
 
   useEffect(() => {
     if (!shop) return;
@@ -360,6 +402,51 @@ export default function SettingsPage() {
               </Text>
             </BlockStack>
           </Card>
+        </Layout.Section>
+
+        {/* Impact */}
+        <Layout.Section>
+          <Box background="bg-surface-secondary" padding="600" borderRadius="300">
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingLg">
+                CheckoutMaxx is monitoring your store
+              </Text>
+              <InlineGrid columns={4} gap="400">
+                {[
+                  {
+                    label: "CHECKOUTS MONITORED",
+                    value: kpiData ? kpiData.checkoutsStarted.toLocaleString() : "—",
+                  },
+                  {
+                    label: "ISSUES CAUGHT",
+                    value: String(issuesCaught),
+                  },
+                  {
+                    label: "ALERTS RESOLVED",
+                    value: String(alertsResolved),
+                  },
+                  {
+                    label: "STATUS",
+                    value: statusData ? statusData.state.replace("_", " ") : "—",
+                  },
+                ].map(({ label, value }) => (
+                  <BlockStack key={label} gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {label}
+                    </Text>
+                    <Text as="p" variant="heading2xl">
+                      {value}
+                    </Text>
+                  </BlockStack>
+                ))}
+              </InlineGrid>
+              <Divider />
+              <Text as="p" tone="subdued" variant="bodySm">
+                Monitoring checkout events in real time. Alerts fire when patterns deviate from your
+                baseline.
+              </Text>
+            </BlockStack>
+          </Box>
         </Layout.Section>
       </Layout>
     </Page>

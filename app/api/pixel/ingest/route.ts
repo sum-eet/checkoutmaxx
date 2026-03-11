@@ -4,6 +4,10 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sanitizePayload } from "@/lib/sanitize";
 
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 500;
+const WINDOW_MS = 60_000;
+
 // CORS headers — required for sendBeacon cross-origin requests
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +50,19 @@ export async function POST(req: NextRequest) {
 
   if (!shopDomain || !eventType) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: CORS });
+  }
+
+  // Rate limiting — 500 requests per minute per shop/IP
+  const key = shopDomain || req.headers.get("x-forwarded-for") || "unknown";
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= RATE_LIMIT) {
+      return NextResponse.json({ ok: false }, { status: 429, headers: CORS });
+    }
+    entry.count++;
+  } else {
+    rateLimitMap.set(key, { count: 1, resetAt: now + WINDOW_MS });
   }
 
   // Look up shop — must exist and be active
