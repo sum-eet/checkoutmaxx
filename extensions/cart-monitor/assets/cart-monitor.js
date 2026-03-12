@@ -528,6 +528,20 @@
   });
 
   // ── Init ──────────────────────────────────────────────────────────────
+  // Store our session ID as a cart attribute so the checkout Web Pixel
+  // can link cart sessions to checkout sessions via the same ID.
+  var _sessionIdStored = false;
+  function storeSessionInCart() {
+    if (_sessionIdStored) return;
+    _sessionIdStored = true;
+    var sid = getSessionId();
+    fetch('/cart/update.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attributes: { _cmx_sid: sid } }),
+    }).catch(function() {});
+  }
+
   fetch('/cart.js')
     .then(function(r) { return r.json(); })
     .then(function(cart) {
@@ -536,6 +550,7 @@
         if (CONFIG.debug) {
           console.log('[CheckoutMaxx Cart] Initialised. Cart token:', cartToken);
         }
+        storeSessionInCart();
       }
     })
     .catch(function() {});

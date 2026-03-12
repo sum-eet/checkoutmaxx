@@ -15,9 +15,9 @@ register(({ analytics, browser, init }) => {
     init.data?.shop?.domain ||
     null;
 
-  // Track the current checkout token globally so all events (including
-  // alert_displayed which has no checkout in its payload) share the same sessionId.
-  let currentCheckoutToken = null;
+  // Track session ID — prefer _cmx_sid from cart attributes (set by cart-monitor.js)
+  // so cart sessions and checkout sessions share the same ID. Fall back to checkout token.
+  let currentSessionId = null;
 
   function getDeviceType() {
     const ua = init.context?.navigator?.userAgent || "";
@@ -26,16 +26,23 @@ register(({ analytics, browser, init }) => {
     return "desktop";
   }
 
+  function extractSessionId(checkout) {
+    if (!checkout) return null;
+    // Cart attributes are in customAttributes: [{key, value}]
+    const attrs = checkout.customAttributes || checkout.attributes || [];
+    const cmxAttr = Array.isArray(attrs)
+      ? attrs.find((a) => a.key === "_cmx_sid")
+      : null;
+    if (cmxAttr?.value) return cmxAttr.value;
+    // Fall back to checkout token
+    return checkout.token || checkout.id || null;
+  }
+
   function send(eventType, payload) {
     const body = JSON.stringify({
       shopDomain,
       eventType,
-      sessionId:
-        payload?.checkout?.token ||
-        payload?.checkout?.id ||
-        payload?.cartId ||
-        currentCheckoutToken ||
-        null,
+      sessionId: currentSessionId,
       occurredAt: new Date().toISOString(),
       deviceType: getDeviceType(),
       country:
@@ -49,7 +56,7 @@ register(({ analytics, browser, init }) => {
   }
 
   analytics.subscribe("checkout_started", (event) => {
-    currentCheckoutToken = event.data?.checkout?.token || event.data?.checkout?.id || null;
+    currentSessionId = extractSessionId(event.data?.checkout);
     send("checkout_started", event.data);
   });
 
