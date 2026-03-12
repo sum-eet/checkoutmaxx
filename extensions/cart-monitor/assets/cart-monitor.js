@@ -431,10 +431,12 @@
           logEvent(buildEvent(ev.type, ev.data));
         });
       }).catch(function() {
-        logEvent(buildEvent('cart_non_json_response', { url: url, status: response.status }));
+        // Non-JSON response — skip silently (sections HTML, redirects, etc.)
       });
       return response;
     }, function(err) {
+      // Ignore AbortError — theme intentionally cancels in-flight requests
+      if (err && err.name === 'AbortError') { throw err; }
       logEvent(buildEvent('cart_fetch_error', { url: url, error: err.message }));
       throw err;
     });

@@ -27,8 +27,16 @@ async function processEvent(req: NextRequest) {
 
     if (!eventType || !shopDomain || !sessionId) return;
 
-    // Skip noisy low-value events to keep DB lean
-    if (eventType === 'cart_fetched' || eventType === 'cart_unknown_endpoint') return;
+    // Skip noisy or error-only events to keep DB lean
+    const SKIP_EVENTS = new Set([
+      'cart_fetched',
+      'cart_unknown_endpoint',
+      'cart_fetch_error',
+      'cart_xhr_error',
+      'cart_xhr_parse_error',
+      'cart_non_json_response',
+    ]);
+    if (SKIP_EVENTS.has(eventType)) return;
 
     const shop = await prisma.shop.findUnique({
       where: { shopDomain },
