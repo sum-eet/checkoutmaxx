@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         lastWeekStarted > 0 ? (lastWeekCompleted / lastWeekStarted) * 100 : 0;
       const delta = cvr - prevCvr;
       const deltaStr = (delta >= 0 ? "+" : "") + delta.toFixed(1) + "pts";
-      const resolved = alerts.filter((a) => a.resolvedAt).length;
+      const resolved = alerts.filter((a: any) => a.resolvedAt).length;
       const topDrop = funnel
         .slice(1)
         .sort((a, b) => b.dropPct - a.dropPct)[0];
