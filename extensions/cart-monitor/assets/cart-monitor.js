@@ -420,14 +420,14 @@
       url.indexOf('/discount') !== -1;
 
     if (!isCartEndpoint) {
-      return _baseFetch.call(this, input, init);
+      return _baseFetch.call(window, input, init);
     }
 
     var requestBody = (init && init.body && typeof init.body === 'string')
       ? init.body
       : null;
 
-    return _baseFetch.call(this, input, init).then(function(response) {
+    return _baseFetch.call(window, input, init).then(function(response) {
       var clone = response.clone();
       clone.json().then(function(responseData) {
         extractCartToken(responseData);
