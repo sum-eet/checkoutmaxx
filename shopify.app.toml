@@ -21,3 +21,7 @@ shop_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/shop/reda
 
 [pos]
 embedded = false
+
+[[extensions]]
+type = "theme"
+handle = "cart-monitor"

@@ -1,0 +1,9 @@
+api_version = "2024-01"
+
+[[extensions]]
+type = "theme"
+name = "cart-monitor"
+handle = "cart-monitor"
+
+  [[extensions.targeting]]
+  target = "body"

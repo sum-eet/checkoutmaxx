@@ -1,0 +1,20 @@
+{% comment %}
+  CheckoutMaxx Cart Monitor
+  Injected automatically on all storefront pages via theme app extension.
+  Loads the cart monitoring script which intercepts cart network activity.
+{% endcomment %}
+
+<script
+  src="{{ 'cart-monitor.js' | asset_url }}"
+  data-shop="{{ shop.permanent_domain }}"
+  data-log-url="https://checkoutmaxx-rt55.vercel.app/api/cart/log"
+  defer
+></script>
+
+{% schema %}
+{
+  "name": "Cart Monitor",
+  "target": "body",
+  "javascript": "cart-monitor.js"
+}
+{% endschema %}
