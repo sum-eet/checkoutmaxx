@@ -404,9 +404,11 @@
   }
 
   // ── Fetch Interceptor ─────────────────────────────────────────────────
-  var _originalFetch = window.fetch;
+  // Use Object.defineProperty so our wrapper persists even if third-party apps
+  // (Rebuy, Alia, etc.) overwrite window.fetch after our script runs.
+  var _baseFetch = window.fetch; // native or whatever is current
 
-  window.fetch = function (input, init) {
+  function _ourFetch(input, init) {
     var url = typeof input === 'string'
       ? input
       : (input instanceof Request ? input.url : String(input));
@@ -418,20 +420,19 @@
       url.indexOf('/discount') !== -1;
 
     if (!isCartEndpoint) {
-      return _originalFetch(input, init);
+      return _baseFetch.call(this, input, init);
     }
 
     var requestBody = (init && init.body && typeof init.body === 'string')
       ? init.body
       : null;
 
-    return _originalFetch(input, init).then(function(response) {
+    return _baseFetch.call(this, input, init).then(function(response) {
       var clone = response.clone();
       clone.json().then(function(responseData) {
         extractCartToken(responseData);
         var classified = classifyCartEvent(url, requestBody, responseData, response.status);
         if (!classified) return;
-        // classifyCartEvent can return an array (multiple coupon events from one update)
         var events = Array.isArray(classified) ? classified : [classified];
         events.forEach(function(ev) {
           logEvent(buildEvent(ev.type, ev.data));
@@ -441,12 +442,26 @@
       });
       return response;
     }, function(err) {
-      // Ignore AbortError — theme intentionally cancels in-flight requests
       if (err && err.name === 'AbortError') { throw err; }
       logEvent(buildEvent('cart_fetch_error', { url: url, error: err.message }));
       throw err;
     });
-  };
+  }
+
+  try {
+    Object.defineProperty(window, 'fetch', {
+      get: function() { return _ourFetch; },
+      set: function(newFn) {
+        // Another script is overwriting fetch — let them, but make _baseFetch
+        // point to their version so our wrapper chains correctly.
+        _baseFetch = newFn;
+      },
+      configurable: true,
+    });
+  } catch (e) {
+    // Fallback if defineProperty fails (very old browsers)
+    window.fetch = _ourFetch;
+  }
 
   // ── XHR Interceptor ───────────────────────────────────────────────────
   var _originalOpen = XMLHttpRequest.prototype.open;
