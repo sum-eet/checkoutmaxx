@@ -35,7 +35,7 @@ async function processEvent(req: NextRequest) {
     if (!text) return;
 
     const event = JSON.parse(text);
-    const { eventType, shopDomain, sessionId, cartToken, occurredAt, url, payload = {} } = event;
+    const { eventType, shopDomain, sessionId, cartToken, occurredAt, url, device, country, payload = {} } = event;
 
     if (!eventType || !shopDomain || !sessionId) return;
 
@@ -109,6 +109,8 @@ async function processEvent(req: NextRequest) {
         lineIndex: typeof payload.lineIndex === 'number' ? payload.lineIndex : null,
         newQuantity: typeof payload.newQuantity === 'number' ? payload.newQuantity : null,
         pageUrl: sanitisedUrl,
+        device: typeof device === 'string' ? device : null,
+        country: typeof country === 'string' ? country : null,
         occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
       },
     });

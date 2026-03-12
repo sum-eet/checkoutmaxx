@@ -135,6 +135,8 @@ model CartEvent {
   lineIndex        Int?
   newQuantity      Int?
   pageUrl          String?
+  device           String?  // mobile | desktop
+  country          String?  // from window.Shopify.country on storefront
   occurredAt       DateTime
   createdAt        DateTime @default(now())
 

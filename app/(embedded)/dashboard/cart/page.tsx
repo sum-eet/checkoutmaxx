@@ -45,6 +45,7 @@ type CartSession = {
   orderCompleted: boolean;
   checkoutEvents: { eventType: string; occurredAt: string }[];
   country: string | null;
+  device: string | null;
 };
 
 type TimelineEvent = {
@@ -276,6 +277,10 @@ export default function CartActivityPage() {
       {s.country ?? '—'}
     </Text>,
 
+    <Text as="span" variant="bodySm" tone="subdued">
+      {s.device ?? '—'}
+    </Text>,
+
     <Text as="span" variant="bodySm">
       {s.lineItems.length > 0
         ? s.lineItems.map((i: any) => `${i.productTitle} ×${i.quantity}`).join(', ')
@@ -409,8 +414,8 @@ export default function CartActivityPage() {
                     </EmptyState>
                   ) : (
                     <DataTable
-                      columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text']}
-                      headings={['Time', 'Country', 'Products', 'Cart value', 'Coupons', 'Outcome', '']}
+                      columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                      headings={['Time', 'Country', 'Device', 'Products', 'Cart value', 'Coupons', 'Outcome', '']}
                       rows={sessionRows}
                     />
                   )

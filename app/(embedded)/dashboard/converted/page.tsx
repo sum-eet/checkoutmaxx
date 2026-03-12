@@ -76,18 +76,22 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
 function KpiCard({
   label,
   value,
+  sub,
   delta,
   sparkData,
   color,
+  href,
 }: {
   label: string;
   value: string;
-  delta: number | null;
+  sub?: string;
+  delta?: number | null;
   sparkData: number[];
   color: string;
+  href?: string;
 }) {
-  const positive = delta !== null && delta >= 0;
-  return (
+  const positive = delta !== null && delta !== undefined && delta >= 0;
+  const inner = (
     <Card>
       <BlockStack gap="100">
         <Text as="p" variant="headingMd" tone="subdued">
@@ -97,16 +101,29 @@ function KpiCard({
           <Text as="p" variant="heading2xl">
             {value}
           </Text>
-          {delta !== null && (
+          {delta !== null && delta !== undefined && (
             <Badge tone={positive ? "success" : "critical"}>
               {`${positive ? "+" : ""}${(delta * 100).toFixed(1)}%`}
             </Badge>
           )}
         </InlineStack>
+        {sub && (
+          <Text as="p" variant="bodySm" tone="subdued">
+            {sub}
+          </Text>
+        )}
         <Sparkline data={sparkData} color={color} />
       </BlockStack>
     </Card>
   );
+  if (href) {
+    return (
+      <a href={href} style={{ textDecoration: 'none', display: 'block' }}>
+        {inner}
+      </a>
+    );
+  }
+  return inner;
 }
 
 type KpiData = {
@@ -115,6 +132,15 @@ type KpiData = {
   cvr: number;
   cvrDelta: number | null;
   baselineCvr: number | null;
+};
+
+type CartKpiData = {
+  cartsOpened: number;
+  cartsWithCoupon: number;
+  cartsCheckedOut: number;
+  recoveredCarts: number;
+  recoveredRevenue: number;
+  hourlyBuckets: number[];
 };
 
 type FunnelStep = {
@@ -140,6 +166,11 @@ function ConvertedContent() {
     baseUrl ? `${baseUrl}&metric=funnel&${rp}` : null,
     fetcher
   );
+  const { data: cartKpi } = useSWR<CartKpiData>(
+    shop ? `/api/cart/all?shop=${shop}` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
 
   if (!shop) {
     return (
@@ -154,7 +185,7 @@ function ConvertedContent() {
   const funnelArr = Array.isArray(funnel) ? funnel : [];
   const kpiValid = kpi != null && "checkoutsStarted" in kpi;
 
-  const sparkPoints =
+  const funnelSpark =
     funnelArr.length > 0 ? funnelArr.map((f) => f.sessions) : [0, 0, 0, 0, 0];
 
   const cvrSpark =
@@ -164,6 +195,18 @@ function ConvertedContent() {
   const currentCvr = kpiValid ? (kpi!.cvr ?? 0) : 0;
   const cvrPct = parseFloat((currentCvr * 100).toFixed(1));
   const cvrDeltaForBadge = kpi?.cvrDelta ?? null;
+
+  // Cart KPI derived values
+  const cartsOpened = cartKpi?.cartsOpened ?? 0;
+  const cartsCheckedOut = cartKpi?.cartsCheckedOut ?? 0;
+  const cartSpark = cartKpi?.hourlyBuckets ?? new Array(24).fill(0);
+  const checkoutStartRate = cartsOpened > 0
+    ? `${Math.round((cartsCheckedOut / cartsOpened) * 100)}% reached checkout`
+    : null;
+  const checkoutStartRateSub = kpiValid && cartsOpened > 0
+    ? `${Math.round((kpi!.checkoutsStarted / cartsOpened) * 100)}% of cart additions`
+    : null;
+  const checkoutsStarted = kpiValid ? kpi!.checkoutsStarted : 0;
 
   const funnelRows =
     funnelArr.map((f) => [f.label, String(f.sessions), `${f.pct}%`]);
@@ -184,34 +227,40 @@ function ConvertedContent() {
         <DateRangeSelector value={range} onChange={setRange} />
       </InlineStack>
 
-      {/* KPI Row 1 */}
-      {kpiValid ? (
-        <InlineGrid columns={3} gap="400">
+      {/* KPI Row — Cart Additions → Checkout Starts → Checkout Completes */}
+      <InlineGrid columns={3} gap="400">
+        <KpiCard
+          label="Cart Additions"
+          value={cartsOpened.toLocaleString()}
+          sub={checkoutStartRate ?? undefined}
+          sparkData={cartSpark}
+          color="#4F7FFF"
+          href="/dashboard/cart"
+        />
+        {kpiValid ? (
           <KpiCard
-            label="Checkouts Started"
-            value={kpi!.checkoutsStarted.toLocaleString()}
-            delta={null}
-            sparkData={sparkPoints}
-            color="#4F7FFF"
-          />
-          <KpiCard
-            label="Completed Orders"
-            value={kpi!.completedOrders.toLocaleString()}
-            delta={null}
-            sparkData={sparkPoints.slice().reverse()}
+            label="Checkout Starts"
+            value={checkoutsStarted.toLocaleString()}
+            sub={checkoutStartRateSub ?? undefined}
+            sparkData={funnelSpark}
             color="#007f5f"
           />
+        ) : (
+          <LoadingCard />
+        )}
+        {kpiValid ? (
           <KpiCard
-            label="Checkout CVR"
-            value={`${cvrPct}%`}
+            label="Checkout Completes"
+            value={kpi!.completedOrders.toLocaleString()}
+            sub={`CVR: ${cvrPct}%`}
             delta={cvrDeltaForBadge}
             sparkData={cvrSpark}
             color="#6366f1"
           />
-        </InlineGrid>
-      ) : (
-        <LoadingCard />
-      )}
+        ) : (
+          <LoadingCard />
+        )}
+      </InlineGrid>
 
       {/* Funnel drop-off */}
       {funnelArr.length > 0 && (

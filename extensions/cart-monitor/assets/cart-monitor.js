@@ -60,6 +60,10 @@
       (data.cart_level_discount_applications ? data.cart_level_discount_applications.length : 0);
   }
 
+  // ── Device Detection ──────────────────────────────────────────────────
+  var _deviceType = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+  var _country = (window.Shopify && window.Shopify.country) || null;
+
   // ── Event Builder ─────────────────────────────────────────────────────
   function buildEvent(type, payload) {
     return {
@@ -69,6 +73,8 @@
       cartToken: cartToken,
       occurredAt: new Date().toISOString(),
       url: window.location.href,
+      device: _deviceType,
+      country: _country,
       payload: payload,
     };
   }

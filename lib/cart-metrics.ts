@@ -43,6 +43,7 @@ export type CartSession = {
   orderCompleted: boolean;
   checkoutEvents: CheckoutStep[];
   country: string | null;
+  device: string | null;
 };
 
 export type CouponAttempt = {
@@ -72,6 +73,7 @@ export type CartKPIs = {
   cartsCheckedOut: number;
   recoveredCarts: number;
   recoveredRevenue: number;
+  hourlyBuckets: number[]; // 24-element array: cart sessions opened per hour today
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -90,7 +92,7 @@ export async function getCartKPIs(shopId: string): Promise<CartKPIs> {
   const [sessions, couponSessions, checkoutSessions, recoveries] = await Promise.all([
     prisma.cartEvent.findMany({
       where: { shopId, occurredAt: { gte: since } },
-      select: { sessionId: true },
+      select: { sessionId: true, occurredAt: true },
       distinct: ['sessionId'],
     }),
     prisma.cartEvent.findMany({
@@ -116,12 +118,19 @@ export async function getCartKPIs(shopId: string): Promise<CartKPIs> {
 
   const recoveredRevenue = recoveries.reduce((sum, r) => sum + (r.cartValue ?? 0), 0);
 
+  const hourlyBuckets = new Array(24).fill(0) as number[];
+  sessions.forEach((s) => {
+    const hour = new Date(s.occurredAt).getHours();
+    hourlyBuckets[hour]++;
+  });
+
   return {
     cartsOpened: sessions.length,
     cartsWithCoupon: couponSessions.length,
     cartsCheckedOut: checkoutSessions.length,
     recoveredCarts: recoveries.length,
     recoveredRevenue,
+    hourlyBuckets,
   };
 }
 
@@ -152,24 +161,41 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
   });
 
   const checkoutBySession = new Map<string, CheckoutStep[]>();
-  const countryBySession = new Map<string, string>();
+  const checkoutCountryBySession = new Map<string, string>();
   checkoutEvents.forEach((ce) => {
     if (!checkoutBySession.has(ce.sessionId)) checkoutBySession.set(ce.sessionId, []);
     checkoutBySession.get(ce.sessionId)!.push({
       eventType: ce.eventType,
       occurredAt: ce.occurredAt,
     });
-    if (ce.country && !countryBySession.has(ce.sessionId)) {
-      countryBySession.set(ce.sessionId, ce.country);
+    if (ce.country && !checkoutCountryBySession.has(ce.sessionId)) {
+      checkoutCountryBySession.set(ce.sessionId, ce.country);
     }
   });
+
+  // Meaningful event types — sessions that only have cart_bulk_updated / cart_fetched
+  // are phantom sessions from third-party apps (Rebuy etc.) and should be filtered out.
+  const MEANINGFUL_TYPES = new Set([
+    'cart_item_added', 'cart_item_changed', 'cart_item_removed',
+    'cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered',
+    'cart_coupon_removed', 'cart_checkout_clicked', 'cart_page_hidden',
+  ]);
 
   const sessions: CartSession[] = [];
 
   Array.from(bySession.entries()).forEach(([sessionId, evs]) => {
+    // Skip phantom sessions (only bulk/fetch events from third-party app polling)
+    const hasMeaningfulEvent = evs.some((e) => MEANINGFUL_TYPES.has(e.eventType));
+    const hasCheckoutEvents = (checkoutBySession.get(sessionId) ?? []).length > 0;
+    if (!hasMeaningfulEvent && !hasCheckoutEvents) return;
+
     const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
-    const firstWithValue = evs.find((e) => e.cartValue != null);
+    // Use first event with a positive cart value to avoid $0 from empty-cart polls
+    const firstWithValue = evs.find((e) => e.cartValue != null && e.cartValue > 0);
     const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
+    // Prefer country from CartEvent (direct detection), fall back to CheckoutEvent
+    const cartCountry = evs.find((e) => (e as any).country != null)?.country ?? null;
+    const device = evs.find((e) => (e as any).device != null)?.device ?? null;
 
     const couponMap = new Map<string, CouponAttempt>();
     evs.forEach((ev) => {
@@ -201,7 +227,8 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
       checkedOut,
       orderCompleted,
       checkoutEvents: checkoutSteps,
-      country: countryBySession.get(sessionId) ?? null,
+      country: cartCountry ?? checkoutCountryBySession.get(sessionId) ?? null,
+      device,
     });
   });
 
