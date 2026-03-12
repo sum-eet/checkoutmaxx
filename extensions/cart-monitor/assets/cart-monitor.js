@@ -36,13 +36,23 @@
     return id;
   }
 
-  // ── Cart Token ────────────────────────────────────────────────────────
+  // ── Cart Token + State ────────────────────────────────────────────────
   var cartToken = null;
+  // Track last known cart state to deduplicate cart_fetched spam.
+  // Many apps (Rebuy, Alia, etc.) poll /cart.js constantly.
+  // Only fire cart_fetched when something actually changed.
+  var lastCartState = null;
 
   function extractCartToken(responseData) {
     if (responseData && responseData.token) {
       cartToken = responseData.token;
     }
+  }
+
+  function cartStateKey(data) {
+    if (!data) return null;
+    return (data.item_count || 0) + ':' + (data.total_price || 0) + ':' +
+      (data.cart_level_discount_applications ? data.cart_level_discount_applications.length : 0);
   }
 
   // ── Event Builder ─────────────────────────────────────────────────────
@@ -256,7 +266,14 @@
     }
 
     // ── Cart Fetched ─────────────────────────────────────────────────────
+    // Deduplicate: many third-party apps (Rebuy, Alia, etc.) poll /cart.js
+    // constantly. Only fire when cart state actually changed.
     if (path.indexOf('/cart.js') !== -1 || path === '/cart') {
+      var stateKey = cartStateKey(responseData);
+      if (stateKey === lastCartState) {
+        return null; // no change, skip
+      }
+      lastCartState = stateKey;
       return {
         type: 'cart_fetched',
         data: {
@@ -303,6 +320,7 @@
       clone.json().then(function(responseData) {
         extractCartToken(responseData);
         var classified = classifyCartEvent(url, requestBody, responseData, response.status);
+        if (!classified) return;
         logEvent(buildEvent(classified.type, classified.data));
       }).catch(function() {
         logEvent(buildEvent('cart_non_json_response', { url: url, status: response.status }));
@@ -341,6 +359,7 @@
           var responseData = JSON.parse(self.responseText);
           extractCartToken(responseData);
           var classified = classifyCartEvent(url, self._cmx_requestBody, responseData, self.status);
+          if (!classified) return;
           logEvent(buildEvent(classified.type, classified.data));
         } catch (e) {
           logEvent(buildEvent('cart_xhr_parse_error', { url: url, status: self.status }));

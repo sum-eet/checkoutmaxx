@@ -28,13 +28,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400, headers: CORS_HEADERS });
   }
 
-  const line =
-    JSON.stringify({ ...event, receivedAt: new Date().toISOString() }) + "\n";
+  const enriched = { ...event, receivedAt: new Date().toISOString() };
+
+  // Log to Vercel function logs so you can read events in the dashboard
+  console.log(`[cart-log] ${enriched.eventType} | shop=${enriched.shopDomain} | session=${enriched.sessionId} | cart=${enriched.cartToken}`);
+  if (enriched.payload) {
+    console.log(`[cart-log] payload:`, JSON.stringify(enriched.payload));
+  }
 
   try {
-    appendFileSync(LOG_FILE, line);
+    appendFileSync(LOG_FILE, JSON.stringify(enriched) + "\n");
   } catch {
-    // /tmp not writable in all environments — events still logged to console in extension
+    // /tmp not writable in all environments — events still in Vercel logs above
   }
 
   return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
