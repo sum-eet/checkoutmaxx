@@ -217,9 +217,14 @@ function ConvertedContent() {
       {funnelArr.length > 0 && (
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Funnel Conversion by Step
-            </Text>
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                Funnel Conversion by Step
+              </Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Uptick at end = accelerated checkouts (Shop Pay / Apple Pay)
+              </Text>
+            </InlineStack>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart
                 data={funnelArr.map((f, i) => ({ label: f.label.split(" ")[0], pct: f.pct, i }))}
@@ -269,11 +274,16 @@ function ConvertedContent() {
               Funnel Steps
             </Text>
             {Array.isArray(funnel) ? (
-              <DataTable
-                columnContentTypes={["text", "numeric", "numeric"]}
-                headings={["Step", "Sessions", "Pct"]}
-                rows={funnelRows}
-              />
+              <>
+                <DataTable
+                  columnContentTypes={["text", "numeric", "numeric"]}
+                  headings={["Step", "Sessions", "Pct"]}
+                  rows={funnelRows}
+                />
+                <Text as="p" tone="subdued" variant="bodySm">
+                  * Completed may exceed Payment — Shop Pay / Apple Pay skip intermediate steps
+                </Text>
+              </>
             ) : (
               <SkeletonBodyText lines={3} />
             )}
