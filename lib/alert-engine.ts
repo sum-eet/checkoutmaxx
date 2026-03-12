@@ -183,14 +183,14 @@ async function checkPaymentFailures(shop: any) {
           shopId: shop.id,
           eventType: "checkout_completed",
           occurredAt: { gte: thirtyMinutesAgo },
-          sessionId: { in: submittedSessions.map((s) => s.sessionId) },
+          sessionId: { in: submittedSessions.map((s: any) => s.sessionId) },
         },
         select: { sessionId: true },
       })
-    ).map((e) => e.sessionId)
+    ).map((e: any) => e.sessionId)
   );
 
-  const failedSessions = submittedSessions.filter((s) => !completedSessionIds.has(s.sessionId));
+  const failedSessions = submittedSessions.filter((s: any) => !completedSessionIds.has(s.sessionId));
   const threshold = shop.paymentFailureRate ?? PAYMENT_FAILURE_THRESHOLD;
   const failureRate = failedSessions.length / paymentAttempts;
 

@@ -84,9 +84,9 @@ export async function getKpiMetrics(shopId: string, range: DateRange): Promise<K
   ]);
 
   // Union: a session that completed without a tracked start still counts as started
-  const startedSet = new Set(started.map((r) => r.sessionId));
-  const completedSet = new Set(completed.map((r) => r.sessionId));
-  completed.forEach((r) => startedSet.add(r.sessionId));
+  const startedSet = new Set(started.map((r: any) => r.sessionId));
+  const completedSet = new Set(completed.map((r: any) => r.sessionId));
+  completed.forEach((r: any) => startedSet.add(r.sessionId));
 
   const checkoutsStarted = startedSet.size;
   const completedOrders = completedSet.size;
@@ -119,7 +119,7 @@ export async function getFunnelMetrics(
             select: { sessionId: true },
             distinct: ["sessionId"],
           })
-          .then((rows) => rows.length)
+          .then((rows: any) => rows.length)
       )
     ),
     prisma.checkoutEvent.findMany({
@@ -135,8 +135,8 @@ export async function getFunnelMetrics(
   ]);
 
   // Step[0]: union of started+completed sessions (same logic as KPI so numbers match)
-  const startedSet = new Set(startedRows.map((r) => r.sessionId));
-  completedRows.forEach((r) => startedSet.add(r.sessionId));
+  const startedSet = new Set(startedRows.map((r: any) => r.sessionId));
+  completedRows.forEach((r: any) => startedSet.add(r.sessionId));
   const unionTotal = startedSet.size;
 
   // Build counts with accurate step[0] and step[last], cap intermediates at total
@@ -198,10 +198,10 @@ export async function getTopErrors(shopId: string, range: DateRange): Promise<To
         select: { sessionId: true },
         distinct: ["sessionId"],
       })
-      .then((rows) => new Set(rows.map((r) => r.sessionId))),
+      .then((rows: any) => new Set(rows.map((r: any) => r.sessionId))),
   ]);
 
-  const paymentDropoffs = paymentAttempted.filter((s) => !completedIds.has(s.sessionId)).length;
+  const paymentDropoffs = paymentAttempted.filter((s: any) => !completedIds.has(s.sessionId)).length;
 
   return [
     { type: "discount_error", label: "Discount code error", count: discountErrors },
@@ -229,8 +229,8 @@ export async function getDroppedProducts(
     }),
   ]);
 
-  const completedSet = new Set(completedSessions.map((s) => s.sessionId));
-  const dropped = startedEvents.filter((s) => !completedSet.has(s.sessionId));
+  const completedSet = new Set(completedSessions.map((s: any) => s.sessionId));
+  const dropped = startedEvents.filter((s: any) => !completedSet.has(s.sessionId));
 
   const productMap = new Map<string, number>();
   for (const event of dropped) {
@@ -334,5 +334,5 @@ export async function getDistinctCountries(shopId: string, range: DateRange): Pr
     distinct: ["country"],
     take: 20,
   });
-  return rows.map((r) => r.country!).filter(Boolean);
+  return rows.map((r: any) => r.country!).filter(Boolean);
 }

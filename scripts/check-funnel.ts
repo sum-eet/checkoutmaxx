@@ -20,7 +20,7 @@ async function main() {
       distinct: ["sessionId"],
     });
     console.log(`${et}: ${rows.length}`);
-    rows.forEach(r => console.log("  -", r.sessionId));
+    rows.forEach((r: any) => console.log("  -", r.sessionId));
   }
 
   const completed = await prisma.checkoutEvent.findMany({
@@ -34,10 +34,10 @@ async function main() {
     distinct: ["sessionId"],
   });
 
-  const paymentSet = new Set(payment.map(r => r.sessionId));
-  const noPayment = completed.filter(r => !paymentSet.has(r.sessionId));
+  const paymentSet = new Set(payment.map((r: any) => r.sessionId));
+  const noPayment = completed.filter((r: any) => !paymentSet.has(r.sessionId));
   console.log(`\nCompleted WITHOUT payment_info_submitted: ${noPayment.length}`);
-  noPayment.forEach(r => console.log("  -", r.sessionId));
+  noPayment.forEach((r: any) => console.log("  -", r.sessionId));
   await prisma.$disconnect();
 }
 

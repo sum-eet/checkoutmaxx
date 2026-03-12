@@ -116,10 +116,10 @@ export async function getCartKPIs(shopId: string): Promise<CartKPIs> {
     }),
   ]);
 
-  const recoveredRevenue = recoveries.reduce((sum, r) => sum + (r.cartValue ?? 0), 0);
+  const recoveredRevenue = recoveries.reduce((sum: any, r: any) => sum + (r.cartValue ?? 0), 0);
 
   const hourlyBuckets = new Array(24).fill(0) as number[];
-  sessions.forEach((s) => {
+  sessions.forEach((s: any) => {
     const hour = new Date(s.occurredAt).getHours();
     hourlyBuckets[hour]++;
   });
@@ -147,7 +147,7 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
   if (events.length === 0) return [];
 
   const bySession = new Map<string, typeof events>();
-  events.forEach((ev) => {
+  events.forEach((ev: any) => {
     if (!bySession.has(ev.sessionId)) bySession.set(ev.sessionId, []);
     bySession.get(ev.sessionId)!.push(ev);
   });
@@ -162,7 +162,7 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
 
   const checkoutBySession = new Map<string, CheckoutStep[]>();
   const checkoutCountryBySession = new Map<string, string>();
-  checkoutEvents.forEach((ce) => {
+  checkoutEvents.forEach((ce: any) => {
     if (!checkoutBySession.has(ce.sessionId)) checkoutBySession.set(ce.sessionId, []);
     checkoutBySession.get(ce.sessionId)!.push({
       eventType: ce.eventType,
@@ -185,20 +185,20 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
 
   Array.from(bySession.entries()).forEach(([sessionId, evs]) => {
     // Skip phantom sessions (only bulk/fetch events from third-party app polling)
-    const hasMeaningfulEvent = evs.some((e) => MEANINGFUL_TYPES.has(e.eventType));
+    const hasMeaningfulEvent = evs.some((e: any) => MEANINGFUL_TYPES.has(e.eventType));
     const hasCheckoutEvents = (checkoutBySession.get(sessionId) ?? []).length > 0;
     if (!hasMeaningfulEvent && !hasCheckoutEvents) return;
 
     const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
     // Use first event with a positive cart value to avoid $0 from empty-cart polls
-    const firstWithValue = evs.find((e) => e.cartValue != null && e.cartValue > 0);
+    const firstWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0);
     const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
     // Prefer country from CartEvent (direct detection), fall back to CheckoutEvent
-    const cartCountry = evs.find((e) => (e as any).country != null)?.country ?? null;
-    const device = evs.find((e) => (e as any).device != null)?.device ?? null;
+    const cartCountry = evs.find((e: any) => e.country != null)?.country ?? null;
+    const device = evs.find((e: any) => e.device != null)?.device ?? null;
 
     const couponMap = new Map<string, CouponAttempt>();
-    evs.forEach((ev) => {
+    evs.forEach((ev: any) => {
       if (!ev.couponCode) return;
       const existing = couponMap.get(ev.couponCode);
       couponMap.set(ev.couponCode, {
@@ -211,7 +211,7 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
 
     const checkoutSteps = checkoutBySession.get(sessionId) ?? [];
     const checkedOut =
-      evs.some((e) => e.eventType === 'cart_checkout_clicked') || checkoutSteps.length > 0;
+      evs.some((e: any) => e.eventType === 'cart_checkout_clicked') || checkoutSteps.length > 0;
     const orderCompleted = checkoutSteps.some((e) => e.eventType === 'checkout_completed');
 
     sessions.push({
@@ -375,7 +375,7 @@ export async function getCouponStats(shopId: string): Promise<CouponStat[]> {
     { attempts: number; successes: number; recoveries: number; cartValues: number[]; lastSeen: Date }
   >();
 
-  events.forEach((ev) => {
+  events.forEach((ev: any) => {
     const code = ev.couponCode!;
     if (!statsMap.has(code)) {
       statsMap.set(code, {
