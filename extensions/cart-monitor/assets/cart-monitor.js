@@ -103,12 +103,22 @@
 
     // ── Item Added ──────────────────────────────────────────────────────
     if (path.indexOf('/cart/add') !== -1) {
-      var items = (responseData && responseData.items) ? responseData.items : [];
+      // Dawn single-add returns the item directly {product_id, ...}
+      // Multi-add returns {items: [...]}
+      // Both formats need to be handled
+      var rawItems = responseData
+        ? (responseData.items
+            ? responseData.items
+            : (responseData.product_id ? [responseData] : []))
+        : [];
+
+      // For single-add, cartValue/itemCount aren't in the response —
+      // read from the global cart state fetched at init
       return {
         type: 'cart_item_added',
         data: {
           success: status >= 200 && status < 300,
-          itemsAdded: items.map(function(i) {
+          itemsAdded: rawItems.map(function(i) {
             return {
               productId: i.product_id,
               variantId: i.variant_id,
@@ -119,9 +129,10 @@
               sku: i.sku,
             };
           }),
-          cartValue: responseData && responseData.total_price,
-          cartItemCount: responseData && responseData.item_count,
-          cartToken: responseData && responseData.token,
+          // These are present on multi-add response, absent on single-add
+          cartValue: responseData && responseData.total_price != null ? responseData.total_price : null,
+          cartItemCount: responseData && responseData.item_count != null ? responseData.item_count : null,
+          cartToken: responseData && responseData.token ? responseData.token : cartToken,
           errorMessage: status >= 400 ? (responseData && responseData.description) : null,
         },
       };
