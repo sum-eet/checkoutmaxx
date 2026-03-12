@@ -8,12 +8,14 @@ export type CartSession = {
   firstSeen: Date;
   lastSeen: Date;
   cartValue: number | null;
+  startingCartValue: number | null;
   cartItemCount: number | null;
   lineItems: any[];
   couponsAttempted: CouponAttempt[];
   checkedOut: boolean;
   orderCompleted: boolean;
   checkoutEvents: CheckoutStep[];
+  country: string | null;
 };
 
 export type CouponAttempt = {
@@ -118,23 +120,28 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
 
   const checkoutEvents = await prisma.checkoutEvent.findMany({
     where: { shopId, sessionId: { in: sessionIds } },
-    select: { sessionId: true, eventType: true, occurredAt: true },
+    select: { sessionId: true, eventType: true, occurredAt: true, country: true },
     orderBy: { occurredAt: 'asc' },
   });
 
   const checkoutBySession = new Map<string, CheckoutStep[]>();
+  const countryBySession = new Map<string, string>();
   checkoutEvents.forEach((ce) => {
     if (!checkoutBySession.has(ce.sessionId)) checkoutBySession.set(ce.sessionId, []);
     checkoutBySession.get(ce.sessionId)!.push({
       eventType: ce.eventType,
       occurredAt: ce.occurredAt,
     });
+    if (ce.country && !countryBySession.has(ce.sessionId)) {
+      countryBySession.set(ce.sessionId, ce.country);
+    }
   });
 
   const sessions: CartSession[] = [];
 
   Array.from(bySession.entries()).forEach(([sessionId, evs]) => {
     const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
+    const firstWithValue = evs.find((e) => e.cartValue != null);
     const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
 
     const couponMap = new Map<string, CouponAttempt>();
@@ -160,12 +167,14 @@ export async function getCartSessions(shopId: string): Promise<CartSession[]> {
       firstSeen: evs[0].occurredAt,
       lastSeen: evs[evs.length - 1].occurredAt,
       cartValue: lastWithValue?.cartValue ?? null,
+      startingCartValue: firstWithValue?.cartValue ?? null,
       cartItemCount: lastWithValue?.cartItemCount ?? null,
       lineItems: (lastWithItems?.lineItems as any[]) ?? [],
       couponsAttempted: Array.from(couponMap.values()),
       checkedOut,
       orderCompleted,
       checkoutEvents: checkoutSteps,
+      country: countryBySession.get(sessionId) ?? null,
     });
   });
 

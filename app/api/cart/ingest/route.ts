@@ -53,9 +53,15 @@ async function processEvent(req: NextRequest) {
     const shopId = await resolveShopId(shopDomain);
     if (!shopId) return;
 
-    // Sanitise lineItems — strip any PII, keep only product data
-    const sanitisedLineItems = Array.isArray(payload.lineItems)
-      ? payload.lineItems.map((item: any) => ({
+    // Sanitise lineItems — strip any PII, keep only product data.
+    // cart_item_added puts items in payload.itemsAdded, all others in payload.lineItems.
+    const rawLineItems = Array.isArray(payload.lineItems)
+      ? payload.lineItems
+      : Array.isArray(payload.itemsAdded)
+      ? payload.itemsAdded
+      : null;
+    const sanitisedLineItems = rawLineItems
+      ? rawLineItems.map((item: any) => ({
           productId: item.productId ?? null,
           variantId: item.variantId ?? null,
           productTitle: item.productTitle ?? null,

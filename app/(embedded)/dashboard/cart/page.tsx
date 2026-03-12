@@ -34,12 +34,14 @@ type CartSession = {
   firstSeen: string;
   lastSeen: string;
   cartValue: number | null;
+  startingCartValue: number | null;
   cartItemCount: number | null;
   lineItems: any[];
   couponsAttempted: CouponAttempt[];
   checkedOut: boolean;
   orderCompleted: boolean;
   checkoutEvents: { eventType: string; occurredAt: string }[];
+  country: string | null;
 };
 
 type TimelineEvent = {
@@ -266,15 +268,24 @@ export default function CartActivityPage() {
   const sessionRows = sessions.map((s) => [
     <Text as="span" variant="bodySm">{formatTime(s.firstSeen)}</Text>,
 
+    <Text as="span" variant="bodySm" tone="subdued">
+      {s.country ?? '—'}
+    </Text>,
+
     <Text as="span" variant="bodySm">
       {s.lineItems.length > 0
-        ? s.lineItems.map((i: any) => `${i.productTitle} x${i.quantity}`).join(', ')
-        : s.cartItemCount != null
+        ? s.lineItems.map((i: any) => `${i.productTitle} ×${i.quantity}`).join(', ')
+        : s.cartItemCount != null && s.cartItemCount > 0
         ? `${s.cartItemCount} item${s.cartItemCount !== 1 ? 's' : ''}`
         : '—'}
     </Text>,
 
-    <Text as="span" variant="bodySm">{formatCents(s.cartValue)}</Text>,
+    <Text as="span" variant="bodySm">
+      {s.startingCartValue != null ? formatCents(s.startingCartValue) : '—'}
+      {s.cartValue != null && s.cartValue !== s.startingCartValue
+        ? ` → ${formatCents(s.cartValue)}`
+        : ''}
+    </Text>,
 
     <CouponPills coupons={s.couponsAttempted} />,
 
@@ -386,8 +397,8 @@ export default function CartActivityPage() {
                     </EmptyState>
                   ) : (
                     <DataTable
-                      columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text']}
-                      headings={['Time', 'Products', 'Cart value', 'Coupons', 'Outcome', '']}
+                      columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                      headings={['Time', 'Country', 'Products', 'Cart value', 'Coupons', 'Outcome', '']}
                       rows={sessionRows}
                     />
                   )
