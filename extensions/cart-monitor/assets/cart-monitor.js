@@ -135,9 +135,11 @@
       return {
         type: qty === 0 ? 'cart_item_removed' : 'cart_item_changed',
         data: {
-          variantId: req && req.data && (req.data.id || req.data.variant_id),
-          newQuantity: qty,
+          // Dawn sends line (1-based index) or key, not id/variant_id directly
+          variantId: req && req.data && (req.data.id || req.data.variant_id || null),
+          lineIndex: req && req.data && req.data.line ? parseInt(req.data.line, 10) : null,
           lineKey: req && req.data && req.data.key,
+          newQuantity: qty,
           cartValue: responseData && responseData.total_price,
           cartItemCount: responseData && responseData.item_count,
           cartToken: responseData && responseData.token,
@@ -352,7 +354,12 @@
       href.indexOf('/checkout') !== -1 ||
       target.getAttribute('name') === 'checkout' ||
       target.getAttribute('data-checkout') !== null ||
-      (target.tagName === 'BUTTON' && target.form && target.form.action && target.form.action.indexOf('/cart') !== -1);
+      target.getAttribute('data-cart-checkout') !== null ||
+      // Dawn: submit button inside a cart form — but only if it's a submit type
+      // (quantity +/- are type="button", checkout is type="submit" with name="checkout")
+      (target.tagName === 'BUTTON' && target.type === 'submit' &&
+        target.form && target.form.action && target.form.action.indexOf('/cart') !== -1 &&
+        (target.name === 'checkout' || target.getAttribute('aria-label') === 'checkout'));
 
     if (isCheckoutLink) {
       logEvent(buildEvent('cart_checkout_clicked', {
