@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
+// Module-level cache — same Vercel instance handles many beacons from the same shop.
+// Avoids a DB roundtrip on every single cart event.
+const shopIdCache = new Map<string, string>(); // shopDomain -> shopId
+
+async function resolveShopId(shopDomain: string): Promise<string | null> {
+  const cached = shopIdCache.get(shopDomain);
+  if (cached) return cached;
+  const shop = await prisma.shop.findUnique({ where: { shopDomain }, select: { id: true } });
+  if (shop) shopIdCache.set(shopDomain, shop.id);
+  return shop?.id ?? null;
+}
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -38,11 +50,8 @@ async function processEvent(req: NextRequest) {
     ]);
     if (SKIP_EVENTS.has(eventType)) return;
 
-    const shop = await prisma.shop.findUnique({
-      where: { shopDomain },
-      select: { id: true },
-    });
-    if (!shop) return;
+    const shopId = await resolveShopId(shopDomain);
+    if (!shopId) return;
 
     // Sanitise lineItems — strip any PII, keep only product data
     const sanitisedLineItems = Array.isArray(payload.lineItems)
@@ -79,7 +88,7 @@ async function processEvent(req: NextRequest) {
 
     await prisma.cartEvent.create({
       data: {
-        shopId: shop.id,
+        shopId,
         sessionId,
         cartToken: cartToken ?? '',
         eventType,
