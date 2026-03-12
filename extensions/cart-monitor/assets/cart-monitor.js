@@ -1,12 +1,10 @@
 /**
- * CheckoutMaxx Cart Monitor — Phase 1 Discovery
+ * CheckoutMaxx Cart Monitor — Phase 2
  *
  * Intercepts all cart-related network activity on the Shopify storefront.
- * Runs on every page (cart page, product pages, collection pages) because
- * cart drawers can open anywhere.
+ * Runs on every page because cart drawers can open anywhere.
  *
- * Phase 1: logs to console + beacons to /api/cart/log for inspection.
- * Phase 2 will replace the beacon target with the real ingest endpoint.
+ * Phase 2: coupon intelligence via /cart/update discount field detection.
  */
 
 (function () {
@@ -20,10 +18,10 @@
     shopDomain: script && script.dataset && script.dataset.shop
       ? script.dataset.shop
       : window.location.hostname,
-    logUrl: script && script.dataset && script.dataset.logUrl
-      ? script.dataset.logUrl
+    logUrl: script && script.dataset && script.dataset.ingestUrl
+      ? script.dataset.ingestUrl
       : null,
-    debug: true,
+    debug: false, // Phase 2: console logging off in production
   };
 
   // ── Session ID ────────────────────────────────────────────────────────
@@ -42,6 +40,13 @@
   // Many apps (Rebuy, Alia, etc.) poll /cart.js constantly.
   // Only fire cart_fetched when something actually changed.
   var lastCartState = null;
+
+  // ── Coupon State ───────────────────────────────────────────────────────
+  // Track discount codes seen across /cart/update calls.
+  // Key: code string, Value: boolean (applicable)
+  var lastDiscountCodes = {};
+  // Last discount field string sent, to deduplicate rapid-fire requests
+  var lastDiscountPayload = null;
 
   function extractCartToken(responseData) {
     if (responseData && responseData.token) {
@@ -177,15 +182,114 @@
       };
     }
 
-    // ── Bulk Update ──────────────────────────────────────────────────────
+    // ── Cart Update (includes coupon operations) ─────────────────────────
     if (path.indexOf('/cart/update') !== -1) {
+      var discountField = req && req.data && req.data.discount
+        ? String(req.data.discount).trim()
+        : null;
+
+      // If this update contains a discount field, extract coupon intelligence
+      if (discountField && discountField !== lastDiscountPayload) {
+        lastDiscountPayload = discountField;
+
+        var newCodes = (responseData && responseData.discount_codes) || [];
+        var couponEvents = [];
+
+        // Find discount amount for a specific code from items[].discounts
+        function getDiscountAmount(code) {
+          var total = 0;
+          var items = (responseData && responseData.items) || [];
+          items.forEach(function(item) {
+            (item.discounts || []).forEach(function(d) {
+              if (d.title === code) total += d.amount;
+            });
+          });
+          return total;
+        }
+
+        // Check each code in the response
+        newCodes.forEach(function(entry) {
+          var code = entry.code;
+          var applicable = entry.applicable;
+          var wasKnown = lastDiscountCodes.hasOwnProperty(code);
+          var wasApplicable = lastDiscountCodes[code];
+
+          if (!wasKnown) {
+            // Brand new code we haven't seen before
+            if (applicable) {
+              couponEvents.push({
+                type: 'cart_coupon_applied',
+                data: {
+                  code: code,
+                  discountAmount: getDiscountAmount(code),
+                  cartValue: responseData.total_price,
+                  cartItemCount: responseData.item_count,
+                  cartToken: responseData.token || cartToken,
+                  retriedAfterFail: false,
+                },
+              });
+            } else {
+              couponEvents.push({
+                type: 'cart_coupon_failed',
+                data: {
+                  code: code,
+                  // Shopify does not return a failure reason from /cart/update.
+                  // applicable: false is the only signal. Reason classification
+                  // happens at checkout via Web Pixel alert_displayed event.
+                  failureReason: 'unknown',
+                  cartValue: responseData.total_price,
+                  cartItemCount: responseData.item_count,
+                  cartToken: responseData.token || cartToken,
+                },
+              });
+            }
+          } else if (!wasApplicable && applicable) {
+            // Was failing before, now succeeds.
+            // This is the "customer added more items to unlock the discount" scenario.
+            couponEvents.push({
+              type: 'cart_coupon_recovered',
+              data: {
+                code: code,
+                discountAmount: getDiscountAmount(code),
+                cartValue: responseData.total_price,
+                cartItemCount: responseData.item_count,
+                cartToken: responseData.token || cartToken,
+                retriedAfterFail: true,
+              },
+            });
+          }
+          // Update known state
+          lastDiscountCodes[code] = applicable;
+        });
+
+        // Check for removed codes (present before, absent now)
+        Object.keys(lastDiscountCodes).forEach(function(code) {
+          var stillPresent = newCodes.some(function(c) { return c.code === code; });
+          if (!stillPresent) {
+            couponEvents.push({
+              type: 'cart_coupon_removed',
+              data: {
+                code: code,
+                cartValue: responseData && responseData.total_price,
+                cartToken: (responseData && responseData.token) || cartToken,
+              },
+            });
+            delete lastDiscountCodes[code];
+          }
+        });
+
+        if (couponEvents.length > 0) {
+          return couponEvents; // array — call site handles this
+        }
+      }
+
+      // Non-discount update (Rebuy attribute update, quantity bulk update, etc.)
       return {
         type: 'cart_bulk_updated',
         data: {
           cartValue: responseData && responseData.total_price,
           cartItemCount: responseData && responseData.item_count,
           cartToken: responseData && responseData.token,
-          updates: req && req.data && (req.data.updates || req.data),
         },
       };
     }
@@ -321,7 +425,11 @@
         extractCartToken(responseData);
         var classified = classifyCartEvent(url, requestBody, responseData, response.status);
         if (!classified) return;
-        logEvent(buildEvent(classified.type, classified.data));
+        // classifyCartEvent can return an array (multiple coupon events from one update)
+        var events = Array.isArray(classified) ? classified : [classified];
+        events.forEach(function(ev) {
+          logEvent(buildEvent(ev.type, ev.data));
+        });
       }).catch(function() {
         logEvent(buildEvent('cart_non_json_response', { url: url, status: response.status }));
       });
@@ -360,7 +468,10 @@
           extractCartToken(responseData);
           var classified = classifyCartEvent(url, self._cmx_requestBody, responseData, self.status);
           if (!classified) return;
-          logEvent(buildEvent(classified.type, classified.data));
+          var events = Array.isArray(classified) ? classified : [classified];
+          events.forEach(function(ev) {
+            logEvent(buildEvent(ev.type, ev.data));
+          });
         } catch (e) {
           logEvent(buildEvent('cart_xhr_parse_error', { url: url, status: self.status }));
         }

@@ -1,6 +1,7 @@
 api_version = "2024-01"
 
 [[extensions]]
+uid = "51730e0c-9e7d-83be-0cd9-0160899c82b18f39945d"
 type = "theme"
 name = "cart-monitor"
 handle = "cart-monitor"

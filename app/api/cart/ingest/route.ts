@@ -1,0 +1,96 @@
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
+export async function POST(req: NextRequest) {
+  // Respond immediately — sendBeacon doesn't wait for response
+  void processEvent(req);
+  return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
+}
+
+async function processEvent(req: NextRequest) {
+  try {
+    const text = await req.text();
+    if (!text) return;
+
+    const event = JSON.parse(text);
+    const { eventType, shopDomain, sessionId, cartToken, occurredAt, url, payload = {} } = event;
+
+    if (!eventType || !shopDomain || !sessionId) return;
+
+    // Skip noisy low-value events to keep DB lean
+    if (eventType === 'cart_fetched' || eventType === 'cart_unknown_endpoint') return;
+
+    const shop = await prisma.shop.findUnique({
+      where: { shopDomain },
+      select: { id: true },
+    });
+    if (!shop) return;
+
+    // Sanitise lineItems — strip any PII, keep only product data
+    const sanitisedLineItems = Array.isArray(payload.lineItems)
+      ? payload.lineItems.map((item: any) => ({
+          productId: item.productId ?? null,
+          variantId: item.variantId ?? null,
+          productTitle: item.productTitle ?? null,
+          price: item.price ?? null,
+          quantity: item.quantity ?? null,
+        }))
+      : null;
+
+    const isCouponEvent = [
+      'cart_coupon_applied',
+      'cart_coupon_failed',
+      'cart_coupon_recovered',
+      'cart_coupon_removed',
+    ].includes(eventType);
+
+    const couponSuccess =
+      eventType === 'cart_coupon_applied' || eventType === 'cart_coupon_recovered'
+        ? true
+        : eventType === 'cart_coupon_failed'
+        ? false
+        : null;
+
+    // Sanitise pageUrl — store pathname only, no query params (may contain discount codes)
+    let sanitisedUrl: string | null = null;
+    try {
+      sanitisedUrl = url ? new URL(url).pathname : null;
+    } catch {
+      sanitisedUrl = null;
+    }
+
+    await prisma.cartEvent.create({
+      data: {
+        shopId: shop.id,
+        sessionId,
+        cartToken: cartToken ?? '',
+        eventType,
+        cartValue: typeof payload.cartValue === 'number' ? payload.cartValue : null,
+        cartItemCount: typeof payload.cartItemCount === 'number' ? payload.cartItemCount : null,
+        lineItems: sanitisedLineItems,
+        couponCode: isCouponEvent ? (payload.code ?? null) : null,
+        couponSuccess,
+        couponFailReason: payload.failureReason ?? null,
+        couponRecovered: payload.retriedAfterFail ?? null,
+        discountAmount: typeof payload.discountAmount === 'number' ? payload.discountAmount : null,
+        lineIndex: typeof payload.lineIndex === 'number' ? payload.lineIndex : null,
+        newQuantity: typeof payload.newQuantity === 'number' ? payload.newQuantity : null,
+        pageUrl: sanitisedUrl,
+        occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
+      },
+    });
+  } catch (err) {
+    // Never surface errors — beacon is fire-and-forget
+    console.error('[cart/ingest]', err);
+  }
+}

@@ -40,6 +40,3 @@ prisma/migrations/
 # Preview / walkthrough — commit manually when ready
 app/preview/
 
-# Cart monitor Phase 1 — local dev only, contains real store data
-/tmp/cart-events.log
-scripts/read-cart-log.ts

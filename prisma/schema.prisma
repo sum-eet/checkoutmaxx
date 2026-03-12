@@ -63,6 +63,7 @@ model Shop {
   checkoutEvents CheckoutEvent[]
   alertLogs      AlertLog[]
   baselines      Baseline[]
+  cartEvents     CartEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -110,6 +111,40 @@ model Baseline {
   computedAt  DateTime @default(now())
 
   @@index([shopId, metricName])
+}
+
+model CartEvent {
+  id               String   @id @default(cuid())
+  shopId           String
+  sessionId        String
+  cartToken        String
+  eventType        String
+  // eventType values:
+  // cart_fetched | cart_item_added | cart_item_changed | cart_item_removed
+  // cart_bulk_updated | cart_checkout_clicked | cart_page_hidden
+  // cart_coupon_applied | cart_coupon_failed | cart_coupon_recovered | cart_coupon_removed
+
+  cartValue        Int?     // in cents
+  cartItemCount    Int?
+  lineItems        Json?    // sanitised array: [{productId, variantId, productTitle, price, quantity}]
+  couponCode       String?
+  couponSuccess    Boolean?
+  couponFailReason String?  // always "unknown" from cart; real reason at checkout via Web Pixel
+  couponRecovered  Boolean? // true = customer added items after failure to unlock discount
+  discountAmount   Int?     // in cents
+  lineIndex        Int?
+  newQuantity      Int?
+  pageUrl          String?
+  occurredAt       DateTime
+  createdAt        DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id])
+
+  @@index([shopId, occurredAt])
+  @@index([sessionId])
+  @@index([cartToken])
+  @@index([shopId, eventType, occurredAt])
+  @@index([shopId, couponCode, occurredAt])
 }
 
 model AlertLog {

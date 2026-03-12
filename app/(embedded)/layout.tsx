@@ -51,6 +51,7 @@ export default function EmbeddedLayout({ children }: { children: React.ReactNode
       <NavMenu>
         <a href="/dashboard/converted" rel="home">Converted Carts</a>
         <a href="/dashboard/abandoned">Abandoned Carts</a>
+        <a href="/dashboard/cart">Cart Activity</a>
         <a href="/alerts">Notifications</a>
         <a href="/settings">Settings</a>
       </NavMenu>
