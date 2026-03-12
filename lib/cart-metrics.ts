@@ -1,5 +1,32 @@
 import prisma from '@/lib/prisma';
 
+// ── Module-level TTL cache ─────────────────────────────────────────────────────
+// Avoids hammering the DB on every page load. 60-second TTL per shopId.
+// Cleared on demand when the user hits the refresh button (/api/cart/all?refresh=1).
+
+type CacheEntry = { data: CartDashboardData; expiresAt: number };
+const dashboardCache = new Map<string, CacheEntry>();
+
+export type CartDashboardData = {
+  kpis: CartKPIs;
+  sessions: CartSession[];
+  couponStats: CouponStat[];
+};
+
+export function getCachedDashboard(shopId: string): CartDashboardData | null {
+  const entry = dashboardCache.get(shopId);
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return entry.data;
+}
+
+export function setCachedDashboard(shopId: string, data: CartDashboardData): void {
+  dashboardCache.set(shopId, { data, expiresAt: Date.now() + 60_000 });
+}
+
+export function invalidateDashboardCache(shopId: string): void {
+  dashboardCache.delete(shopId);
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export type CartSession = {

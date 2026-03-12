@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import useSWR from 'swr';
 import {
   Page,
   Layout,
@@ -16,7 +17,9 @@ import {
   Box,
   Modal,
   EmptyState,
+  Button,
 } from '@shopify/polaris';
+import { RefreshIcon } from '@shopify/polaris-icons';
 import { useShop } from '@/hooks/useShop';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -236,29 +239,30 @@ function TimelineModal({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
 export default function CartActivityPage() {
   const shop = useShop();
   const [selectedTab, setSelectedTab] = useState(0);
-  const [kpis, setKpis] = useState<KPIs | null>(null);
-  const [sessions, setSessions] = useState<CartSession[]>([]);
-  const [couponStats, setCouponStats] = useState<CouponStat[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<CartSession | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    if (!shop) return;
-    Promise.all([
-      fetch(`/api/cart/kpis?shop=${shop}`).then((r) => r.json()),
-      fetch(`/api/cart/sessions?shop=${shop}`).then((r) => r.json()),
-      fetch(`/api/cart/coupons?shop=${shop}`).then((r) => r.json()),
-    ]).then(([kpiData, sessionData, couponData]) => {
-      setKpis(kpiData.kpis);
-      setSessions(sessionData.sessions ?? []);
-      setCouponStats(couponData.stats ?? []);
-      setLoading(false);
-    });
-  }, [shop]);
+  const { data, isLoading, mutate } = useSWR(
+    shop ? `/api/cart/all?shop=${shop}` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const kpis: KPIs | null = data?.kpis ?? null;
+  const sessions: CartSession[] = data?.sessions ?? [];
+  const couponStats: CouponStat[] = data?.couponStats ?? [];
+  const loading = isLoading;
+
+  function handleRefresh() {
+    setRefreshKey((k) => k + 1);
+    fetch(`/api/cart/all?shop=${shop}&refresh=1`).then((r) => r.json()).then(() => mutate());
+  }
 
   const tabs = [
     { id: 'sessions', content: 'Cart Sessions' },
@@ -327,12 +331,12 @@ export default function CartActivityPage() {
 
   if (loading) {
     return (
-      <Page title="Cart Activity">
+      <Page title="Cart Activity" subtitle="Today's cart sessions — live">
         <Layout>
           <Layout.Section>
             <Card>
               <Box padding="800">
-                <Spinner />
+                <InlineStack align="center"><Spinner /></InlineStack>
               </Box>
             </Card>
           </Layout.Section>
@@ -342,7 +346,15 @@ export default function CartActivityPage() {
   }
 
   return (
-    <Page title="Cart Activity" subtitle="Today's cart sessions — live">
+    <Page
+      title="Cart Activity"
+      subtitle="Today's cart sessions — live"
+      primaryAction={
+        <Button icon={RefreshIcon} onClick={handleRefresh} loading={loading}>
+          Refresh
+        </Button>
+      }
+    >
       <Layout>
 
         <Layout.Section>
