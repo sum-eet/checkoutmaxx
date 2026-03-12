@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
 
 async function processEvent(req: NextRequest) {
   try {
+        console.log('[ingest] DB URL:', process.env.DATABASE_URL?.slice(0, 60));  // ← ADD THIS
+
     const text = await req.text();
     if (!text) return;
 
@@ -51,6 +53,8 @@ async function processEvent(req: NextRequest) {
     if (SKIP_EVENTS.has(eventType)) return;
 
     const shopId = await resolveShopId(shopDomain);
+    console.log('[ingest] shopId resolved:', shopId ? 'OK' : 'NOT FOUND', 'domain:', shopDomain);
+
     if (!shopId) return;
 
     // Sanitise lineItems — strip any PII, keep only product data.
