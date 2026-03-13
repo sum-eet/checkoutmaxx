@@ -148,9 +148,8 @@ These must be true for every row. A violation is a bug, not an edge case.
 5. No CartEvent or CheckoutEvent contains raw PII (email, phone, full name, IP address).
    PII is stripped in `lib/sanitize.ts` before DB write.
 6. Ingest endpoints respond in < 200ms (DB writes happen async via waitUntil()).
-   **NOTE: pixel/ingest is NOT yet async — this is a known TODO (Step 6).**
 7. Every ingest attempt (success or failure) produces an IngestLog row.
-   **NOTE: IngestLog table does not yet exist — this is a known TODO (Step 3).**
+   **NOTE: IngestLog table must be created manually — run supabase/ingestlog-table.sql.**
 
 ---
 

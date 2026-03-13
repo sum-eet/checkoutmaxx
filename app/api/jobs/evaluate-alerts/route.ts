@@ -12,9 +12,23 @@ export async function GET(req: NextRequest) {
     // Dynamic import keeps the alert engine out of the ingest path
     const { evaluateAlerts } = await import("@/lib/alert-engine");
     await evaluateAlerts();
+
+    // Ping healthchecks.io heartbeat — signals cron ran successfully
+    const hcUrl = process.env.HEALTHCHECKS_PING_URL;
+    if (hcUrl) {
+      fetch(hcUrl).catch(() => {}); // fire and forget, never block
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[evaluate-alerts cron]", err);
+
+    // Ping healthchecks.io /fail endpoint so it alerts immediately on error
+    const hcUrl = process.env.HEALTHCHECKS_PING_URL;
+    if (hcUrl) {
+      fetch(hcUrl + "/fail").catch(() => {});
+    }
+
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

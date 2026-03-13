@@ -103,3 +103,57 @@ rule "no TCP in serverless" had been written down.
 
 **Rule going forward:** Every Claude Code session that modifies the codebase
 appends a CHANGELOG.md entry before the session ends.
+
+---
+
+## 2026-03-13: Observability layer built (Steps 2, 3, 4, 6)
+
+**Step 2 — Console confirmation log:**
+cart-monitor.js now logs one line after the first successful `navigator.sendBeacon()` call:
+`[CheckoutMaxx] Active — session: <sessionId>`. Fires once per page load only.
+Visible in DevTools on any store running the extension. Costs nothing. Catches
+"is the extension even running?" class of failures instantly.
+
+**Step 3 — IngestLog:**
+- `lib/ingest-log.ts` (NEW) — shared fire-and-forget helper used by both ingest endpoints
+- Both `app/api/cart/ingest` and `app/api/pixel/ingest` now write to IngestLog after every attempt
+- Records: endpoint, shopDomain, eventType, success, latencyMs, errorCode, errorMessage
+- `supabase/ingestlog-table.sql` (NEW) — run manually in Supabase SQL editor to create the table
+- IngestLog writes are async (fire-and-forget via `.then()`) — never block the main write
+
+**Step 4 — /api/health:**
+- `app/api/health/route.ts` (NEW) — unauthenticated, public endpoint
+- Checks: Supabase reachable, last CartEvent age, last CheckoutEvent age, recent failure count
+- Returns `{ status: "ok"|"degraded"|"down", checks: {...}, timestamp }`
+- HTTP 503 if Supabase is unreachable, HTTP 200 otherwise
+- Uses `Promise.allSettled` — one slow check never blocks the others
+- Ready for UptimeRobot keyword monitor
+
+**Step 6 — pixel/ingest waitUntil:**
+- `app/api/pixel/ingest/route.ts` restructured — now responds 200 immediately
+- All DB work (shop lookup, insert, IngestLog) moved to `waitUntil()` from `@vercel/functions`
+- `@vercel/functions` added to dependencies
+- Reduces pixel/ingest response time from 684-1140ms to <50ms
+- Web Pixel in Shopify checkout sandbox no longer waits for our DB
+
+**Step 5 — Monitoring setup:**
+- UptimeRobot (free): 2 monitors — keyword check on /api/health, HTTP check on /api/cart/ingest
+- healthchecks.io (free): cron heartbeat — replaces UptimeRobot heartbeat (paid-only)
+- `app/api/jobs/evaluate-alerts/route.ts` updated to ping `HEALTHCHECKS_PING_URL` on success,
+  `HEALTHCHECKS_PING_URL/fail` on error
+- `HEALTHCHECKS_PING_URL` env var to be added in Vercel after healthchecks.io check is created
+
+**Files changed this session:**
+- SPEC.md (NEW)
+- CHANGELOG.md (NEW)
+- lib/ingest-log.ts (NEW)
+- app/api/health/route.ts (NEW)
+- supabase/ingestlog-table.sql (NEW)
+- extensions/cart-monitor/assets/cart-monitor.js (console log)
+- app/api/cart/ingest/route.ts (IngestLog wired in)
+- app/api/pixel/ingest/route.ts (waitUntil + IngestLog)
+- app/api/jobs/evaluate-alerts/route.ts (healthchecks.io ping)
+- app/api/alerts/route.ts, alerts/[id]/route.ts, settings/route.ts (Prisma → Supabase)
+- app/api/cart/session/route.ts, sessions, kpis, coupons (Prisma → Supabase)
+- lib/cart-metrics.ts (hasCartValue filter fix)
+- package.json (@vercel/functions added)
