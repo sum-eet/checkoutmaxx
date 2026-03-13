@@ -106,6 +106,33 @@ appends a CHANGELOG.md entry before the session ends.
 
 ---
 
+## 2026-03-13: Fix cart/ingest silent data loss — waitUntil()
+
+**What broke:** IngestLog showed `TypeError: fetch failed` on cart events
+(cart_bulk_updated, cart_page_hidden). 6-8 failures per hour. CartEvent rows
+were not being written despite the endpoint returning 200.
+
+**Root cause:** `void processEvent(req)` fires the async function but returns
+the response immediately. Vercel treats the function as done once the response
+is sent and kills the execution context — cutting the Supabase HTTP request
+mid-flight. The request body (`req.text()`) was also being read AFTER the
+response was sent, which is invalid on a consumed request stream.
+
+**Fix:** Same pattern applied to pixel/ingest earlier today:
+- Read and parse body synchronously before responding
+- Pass parsed data (not the request object) to `processEvent()`
+- Wrap `processEvent()` in `waitUntil()` so Vercel keeps the function alive
+- `SKIP_EVENTS` set moved to module level (minor cleanup)
+
+**Also fixed in same session:**
+- Added GET handler to `/api/cart/ingest` — UptimeRobot HTTP monitors use GET,
+  POST-only endpoint was returning 405 which UptimeRobot read as "down"
+
+**Files changed:**
+- app/api/cart/ingest/route.ts
+
+---
+
 ## 2026-03-13: Observability layer built (Steps 2, 3, 4, 6)
 
 **Step 2 — Console confirmation log:**
