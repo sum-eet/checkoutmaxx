@@ -451,12 +451,14 @@
     });
   }
 
-  // Wrap window.fetch — configurable:true so other scripts can still wrap it
-  // but they'll chain through _ourFetch which always uses _nativeFetch at bottom
+  // Getter-based defineProperty so we intercept ALL window.fetch calls including
+  // those from Rebuy and other third-party scripts that load after us.
+  // _ourFetch always calls _nativeFetch directly — never window.fetch —
+  // so there is no infinite loop even when Rebuy calls window.fetch internally.
   try {
     Object.defineProperty(window, 'fetch', {
-      value: _ourFetch,
-      writable: true,
+      get: function () { return _ourFetch; },
+      set: function () { /* ignore — we stay in control */ },
       configurable: true,
     });
   } catch (e) {
