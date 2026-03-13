@@ -406,9 +406,10 @@
   }
 
   // ── Fetch Interceptor ─────────────────────────────────────────────────
-  // Use Object.defineProperty so our wrapper persists even if third-party apps
-  // (Rebuy, Alia, etc.) overwrite window.fetch after our script runs.
-  var _baseFetch = window.fetch; // native or whatever is current
+  // Capture the native fetch ONCE before Rebuy or any other library wraps it.
+  // We always call _nativeFetch directly — never window.fetch — to prevent
+  // infinite loops when Rebuy's wrapper calls window.fetch internally.
+  var _nativeFetch = window.fetch.bind(window);
 
   function _ourFetch(input, init) {
     var url = typeof input === 'string'
@@ -422,14 +423,14 @@
       url.indexOf('/discount') !== -1;
 
     if (!isCartEndpoint) {
-      return _baseFetch.call(window, input, init);
+      return _nativeFetch(input, init);
     }
 
     var requestBody = (init && init.body && typeof init.body === 'string')
       ? init.body
       : null;
 
-    return _baseFetch.call(window, input, init).then(function(response) {
+    return _nativeFetch(input, init).then(function(response) {
       var clone = response.clone();
       clone.json().then(function(responseData) {
         extractCartToken(responseData);
@@ -450,18 +451,15 @@
     });
   }
 
+  // Wrap window.fetch — configurable:true so other scripts can still wrap it
+  // but they'll chain through _ourFetch which always uses _nativeFetch at bottom
   try {
     Object.defineProperty(window, 'fetch', {
-      get: function() { return _ourFetch; },
-      set: function(newFn) {
-        // Another script is overwriting fetch — let them, but make _baseFetch
-        // point to their version so our wrapper chains correctly.
-        _baseFetch = newFn;
-      },
+      value: _ourFetch,
+      writable: true,
       configurable: true,
     });
   } catch (e) {
-    // Fallback if defineProperty fails (very old browsers)
     window.fetch = _ourFetch;
   }
 
