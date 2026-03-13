@@ -70,6 +70,8 @@ type CouponStat = {
 
 type KPIs = {
   cartsOpened: number;
+  cartsWithProducts: number;
+  emptyCartOpens: number;
   cartsWithCoupon: number;
   cartsCheckedOut: number;
   recoveredCarts: number;
@@ -142,7 +144,11 @@ function TimelineModal({
     setLoading(true);
     fetch(`/api/cart/session?shop=${shop}&sessionId=${session.sessionId}`)
       .then((r) => r.json())
-      .then((data) => setTimeline(data.timeline ?? []))
+      .then((data) => {
+        if (data.error) console.error('[timeline]', data.error);
+        setTimeline(data.timeline ?? []);
+      })
+      .catch((err) => console.error('[timeline fetch]', err))
       .finally(() => setLoading(false));
   }, [open, session?.sessionId]);
 
@@ -291,19 +297,20 @@ export default function CartActivityPage() {
       {s.device ?? '—'}
     </Text>,
 
-    <Text as="span" variant="bodySm">
+    <Text as="span" variant="bodySm" tone={s.lineItems.length === 0 && !s.cartItemCount ? 'subdued' : undefined}>
       {s.lineItems.length > 0
         ? s.lineItems.map((i: any) => `${i.productTitle} ×${i.quantity}`).join(', ')
         : s.cartItemCount != null && s.cartItemCount > 0
         ? `${s.cartItemCount} item${s.cartItemCount !== 1 ? 's' : ''}`
-        : '—'}
+        : 'Empty cart'}
     </Text>,
 
     <Text as="span" variant="bodySm">
-      {s.startingCartValue != null ? formatCents(s.startingCartValue) : '—'}
-      {s.cartValue != null && s.cartValue !== s.startingCartValue
-        ? ` → ${formatCents(s.cartValue)}`
-        : ''}
+      {s.cartValue != null && s.cartValue > 0
+        ? s.startingCartValue != null && s.startingCartValue !== s.cartValue
+          ? `${formatCents(s.startingCartValue)} → ${formatCents(s.cartValue)}`
+          : formatCents(s.cartValue)
+        : '—'}
     </Text>,
 
     <CouponPills coupons={s.couponsAttempted} />,
@@ -390,13 +397,26 @@ export default function CartActivityPage() {
 
         <Layout.Section>
           <InlineStack gap="400" wrap>
-            <KPICard label="Carts opened" value={kpis?.cartsOpened ?? 0} />
+            <KPICard
+              label="Carts opened"
+              value={kpis?.cartsOpened ?? 0}
+              sub={kpis ? `${kpis.cartsWithProducts} with products · ${kpis.emptyCartOpens} empty` : undefined}
+            />
+            <KPICard
+              label="With products"
+              value={kpis?.cartsWithProducts ?? 0}
+              sub={
+                kpis && kpis.cartsOpened > 0
+                  ? `${Math.round((kpis.cartsWithProducts / kpis.cartsOpened) * 100)}% of sessions`
+                  : undefined
+              }
+            />
             <KPICard
               label="Coupon attempted"
               value={kpis?.cartsWithCoupon ?? 0}
               sub={
-                kpis && kpis.cartsOpened > 0
-                  ? `${Math.round((kpis.cartsWithCoupon / kpis.cartsOpened) * 100)}% of carts`
+                kpis && kpis.cartsWithProducts > 0
+                  ? `${Math.round((kpis.cartsWithCoupon / kpis.cartsWithProducts) * 100)}% of product carts`
                   : undefined
               }
             />
@@ -404,8 +424,8 @@ export default function CartActivityPage() {
               label="Reached checkout"
               value={kpis?.cartsCheckedOut ?? 0}
               sub={
-                kpis && kpis.cartsOpened > 0
-                  ? `${Math.round((kpis.cartsCheckedOut / kpis.cartsOpened) * 100)}% conversion`
+                kpis && kpis.cartsWithProducts > 0
+                  ? `${((kpis.cartsCheckedOut / kpis.cartsWithProducts) * 100).toFixed(1)}% of product carts`
                   : undefined
               }
             />

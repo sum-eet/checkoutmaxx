@@ -66,6 +66,8 @@ export type CouponStat = {
 
 export type CartKPIs = {
   cartsOpened: number;
+  cartsWithProducts: number;
+  emptyCartOpens: number;
   cartsWithCoupon: number;
   cartsCheckedOut: number;
   recoveredCarts: number;
@@ -86,7 +88,7 @@ function startOfToday(): Date {
 export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPIs> {
   const since_ = (since ?? startOfToday()).toISOString();
 
-  const [allRes, couponRes, checkoutRes, recoveryRes] = await Promise.all([
+  const [allRes, couponRes, checkoutRes, recoveryRes, withProductsRes] = await Promise.all([
     supabase.from('CartEvent')
       .select('sessionId, occurredAt')
       .eq('shopId', shopId)
@@ -106,6 +108,11 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
       .eq('shopId', shopId)
       .gte('occurredAt', since_)
       .eq('eventType', 'cart_coupon_recovered'),
+    supabase.from('CartEvent')
+      .select('sessionId')
+      .eq('shopId', shopId)
+      .gte('occurredAt', since_)
+      .gt('cartValue', 0),
   ]);
 
   // Distinct sessions from all events
@@ -116,6 +123,7 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
 
   const couponSessions = new Set((couponRes.data ?? []).map((r: any) => r.sessionId));
   const checkoutSessions = new Set((checkoutRes.data ?? []).map((r: any) => r.sessionId));
+  const cartsWithProducts = new Set((withProductsRes.data ?? []).map((r: any) => r.sessionId)).size;
 
   // Recovered revenue — one entry per session (first recovery)
   const recoveredBySession = new Map<string, number>();
@@ -133,6 +141,8 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
 
   return {
     cartsOpened: sessionMap.size,
+    cartsWithProducts,
+    emptyCartOpens: sessionMap.size - cartsWithProducts,
     cartsWithCoupon: couponSessions.size,
     cartsCheckedOut: checkoutSessions.size,
     recoveredCarts: recoveredBySession.size,
@@ -302,6 +312,13 @@ export async function getSessionTimeline(shopId: string, sessionId: string): Pro
         break;
       case 'cart_page_hidden':
         label = 'Left the page';
+        break;
+      case 'cart_bulk_updated':
+        label = ev.cartValue != null && ev.cartValue > 0 ? 'Cart updated' : 'Opened page (empty cart)';
+        detail = ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null;
+        break;
+      case 'cart_cleared':
+        label = 'Cleared cart';
         break;
       default:
         label = ev.eventType;
