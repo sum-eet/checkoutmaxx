@@ -106,6 +106,24 @@ appends a CHANGELOG.md entry before the session ends.
 
 ---
 
+## 2026-03-13: Cart timeline page URLs + cart value $0 bug fix
+
+**Cart value $0 with products:** `lastWithValue` was finding any event with `cartValue != null`
+including cartValue=0. Rebuy's attribute-sync calls return `total_price=0` even when
+the cart has items — this was overwriting the real value. Fixed to require `cartValue > 0`.
+Modal header also fixed to show "—" not "$0.00".
+
+**Page URLs in timeline:** Every timeline event now shows the page path where it happened.
+"Left the page · /products/hydrofixx", "Opened page · /collections/all",
+item events show page appended to cart value. This data was always in CartEvent.pageUrl,
+just not surfaced.
+
+**Files changed:**
+- lib/cart-metrics.ts
+- app/(embedded)/dashboard/cart/page.tsx
+
+---
+
 ## 2026-03-13: Cart Activity page improvements
 
 **What changed:**
