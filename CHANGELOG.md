@@ -177,6 +177,49 @@ response was sent, which is invalid on a consumed request stream.
 
 ---
 
+## 2026-03-14: Latency tracking — drawer events, ATC click, elapsed time in timeline
+
+**What changed:**
+
+**cart_drawer_opened / cart_drawer_closed (cart-monitor.js)**
+MutationObserver watches the cart drawer element for attribute changes (`class`,
+`aria-hidden`, `style`, `inert`, `data-state`). Fires `cart_drawer_opened` when
+the drawer becomes visible and `cart_drawer_closed` when it hides. Tries these
+selectors in order: `cart-drawer`, `#CartDrawer`, `.cart-drawer`,
+`.rebuy-cart__flyout`, `[data-cart-drawer]`. Retries after 2.5s if the drawer
+element isn't in the DOM yet (handles SPAs and lazy-loaded drawers). Includes
+`pageUrl` in the event payload.
+
+**cart_atc_clicked (cart-monitor.js)**
+Extended the existing click listener to detect add-to-cart button clicks via:
+`name="add"`, `data-add-to-cart`, `data-product-add`, `.product-form__cart-submit`,
+`.add-to-cart`, or `form[action*="/cart/add"]`. Fires before the `/cart/add.js`
+fetch completes — this is the click latency anchor (time from click to
+`cart_item_added` = true ATC button → network latency). Includes `pageUrl` and
+`triggerText` in payload.
+
+**Elapsed time in timeline modal (cart/page.tsx)**
+Each event in the session timeline now shows elapsed time since the previous
+event (e.g. `+12s`, `+3m 45s`) below the clock time. First event shows no
+elapsed (nothing to diff against). Uses `formatElapsed()` helper.
+
+**Session duration in table (cart/page.tsx)**
+Time column now shows two lines: the session start time and the total duration
+(e.g. `7m 20s`). Uses `formatDuration()` helper.
+
+**Timeline labels (lib/cart-metrics.ts)**
+Added human labels for the three new event types:
+- `cart_drawer_opened` → "Opened cart drawer"
+- `cart_drawer_closed` → "Closed cart drawer"
+- `cart_atc_clicked` → "Clicked add to cart"
+
+**Files changed:**
+- extensions/cart-monitor/assets/cart-monitor.js
+- lib/cart-metrics.ts
+- app/(embedded)/dashboard/cart/page.tsx
+
+---
+
 ## 2026-03-13: Observability layer built (Steps 2, 3, 4, 6)
 
 **Step 2 — Console confirmation log:**
