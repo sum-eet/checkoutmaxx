@@ -18,9 +18,11 @@ import {
   Modal,
   EmptyState,
   Button,
+  SkeletonBodyText,
 } from '@shopify/polaris';
 import { RefreshIcon } from '@shopify/polaris-icons';
 import { useShop } from '@/hooks/useShop';
+import { DateRangeSelector, type DateRange } from '@/components/monitor/DateRangeSelector';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -242,15 +244,23 @@ function TimelineModal({
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function getDefaultRange(): DateRange {
+  const now = new Date();
+  return { start: new Date(now.getTime() - 24 * 60 * 60 * 1000), end: now };
+}
+
 export default function CartActivityPage() {
   const shop = useShop();
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedSession, setSelectedSession] = useState<CartSession | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [range, setRange] = useState<DateRange>(getDefaultRange);
 
-  const { data, isLoading, mutate } = useSWR(
-    shop ? `/api/cart/all?shop=${shop}` : null,
+  const rangeQuery = `start=${range.start.toISOString()}&end=${range.end.toISOString()}`;
+
+  const { data, isLoading, error, mutate } = useSWR(
+    shop ? `/api/cart/all?shop=${shop}&${rangeQuery}` : null,
     fetcher,
     { revalidateOnFocus: false }
   );
@@ -336,7 +346,9 @@ export default function CartActivityPage() {
 
   if (loading) {
     return (
-      <Page title="Cart Activity" subtitle="Today's cart sessions — live">
+      <Page title="Cart Activity" subtitle="Cart sessions"
+        primaryAction={<Button icon={RefreshIcon} onClick={handleRefresh} loading>Refresh</Button>}
+      >
         <Layout>
           <Layout.Section>
             <Card>
@@ -353,7 +365,7 @@ export default function CartActivityPage() {
   return (
     <Page
       title="Cart Activity"
-      subtitle="Today's cart sessions — live"
+      subtitle="Cart sessions"
       primaryAction={
         <Button icon={RefreshIcon} onClick={handleRefresh} loading={loading}>
           Refresh
@@ -361,6 +373,20 @@ export default function CartActivityPage() {
       }
     >
       <Layout>
+
+        <Layout.Section>
+          <InlineStack align="space-between" blockAlign="center" wrap>
+            <DateRangeSelector value={range} onChange={(r) => { setRange(r); mutate(); }} />
+          </InlineStack>
+        </Layout.Section>
+
+        {error && (
+          <Layout.Section>
+            <Banner tone="critical">
+              <Text as="p">Failed to load data — check database connection, then refresh.</Text>
+            </Banner>
+          </Layout.Section>
+        )}
 
         <Layout.Section>
           <InlineStack gap="400" wrap>

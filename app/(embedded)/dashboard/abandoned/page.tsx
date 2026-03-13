@@ -11,7 +11,10 @@ import {
   Badge,
   DataTable,
   SkeletonBodyText,
+  Banner,
+  Button,
 } from "@shopify/polaris";
+import { RefreshIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
 import useSWR from "swr";
 import { useShop } from "@/hooks/useShop";
@@ -150,22 +153,31 @@ function AbandonedContent() {
   const rp = rangeParams(range);
   const baseUrl = shop ? `/api/metrics?shop=${shop}` : null;
 
-  const { data: funnel } = useSWR<FunnelStep[]>(
+  const { data: funnel, error: funnelErr, mutate: mutateFunnel } = useSWR<FunnelStep[]>(
     baseUrl ? `${baseUrl}&metric=funnel&${rp}` : null,
     fetcher
   );
-  const { data: errors } = useSWR<TopError[]>(
+  const { data: errors, mutate: mutateErrors } = useSWR<TopError[]>(
     baseUrl ? `${baseUrl}&metric=errors&${rp}` : null,
     fetcher
   );
-  const { data: dropped } = useSWR<DroppedProduct[]>(
+  const { data: dropped, mutate: mutateDropped } = useSWR<DroppedProduct[]>(
     baseUrl ? `${baseUrl}&metric=dropped-products&${rp}` : null,
     fetcher
   );
-  const { data: failedDiscounts = [] } = useSWR<FailedDiscount[]>(
+  const { data: failedDiscounts = [], mutate: mutateDiscounts } = useSWR<FailedDiscount[]>(
     baseUrl ? `${baseUrl}&metric=failed-discounts&${rp}` : null,
     fetcher
   );
+
+  function handleRefresh() {
+    mutateFunnel();
+    mutateErrors();
+    mutateDropped();
+    mutateDiscounts();
+  }
+
+  const hasError = funnelErr || (funnel as any)?.error;
 
   if (!shop) {
     return (
@@ -191,9 +203,16 @@ function AbandonedContent() {
 
   return (
     <BlockStack gap="500">
-      <InlineStack align="end">
+      <InlineStack align="space-between" blockAlign="center">
         <DateRangeSelector value={range} onChange={setRange} />
+        <Button icon={RefreshIcon} onClick={handleRefresh} size="slim">Refresh</Button>
       </InlineStack>
+
+      {hasError && (
+        <Banner tone="critical">
+          <Text as="p">Failed to load data — check that your database is connected, then refresh.</Text>
+        </Banner>
+      )}
 
       {/* KPI Row */}
       {Array.isArray(funnel) ? (

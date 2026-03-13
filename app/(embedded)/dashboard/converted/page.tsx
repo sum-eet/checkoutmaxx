@@ -11,7 +11,10 @@ import {
   Badge,
   DataTable,
   SkeletonBodyText,
+  Banner,
+  Button,
 } from "@shopify/polaris";
+import { RefreshIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
 import useSWR from "swr";
 import { useShop } from "@/hooks/useShop";
@@ -158,19 +161,28 @@ function ConvertedContent() {
   const rp = rangeParams(range);
   const baseUrl = shop ? `/api/metrics?shop=${shop}` : null;
 
-  const { data: kpi } = useSWR<KpiData>(
+  const { data: kpi, error: kpiErr, mutate: mutateKpi } = useSWR<KpiData>(
     baseUrl ? `${baseUrl}&metric=kpi&${rp}` : null,
     fetcher
   );
-  const { data: funnel } = useSWR<FunnelStep[]>(
+  const { data: funnel, error: funnelErr, mutate: mutateFunnel } = useSWR<FunnelStep[]>(
     baseUrl ? `${baseUrl}&metric=funnel&${rp}` : null,
     fetcher
   );
-  const { data: cartKpi } = useSWR<CartKpiData>(
+  const { data: cartKpi, error: cartErr, mutate: mutateCart } = useSWR<CartKpiData>(
     shop ? `/api/cart/all?shop=${shop}` : null,
     fetcher,
     { revalidateOnFocus: false }
   );
+
+  function handleRefresh() {
+    mutateKpi();
+    mutateFunnel();
+    mutateCart();
+  }
+
+  const hasError = kpiErr || funnelErr || cartErr ||
+    (kpi as any)?.error || (funnel as any)?.error;
 
   if (!shop) {
     return (
@@ -223,9 +235,16 @@ function ConvertedContent() {
 
   return (
     <BlockStack gap="500">
-      <InlineStack align="end">
+      <InlineStack align="space-between" blockAlign="center">
         <DateRangeSelector value={range} onChange={setRange} />
+        <Button icon={RefreshIcon} onClick={handleRefresh} size="slim">Refresh</Button>
       </InlineStack>
+
+      {hasError && (
+        <Banner tone="critical">
+          <Text as="p">Failed to load data — check that your database is connected, then refresh.</Text>
+        </Banner>
+      )}
 
       {/* KPI Row — Cart Additions → Checkout Starts → Checkout Completes */}
       <InlineGrid columns={3} gap="400">

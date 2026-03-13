@@ -17,22 +17,26 @@ export async function GET(req: NextRequest) {
   const shop = await prisma.shop.findUnique({ where: { shopDomain }, select: { id: true } });
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
-  const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1';
-  if (forceRefresh) invalidateDashboardCache(shop.id);
+  const startParam = req.nextUrl.searchParams.get('start');
+  const since = startParam ? new Date(startParam) : undefined;
+  const cacheKey = `${shop.id}:${startParam ?? 'today'}`;
 
-  const cached = getCachedDashboard(shop.id);
+  const forceRefresh = req.nextUrl.searchParams.get('refresh') === '1';
+  if (forceRefresh) invalidateDashboardCache(cacheKey);
+
+  const cached = getCachedDashboard(cacheKey);
   if (cached) {
     return NextResponse.json({ ...cached, cached: true });
   }
 
   const [kpis, sessions, couponStats] = await Promise.all([
-    getCartKPIs(shop.id),
-    getCartSessions(shop.id),
-    getCouponStats(shop.id),
+    getCartKPIs(shop.id, since),
+    getCartSessions(shop.id, since),
+    getCouponStats(shop.id, since),
   ]);
 
   const data = { kpis, sessions, couponStats };
-  setCachedDashboard(shop.id, data);
+  setCachedDashboard(cacheKey, data);
 
   return NextResponse.json({ ...data, cached: false });
 }

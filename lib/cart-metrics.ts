@@ -86,31 +86,31 @@ function startOfToday(): Date {
 
 // ── KPI Cards ──────────────────────────────────────────────────────────────────
 
-export async function getCartKPIs(shopId: string): Promise<CartKPIs> {
-  const since = startOfToday();
+export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPIs> {
+  const since_ = since ?? startOfToday();
 
   const [sessions, couponSessions, checkoutSessions, recoveries] = await Promise.all([
     prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since } },
+      where: { shopId, occurredAt: { gte: since_ } },
       select: { sessionId: true, occurredAt: true },
       distinct: ['sessionId'],
     }),
     prisma.cartEvent.findMany({
       where: {
         shopId,
-        occurredAt: { gte: since },
+        occurredAt: { gte: since_ },
         eventType: { in: ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'] },
       },
       select: { sessionId: true },
       distinct: ['sessionId'],
     }),
     prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since }, eventType: 'cart_checkout_clicked' },
+      where: { shopId, occurredAt: { gte: since_ }, eventType: 'cart_checkout_clicked' },
       select: { sessionId: true },
       distinct: ['sessionId'],
     }),
     prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since }, eventType: 'cart_coupon_recovered' },
+      where: { shopId, occurredAt: { gte: since_ }, eventType: 'cart_coupon_recovered' },
       select: { sessionId: true, cartValue: true },
       distinct: ['sessionId'],
     }),
@@ -136,11 +136,11 @@ export async function getCartKPIs(shopId: string): Promise<CartKPIs> {
 
 // ── Session List ───────────────────────────────────────────────────────────────
 
-export async function getCartSessions(shopId: string): Promise<CartSession[]> {
-  const since = startOfToday();
+export async function getCartSessions(shopId: string, since?: Date): Promise<CartSession[]> {
+  const since_ = since ?? startOfToday();
 
   const events = await prisma.cartEvent.findMany({
-    where: { shopId, occurredAt: { gte: since } },
+    where: { shopId, occurredAt: { gte: since_ } },
     orderBy: { occurredAt: 'asc' },
   });
 
@@ -351,13 +351,13 @@ export async function getSessionTimeline(
 
 // ── Coupon Intelligence ────────────────────────────────────────────────────────
 
-export async function getCouponStats(shopId: string): Promise<CouponStat[]> {
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+export async function getCouponStats(shopId: string, since?: Date): Promise<CouponStat[]> {
+  const since_ = since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const events = await prisma.cartEvent.findMany({
     where: {
       shopId,
-      occurredAt: { gte: since },
+      occurredAt: { gte: since_ },
       couponCode: { not: null },
       eventType: { in: ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'] },
     },
