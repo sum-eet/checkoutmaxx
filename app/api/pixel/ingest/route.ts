@@ -243,6 +243,7 @@ export async function POST(req: NextRequest) {
 
   // Write to DB via Supabase JS client
   const { error: insertError } = await supabase.from("CheckoutEvent").insert({
+    id: crypto.randomUUID(),
     shopId: shop.id,
     sessionId: sessionId || "unknown",
     eventType,

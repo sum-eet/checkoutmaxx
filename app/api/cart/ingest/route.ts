@@ -74,6 +74,7 @@ async function processEvent(req: NextRequest) {
     try { sanitisedUrl = url ? new URL(url).pathname : null; } catch {}
 
     await supabase.from('CartEvent').insert({
+      id: crypto.randomUUID(),
       shopId,
       sessionId,
       cartToken: cartToken ?? '',
