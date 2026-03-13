@@ -106,6 +106,32 @@ appends a CHANGELOG.md entry before the session ends.
 
 ---
 
+## 2026-03-13: Cart Activity page improvements
+
+**What changed:**
+
+KPI cards split — `cartsOpened` now shows "X with products · Y empty" sub-label.
+New "With products" card added. Conversion % now uses product carts as denominator
+(not all 403 opens, most of which are empty cart page visits).
+
+Products column — "Empty cart" (subdued) instead of "—" for sessions with no items.
+
+Cart value display — "— → $0.00" fixed. Now shows "—" for empty carts. Arrow
+only shown when cart value genuinely changed (e.g. "$50.00 → $114.99").
+
+Timeline labels — `cart_bulk_updated` now shows "Opened page (empty cart)" or
+"Cart updated". `cart_cleared` shows "Cleared cart". No more raw event type
+strings in the modal.
+
+Timeline modal — fetch errors now logged to console. Silent empty state
+(when API call fails mid-fetch) is now debuggable.
+
+**Files changed:**
+- lib/cart-metrics.ts (CartKPIs type + getCartKPIs + getSessionTimeline labels)
+- app/(embedded)/dashboard/cart/page.tsx (KPI cards, table columns, modal)
+
+---
+
 ## 2026-03-13: Fix cart/ingest silent data loss — waitUntil()
 
 **What broke:** IngestLog showed `TypeError: fetch failed` on cart events
