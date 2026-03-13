@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionTimeline } from '@/lib/cart-metrics';
-import prisma from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
   const shopDomain = req.nextUrl.searchParams.get('shop');
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
   if (!sessionId) return NextResponse.json({ error: 'Missing sessionId' }, { status: 400 });
 
-  const shop = await prisma.shop.findUnique({ where: { shopDomain }, select: { id: true } });
+  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).single();
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   const timeline = await getSessionTimeline(shop.id, sessionId);

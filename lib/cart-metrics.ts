@@ -190,9 +190,10 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
   const sessions: CartSession[] = [];
 
   for (const [sessionId, evs] of Array.from(bySession.entries())) {
-    const hasMeaningfulEvent = evs.some((e) => MEANINGFUL_TYPES.has(e.eventType));
+    const hasMeaningfulEvent = evs.some((e: any) => MEANINGFUL_TYPES.has(e.eventType));
     const hasCheckoutEvents = (checkoutBySession.get(sessionId) ?? []).length > 0;
-    if (!hasMeaningfulEvent && !hasCheckoutEvents) continue;
+    const hasCartValue = evs.some((e: any) => e.cartValue != null && e.cartValue > 0);
+    if (!hasMeaningfulEvent && !hasCheckoutEvents && !hasCartValue) continue;
 
     const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
     const firstWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0);

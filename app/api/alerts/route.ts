@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const shopDomain = req.nextUrl.searchParams.get("shop");
@@ -8,45 +8,27 @@ export async function GET(req: NextRequest) {
 
   if (!shopDomain) return NextResponse.json({ error: "Missing shop" }, { status: 400 });
 
-  const shop = await prisma.shop.findUnique({ where: { shopDomain } });
+  const { data: shop } = await supabase.from("Shop").select("id").eq("shopDomain", shopDomain).single();
   if (!shop) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
   if (tab === "active") {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    const alerts = await prisma.alertLog.findMany({
-      where: { shopId: shop.id, resolvedAt: null, firedAt: { gte: twoHoursAgo } },
-      orderBy: { firedAt: "desc" },
-      select: {
-        id: true,
-        alertType: true,
-        severity: true,
-        title: true,
-        body: true,
-        actionUrl: true,
-        actionLabel: true,
-        sentEmail: true,
-        sentSlack: true,
-        firedAt: true,
-      },
-    });
-    return NextResponse.json(alerts);
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const { data: alerts } = await supabase
+      .from("AlertLog")
+      .select("id, alertType, severity, title, body, actionUrl, actionLabel, sentEmail, sentSlack, firedAt")
+      .eq("shopId", shop.id)
+      .is("resolvedAt", null)
+      .gte("firedAt", twoHoursAgo)
+      .order("firedAt", { ascending: false });
+    return NextResponse.json(alerts ?? []);
   }
 
   // history tab
-  const alerts = await prisma.alertLog.findMany({
-    where: { shopId: shop.id },
-    orderBy: { firedAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      alertType: true,
-      title: true,
-      sentEmail: true,
-      sentSlack: true,
-      firedAt: true,
-      resolvedAt: true,
-      roiEstimatedUsd: true,
-    },
-  });
-  return NextResponse.json(alerts);
+  const { data: alerts } = await supabase
+    .from("AlertLog")
+    .select("id, alertType, title, sentEmail, sentSlack, firedAt, resolvedAt, roiEstimatedUsd")
+    .eq("shopId", shop.id)
+    .order("firedAt", { ascending: false })
+    .limit(50);
+  return NextResponse.json(alerts ?? []);
 }

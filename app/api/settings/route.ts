@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const shopDomain = req.nextUrl.searchParams.get("shop");
   if (!shopDomain) return NextResponse.json({ error: "Missing shop" }, { status: 400 });
 
-  const shop = await prisma.shop.findUnique({ where: { shopDomain } });
+  const { data: shop } = await supabase
+    .from("Shop")
+    .select("alertEmail, slackWebhookUrl, alertEmailEnabled, alertSlackEnabled, alertAbandonmentEnabled, alertDiscountEnabled, alertExtensionEnabled, alertPaymentEnabled, abandonmentThreshold, discountFailureMin, paymentFailureRate")
+    .eq("shopDomain", shopDomain)
+    .single();
   if (!shop) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
   return NextResponse.json({
@@ -36,17 +40,9 @@ export async function PATCH(req: NextRequest) {
   if (!shopDomain) return NextResponse.json({ error: "Missing shop" }, { status: 400 });
 
   const allowed = [
-    "alertEmail",
-    "slackWebhookUrl",
-    "alertEmailEnabled",
-    "alertSlackEnabled",
-    "alertAbandonmentEnabled",
-    "alertDiscountEnabled",
-    "alertExtensionEnabled",
-    "alertPaymentEnabled",
-    "abandonmentThreshold",
-    "discountFailureMin",
-    "paymentFailureRate",
+    "alertEmail", "slackWebhookUrl", "alertEmailEnabled", "alertSlackEnabled",
+    "alertAbandonmentEnabled", "alertDiscountEnabled", "alertExtensionEnabled",
+    "alertPaymentEnabled", "abandonmentThreshold", "discountFailureMin", "paymentFailureRate",
   ];
 
   const data: Record<string, unknown> = {};
@@ -54,11 +50,10 @@ export async function PATCH(req: NextRequest) {
     if (key in fields) data[key] = fields[key];
   }
 
-  try {
-    await prisma.shop.update({ where: { shopDomain }, data });
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error("[settings/patch]", err);
+  const { error } = await supabase.from("Shop").update(data).eq("shopDomain", shopDomain);
+  if (error) {
+    console.error("[settings/patch]", error);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
+  return NextResponse.json({ ok: true });
 }
