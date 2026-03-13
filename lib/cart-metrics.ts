@@ -1,9 +1,6 @@
-import prisma from '@/lib/prisma';
+import { supabase } from '@/lib/supabase';
 
 // ── Module-level TTL cache ─────────────────────────────────────────────────────
-// Avoids hammering the DB on every page load. 60-second TTL per shopId.
-// Cleared on demand when the user hits the refresh button (/api/cart/all?refresh=1).
-
 type CacheEntry = { data: CartDashboardData; expiresAt: number };
 const dashboardCache = new Map<string, CacheEntry>();
 
@@ -13,18 +10,18 @@ export type CartDashboardData = {
   couponStats: CouponStat[];
 };
 
-export function getCachedDashboard(shopId: string): CartDashboardData | null {
-  const entry = dashboardCache.get(shopId);
+export function getCachedDashboard(key: string): CartDashboardData | null {
+  const entry = dashboardCache.get(key);
   if (!entry || Date.now() > entry.expiresAt) return null;
   return entry.data;
 }
 
-export function setCachedDashboard(shopId: string, data: CartDashboardData): void {
-  dashboardCache.set(shopId, { data, expiresAt: Date.now() + 60_000 });
+export function setCachedDashboard(key: string, data: CartDashboardData): void {
+  dashboardCache.set(key, { data, expiresAt: Date.now() + 60_000 });
 }
 
-export function invalidateDashboardCache(shopId: string): void {
-  dashboardCache.delete(shopId);
+export function invalidateDashboardCache(key: string): void {
+  dashboardCache.delete(key);
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -73,7 +70,7 @@ export type CartKPIs = {
   cartsCheckedOut: number;
   recoveredCarts: number;
   recoveredRevenue: number;
-  hourlyBuckets: number[]; // 24-element array: cart sessions opened per hour today
+  hourlyBuckets: number[];
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -87,48 +84,58 @@ function startOfToday(): Date {
 // ── KPI Cards ──────────────────────────────────────────────────────────────────
 
 export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPIs> {
-  const since_ = since ?? startOfToday();
+  const since_ = (since ?? startOfToday()).toISOString();
 
-  const [sessions, couponSessions, checkoutSessions, recoveries] = await Promise.all([
-    prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since_ } },
-      select: { sessionId: true, occurredAt: true },
-      distinct: ['sessionId'],
-    }),
-    prisma.cartEvent.findMany({
-      where: {
-        shopId,
-        occurredAt: { gte: since_ },
-        eventType: { in: ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'] },
-      },
-      select: { sessionId: true },
-      distinct: ['sessionId'],
-    }),
-    prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since_ }, eventType: 'cart_checkout_clicked' },
-      select: { sessionId: true },
-      distinct: ['sessionId'],
-    }),
-    prisma.cartEvent.findMany({
-      where: { shopId, occurredAt: { gte: since_ }, eventType: 'cart_coupon_recovered' },
-      select: { sessionId: true, cartValue: true },
-      distinct: ['sessionId'],
-    }),
+  const [allRes, couponRes, checkoutRes, recoveryRes] = await Promise.all([
+    supabase.from('CartEvent')
+      .select('sessionId, occurredAt')
+      .eq('shopId', shopId)
+      .gte('occurredAt', since_),
+    supabase.from('CartEvent')
+      .select('sessionId')
+      .eq('shopId', shopId)
+      .gte('occurredAt', since_)
+      .in('eventType', ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered']),
+    supabase.from('CartEvent')
+      .select('sessionId')
+      .eq('shopId', shopId)
+      .gte('occurredAt', since_)
+      .eq('eventType', 'cart_checkout_clicked'),
+    supabase.from('CartEvent')
+      .select('sessionId, cartValue')
+      .eq('shopId', shopId)
+      .gte('occurredAt', since_)
+      .eq('eventType', 'cart_coupon_recovered'),
   ]);
 
-  const recoveredRevenue = recoveries.reduce((sum: any, r: any) => sum + (r.cartValue ?? 0), 0);
+  // Distinct sessions from all events
+  const sessionMap = new Map<string, string>();
+  for (const r of (allRes.data ?? [])) {
+    if (!sessionMap.has(r.sessionId)) sessionMap.set(r.sessionId, r.occurredAt);
+  }
+
+  const couponSessions = new Set((couponRes.data ?? []).map((r: any) => r.sessionId));
+  const checkoutSessions = new Set((checkoutRes.data ?? []).map((r: any) => r.sessionId));
+
+  // Recovered revenue — one entry per session (first recovery)
+  const recoveredBySession = new Map<string, number>();
+  for (const r of (recoveryRes.data ?? [])) {
+    if (!recoveredBySession.has(r.sessionId)) {
+      recoveredBySession.set(r.sessionId, r.cartValue ?? 0);
+    }
+  }
+  const recoveredRevenue = Array.from(recoveredBySession.values()).reduce((a, b) => a + b, 0);
 
   const hourlyBuckets = new Array(24).fill(0) as number[];
-  sessions.forEach((s: any) => {
-    const hour = new Date(s.occurredAt).getHours();
-    hourlyBuckets[hour]++;
-  });
+  for (const [, occurredAt] of Array.from(sessionMap)) {
+    hourlyBuckets[new Date(occurredAt).getHours()]++;
+  }
 
   return {
-    cartsOpened: sessions.length,
-    cartsWithCoupon: couponSessions.length,
-    cartsCheckedOut: checkoutSessions.length,
-    recoveredCarts: recoveries.length,
+    cartsOpened: sessionMap.size,
+    cartsWithCoupon: couponSessions.size,
+    cartsCheckedOut: checkoutSessions.size,
+    recoveredCarts: recoveredBySession.size,
     recoveredRevenue,
     hourlyBuckets,
   };
@@ -137,44 +144,43 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
 // ── Session List ───────────────────────────────────────────────────────────────
 
 export async function getCartSessions(shopId: string, since?: Date): Promise<CartSession[]> {
-  const since_ = since ?? startOfToday();
+  const since_ = (since ?? startOfToday()).toISOString();
 
-  const events = await prisma.cartEvent.findMany({
-    where: { shopId, occurredAt: { gte: since_ } },
-    orderBy: { occurredAt: 'asc' },
-  });
+  const { data: events } = await supabase.from('CartEvent')
+    .select('*')
+    .eq('shopId', shopId)
+    .gte('occurredAt', since_)
+    .order('occurredAt', { ascending: true });
 
-  if (events.length === 0) return [];
+  if (!events || events.length === 0) return [];
 
-  const bySession = new Map<string, typeof events>();
-  events.forEach((ev: any) => {
+  const bySession = new Map<string, any[]>();
+  for (const ev of events) {
     if (!bySession.has(ev.sessionId)) bySession.set(ev.sessionId, []);
     bySession.get(ev.sessionId)!.push(ev);
-  });
+  }
 
   const sessionIds = Array.from(bySession.keys());
 
-  const checkoutEvents = await prisma.checkoutEvent.findMany({
-    where: { shopId, sessionId: { in: sessionIds } },
-    select: { sessionId: true, eventType: true, occurredAt: true, country: true },
-    orderBy: { occurredAt: 'asc' },
-  });
+  const { data: checkoutEvents } = await supabase.from('CheckoutEvent')
+    .select('sessionId, eventType, occurredAt, country')
+    .eq('shopId', shopId)
+    .in('sessionId', sessionIds)
+    .order('occurredAt', { ascending: true });
 
   const checkoutBySession = new Map<string, CheckoutStep[]>();
   const checkoutCountryBySession = new Map<string, string>();
-  checkoutEvents.forEach((ce: any) => {
+  for (const ce of (checkoutEvents ?? [])) {
     if (!checkoutBySession.has(ce.sessionId)) checkoutBySession.set(ce.sessionId, []);
     checkoutBySession.get(ce.sessionId)!.push({
       eventType: ce.eventType,
-      occurredAt: ce.occurredAt,
+      occurredAt: new Date(ce.occurredAt),
     });
     if (ce.country && !checkoutCountryBySession.has(ce.sessionId)) {
       checkoutCountryBySession.set(ce.sessionId, ce.country);
     }
-  });
+  }
 
-  // Meaningful event types — sessions that only have cart_bulk_updated / cart_fetched
-  // are phantom sessions from third-party apps (Rebuy etc.) and should be filtered out.
   const MEANINGFUL_TYPES = new Set([
     'cart_item_added', 'cart_item_changed', 'cart_item_removed',
     'cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered',
@@ -183,23 +189,20 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
 
   const sessions: CartSession[] = [];
 
-  Array.from(bySession.entries()).forEach(([sessionId, evs]) => {
-    // Skip phantom sessions (only bulk/fetch events from third-party app polling)
-    const hasMeaningfulEvent = evs.some((e: any) => MEANINGFUL_TYPES.has(e.eventType));
+  for (const [sessionId, evs] of Array.from(bySession.entries())) {
+    const hasMeaningfulEvent = evs.some((e) => MEANINGFUL_TYPES.has(e.eventType));
     const hasCheckoutEvents = (checkoutBySession.get(sessionId) ?? []).length > 0;
-    if (!hasMeaningfulEvent && !hasCheckoutEvents) return;
+    if (!hasMeaningfulEvent && !hasCheckoutEvents) continue;
 
     const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
-    // Use first event with a positive cart value to avoid $0 from empty-cart polls
     const firstWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0);
     const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
-    // Prefer country from CartEvent (direct detection), fall back to CheckoutEvent
     const cartCountry = evs.find((e: any) => e.country != null)?.country ?? null;
     const device = evs.find((e: any) => e.device != null)?.device ?? null;
 
     const couponMap = new Map<string, CouponAttempt>();
-    evs.forEach((ev: any) => {
-      if (!ev.couponCode) return;
+    for (const ev of evs) {
+      if (!ev.couponCode) continue;
       const existing = couponMap.get(ev.couponCode);
       couponMap.set(ev.couponCode, {
         code: ev.couponCode,
@@ -207,18 +210,17 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
         recovered: ev.couponRecovered ?? existing?.recovered ?? false,
         discountAmount: ev.discountAmount ?? existing?.discountAmount ?? null,
       });
-    });
+    }
 
     const checkoutSteps = checkoutBySession.get(sessionId) ?? [];
-    const checkedOut =
-      evs.some((e: any) => e.eventType === 'cart_checkout_clicked') || checkoutSteps.length > 0;
+    const checkedOut = evs.some((e: any) => e.eventType === 'cart_checkout_clicked') || checkoutSteps.length > 0;
     const orderCompleted = checkoutSteps.some((e) => e.eventType === 'checkout_completed');
 
     sessions.push({
       sessionId,
       cartToken: evs[0].cartToken,
-      firstSeen: evs[0].occurredAt,
-      lastSeen: evs[evs.length - 1].occurredAt,
+      firstSeen: new Date(evs[0].occurredAt),
+      lastSeen: new Date(evs[evs.length - 1].occurredAt),
       cartValue: lastWithValue?.cartValue ?? null,
       startingCartValue: firstWithValue?.cartValue ?? null,
       cartItemCount: lastWithValue?.cartItemCount ?? null,
@@ -230,7 +232,7 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
       country: cartCountry ?? checkoutCountryBySession.get(sessionId) ?? null,
       device,
     });
-  });
+  }
 
   return sessions.sort((a, b) => b.firstSeen.getTime() - a.firstSeen.getTime());
 }
@@ -250,25 +252,15 @@ function formatCents(cents: number): string {
   return '$' + (cents / 100).toFixed(2);
 }
 
-export async function getSessionTimeline(
-  shopId: string,
-  sessionId: string
-): Promise<TimelineEvent[]> {
-  const [cartEvents, checkoutEvents] = await Promise.all([
-    prisma.cartEvent.findMany({
-      where: { shopId, sessionId },
-      orderBy: { occurredAt: 'asc' },
-    }),
-    prisma.checkoutEvent.findMany({
-      where: { shopId, sessionId },
-      select: { eventType: true, occurredAt: true },
-      orderBy: { occurredAt: 'asc' },
-    }),
+export async function getSessionTimeline(shopId: string, sessionId: string): Promise<TimelineEvent[]> {
+  const [cartRes, checkoutRes] = await Promise.all([
+    supabase.from('CartEvent').select('*').eq('shopId', shopId).eq('sessionId', sessionId).order('occurredAt', { ascending: true }),
+    supabase.from('CheckoutEvent').select('eventType, occurredAt').eq('shopId', shopId).eq('sessionId', sessionId).order('occurredAt', { ascending: true }),
   ]);
 
   const timeline: TimelineEvent[] = [];
 
-  for (const ev of cartEvents) {
+  for (const ev of (cartRes.data ?? [])) {
     let label = '';
     let detail: string | null = null;
     let isPositive: boolean | null = null;
@@ -298,9 +290,7 @@ export async function getSessionTimeline(
         break;
       case 'cart_coupon_recovered':
         label = `Coupon ${ev.couponCode} unlocked`;
-        detail = ev.discountAmount != null
-          ? `Added items to qualify — saved ${formatCents(ev.discountAmount)}`
-          : 'Added items to qualify';
+        detail = ev.discountAmount != null ? `Added items to qualify — saved ${formatCents(ev.discountAmount)}` : 'Added items to qualify';
         isPositive = true;
         break;
       case 'cart_coupon_removed':
@@ -316,14 +306,7 @@ export async function getSessionTimeline(
         label = ev.eventType;
     }
 
-    timeline.push({
-      source: 'cart',
-      eventType: ev.eventType,
-      occurredAt: ev.occurredAt,
-      label,
-      detail,
-      isPositive,
-    });
+    timeline.push({ source: 'cart', eventType: ev.eventType, occurredAt: new Date(ev.occurredAt), label, detail, isPositive });
   }
 
   const checkoutLabels: Record<string, string> = {
@@ -335,11 +318,11 @@ export async function getSessionTimeline(
     checkout_completed: 'Order completed',
   };
 
-  for (const ev of checkoutEvents) {
+  for (const ev of (checkoutRes.data ?? [])) {
     timeline.push({
       source: 'checkout',
       eventType: ev.eventType,
-      occurredAt: ev.occurredAt,
+      occurredAt: new Date(ev.occurredAt),
       label: checkoutLabels[ev.eventType] ?? ev.eventType,
       detail: null,
       isPositive: ev.eventType === 'checkout_completed' ? true : null,
@@ -352,47 +335,30 @@ export async function getSessionTimeline(
 // ── Coupon Intelligence ────────────────────────────────────────────────────────
 
 export async function getCouponStats(shopId: string, since?: Date): Promise<CouponStat[]> {
-  const since_ = since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const since_ = (since ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).toISOString();
 
-  const events = await prisma.cartEvent.findMany({
-    where: {
-      shopId,
-      occurredAt: { gte: since_ },
-      couponCode: { not: null },
-      eventType: { in: ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'] },
-    },
-    select: {
-      couponCode: true,
-      couponSuccess: true,
-      couponRecovered: true,
-      cartValue: true,
-      occurredAt: true,
-    },
-  });
+  const { data: events } = await supabase.from('CartEvent')
+    .select('couponCode, couponSuccess, couponRecovered, cartValue, occurredAt')
+    .eq('shopId', shopId)
+    .gte('occurredAt', since_)
+    .not('couponCode', 'is', null)
+    .in('eventType', ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered']);
 
-  const statsMap = new Map<
-    string,
-    { attempts: number; successes: number; recoveries: number; cartValues: number[]; lastSeen: Date }
-  >();
+  const statsMap = new Map<string, { attempts: number; successes: number; recoveries: number; cartValues: number[]; lastSeen: Date }>();
 
-  events.forEach((ev: any) => {
+  for (const ev of (events ?? [])) {
     const code = ev.couponCode!;
     if (!statsMap.has(code)) {
-      statsMap.set(code, {
-        attempts: 0,
-        successes: 0,
-        recoveries: 0,
-        cartValues: [],
-        lastSeen: ev.occurredAt,
-      });
+      statsMap.set(code, { attempts: 0, successes: 0, recoveries: 0, cartValues: [], lastSeen: new Date(ev.occurredAt) });
     }
     const s = statsMap.get(code)!;
     s.attempts++;
     if (ev.couponSuccess) s.successes++;
     if (ev.couponRecovered) s.recoveries++;
     if (ev.cartValue != null) s.cartValues.push(ev.cartValue);
-    if (ev.occurredAt > s.lastSeen) s.lastSeen = ev.occurredAt;
-  });
+    const t = new Date(ev.occurredAt);
+    if (t > s.lastSeen) s.lastSeen = t;
+  }
 
   return Array.from(statsMap.entries())
     .map(([code, s]) => ({
@@ -400,10 +366,7 @@ export async function getCouponStats(shopId: string, since?: Date): Promise<Coup
       attempts: s.attempts,
       successes: s.successes,
       recoveries: s.recoveries,
-      avgCartValue:
-        s.cartValues.length > 0
-          ? Math.round(s.cartValues.reduce((a, b) => a + b, 0) / s.cartValues.length)
-          : null,
+      avgCartValue: s.cartValues.length > 0 ? Math.round(s.cartValues.reduce((a, b) => a + b, 0) / s.cartValues.length) : null,
       lastSeen: s.lastSeen,
     }))
     .sort((a, b) => b.attempts - a.attempts);

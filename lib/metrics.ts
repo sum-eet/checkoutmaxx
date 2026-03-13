@@ -1,4 +1,4 @@
-import prisma from "./prisma";
+import { supabase } from "./supabase";
 
 export type DateRange = { start: Date; end: Date };
 
@@ -60,30 +60,40 @@ const FUNNEL_STEPS = [
 ];
 
 export async function getShopByDomain(shopDomain: string) {
-  return prisma.shop.findUnique({ where: { shopDomain } });
+  const { data } = await supabase
+    .from("Shop")
+    .select("*")
+    .eq("shopDomain", shopDomain)
+    .single();
+  return data;
 }
 
 export async function getKpiMetrics(shopId: string, range: DateRange): Promise<KpiMetrics> {
-  const where = { shopId, occurredAt: { gte: range.start, lte: range.end } };
-
-  const [started, completed, baseline] = await Promise.all([
-    prisma.checkoutEvent.findMany({
-      where: { ...where, eventType: "checkout_started" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
-    prisma.checkoutEvent.findMany({
-      where: { ...where, eventType: "checkout_completed" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
-    prisma.baseline.findFirst({
-      where: { shopId, metricName: "checkout_cvr" },
-      orderBy: { computedAt: "desc" },
-    }),
+  const [startedRes, completedRes, baselineRes] = await Promise.all([
+    supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", "checkout_started")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", "checkout_completed")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("Baseline")
+      .select("value")
+      .eq("shopId", shopId)
+      .eq("metricName", "checkout_cvr")
+      .order("computedAt", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
-  // Union: a session that completed without a tracked start still counts as started
+  const started = startedRes.data ?? [];
+  const completed = completedRes.data ?? [];
+
   const startedSet = new Set(started.map((r: any) => r.sessionId));
   const completedSet = new Set(completed.map((r: any) => r.sessionId));
   completed.forEach((r: any) => startedSet.add(r.sessionId));
@@ -91,7 +101,7 @@ export async function getKpiMetrics(shopId: string, range: DateRange): Promise<K
   const checkoutsStarted = startedSet.size;
   const completedOrders = completedSet.size;
   const cvr = checkoutsStarted > 0 ? completedOrders / checkoutsStarted : 0;
-  const baselineCvr = baseline?.value ?? null;
+  const baselineCvr = baselineRes.data?.value ?? null;
   const cvrDelta = baselineCvr !== null ? cvr - baselineCvr : null;
 
   return { checkoutsStarted, completedOrders, cvr, cvrDelta, baselineCvr };
@@ -103,48 +113,31 @@ export async function getFunnelMetrics(
   device?: string,
   country?: string
 ): Promise<FunnelStep[]> {
-  const baseWhere: Record<string, unknown> = {
-    shopId,
-    occurredAt: { gte: range.start, lte: range.end },
+  const query = (eventType: string) => {
+    let q = supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", eventType)
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString());
+    if (device) q = q.eq("deviceType", device);
+    if (country) q = q.eq("country", country);
+    return q;
   };
-  if (device) baseWhere.deviceType = device;
-  if (country) baseWhere.country = country;
 
-  const [stepResults, startedRows, completedRows] = await Promise.all([
-    Promise.all(
-      FUNNEL_STEPS.map((s) =>
-        prisma.checkoutEvent
-          .findMany({
-            where: { ...baseWhere, eventType: s.step },
-            select: { sessionId: true },
-            distinct: ["sessionId"],
-          })
-          .then((rows: any) => rows.length)
-      )
-    ),
-    prisma.checkoutEvent.findMany({
-      where: { ...baseWhere, eventType: "checkout_started" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
-    prisma.checkoutEvent.findMany({
-      where: { ...baseWhere, eventType: "checkout_completed" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
-  ]);
+  const results = await Promise.all(FUNNEL_STEPS.map((s) => query(s.step)));
 
-  // Step[0]: union of started+completed sessions (same logic as KPI so numbers match)
+  const startedRows = results[0].data ?? [];
+  const completedRows = results[results.length - 1].data ?? [];
+
   const startedSet = new Set(startedRows.map((r: any) => r.sessionId));
   completedRows.forEach((r: any) => startedSet.add(r.sessionId));
   const unionTotal = startedSet.size;
 
-  // Build counts with accurate step[0] and step[last], cap intermediates at total
-  const counts = [...stepResults];
+  const counts = results.map((r) => new Set((r.data ?? []).map((x: any) => x.sessionId)).size);
   counts[0] = unionTotal;
   counts[counts.length - 1] = completedRows.length;
 
-  // Cap each intermediate step at total sessions (never exceed step[0])
   const baseline = counts[0] || 1;
   const capped = counts.map((c) => Math.min(c, baseline));
 
@@ -158,50 +151,47 @@ export async function getFunnelMetrics(
 }
 
 export async function getLiveEventFeed(shopId: string, limit = 50): Promise<LiveEvent[]> {
-  return prisma.checkoutEvent.findMany({
-    where: { shopId },
-    orderBy: { occurredAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      eventType: true,
-      sessionId: true,
-      deviceType: true,
-      country: true,
-      discountCode: true,
-      totalPrice: true,
-      currency: true,
-      errorMessage: true,
-      occurredAt: true,
-    },
-  });
+  const { data } = await supabase.from("CheckoutEvent")
+    .select("id, eventType, sessionId, deviceType, country, discountCode, totalPrice, currency, errorMessage, occurredAt")
+    .eq("shopId", shopId)
+    .order("occurredAt", { ascending: false })
+    .limit(limit);
+  return (data ?? []).map((r: any) => ({ ...r, occurredAt: new Date(r.occurredAt) }));
 }
 
 export async function getTopErrors(shopId: string, range: DateRange): Promise<TopError[]> {
-  const where = { shopId, occurredAt: { gte: range.start, lte: range.end } };
-
-  const [discountErrors, extensionErrors, paymentAttempted, completedIds] = await Promise.all([
-    prisma.checkoutEvent.count({
-      where: { ...where, eventType: "alert_displayed" },
-    }),
-    prisma.checkoutEvent.count({
-      where: { ...where, eventType: "ui_extension_errored" },
-    }),
-    prisma.checkoutEvent.findMany({
-      where: { ...where, eventType: "payment_info_submitted" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
-    prisma.checkoutEvent
-      .findMany({
-        where: { ...where, eventType: "checkout_completed" },
-        select: { sessionId: true },
-        distinct: ["sessionId"],
-      })
-      .then((rows: any) => new Set(rows.map((r: any) => r.sessionId))),
+  const [discountRes, extensionRes, paymentRes, completedRes] = await Promise.all([
+    supabase.from("CheckoutEvent")
+      .select("*", { count: "exact", head: true })
+      .eq("shopId", shopId)
+      .eq("eventType", "alert_displayed")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("CheckoutEvent")
+      .select("*", { count: "exact", head: true })
+      .eq("shopId", shopId)
+      .eq("eventType", "ui_extension_errored")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", "payment_info_submitted")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", "checkout_completed")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
   ]);
 
-  const paymentDropoffs = paymentAttempted.filter((s: any) => !completedIds.has(s.sessionId)).length;
+  const discountErrors = discountRes.count ?? 0;
+  const extensionErrors = extensionRes.count ?? 0;
+  const paymentSessions = new Set((paymentRes.data ?? []).map((r: any) => r.sessionId));
+  const completedSessions = new Set((completedRes.data ?? []).map((r: any) => r.sessionId));
+  const paymentDropoffs = Array.from(paymentSessions).filter((id) => !completedSessions.has(id)).length;
 
   return [
     { type: "discount_error", label: "Discount code error", count: discountErrors },
@@ -210,27 +200,29 @@ export async function getTopErrors(shopId: string, range: DateRange): Promise<To
   ].filter((e) => e.count > 0);
 }
 
-export async function getDroppedProducts(
-  shopId: string,
-  range: DateRange
-): Promise<DroppedProduct[]> {
-  const where = { shopId, occurredAt: { gte: range.start, lte: range.end } };
-
-  const [startedEvents, completedSessions] = await Promise.all([
-    prisma.checkoutEvent.findMany({
-      where: { ...where, eventType: "checkout_started" },
-      select: { sessionId: true, rawPayload: true },
-      distinct: ["sessionId"],
-    }),
-    prisma.checkoutEvent.findMany({
-      where: { ...where, eventType: "checkout_completed" },
-      select: { sessionId: true },
-      distinct: ["sessionId"],
-    }),
+export async function getDroppedProducts(shopId: string, range: DateRange): Promise<DroppedProduct[]> {
+  const [startedRes, completedRes] = await Promise.all([
+    supabase.from("CheckoutEvent")
+      .select("sessionId, rawPayload")
+      .eq("shopId", shopId)
+      .eq("eventType", "checkout_started")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
+    supabase.from("CheckoutEvent")
+      .select("sessionId")
+      .eq("shopId", shopId)
+      .eq("eventType", "checkout_completed")
+      .gte("occurredAt", range.start.toISOString())
+      .lte("occurredAt", range.end.toISOString()),
   ]);
 
-  const completedSet = new Set(completedSessions.map((s: any) => s.sessionId));
-  const dropped = startedEvents.filter((s: any) => !completedSet.has(s.sessionId));
+  const completedSet = new Set((completedRes.data ?? []).map((r: any) => r.sessionId));
+  const seenSessions = new Set<string>();
+  const dropped = (startedRes.data ?? []).filter((r: any) => {
+    if (completedSet.has(r.sessionId) || seenSessions.has(r.sessionId)) return false;
+    seenSessions.add(r.sessionId);
+    return true;
+  });
 
   const productMap = new Map<string, number>();
   for (const event of dropped) {
@@ -258,24 +250,28 @@ export async function getDroppedProducts(
 }
 
 export async function getStatusBannerState(shopId: string): Promise<StatusResult> {
-  const shop = await prisma.shop.findUnique({ where: { id: shopId } });
+  const { data: shop } = await supabase.from("Shop").select("installedAt").eq("id", shopId).single();
   if (!shop) return { state: "no_data" };
 
-  const hoursSinceInstall = (Date.now() - shop.installedAt.getTime()) / (1000 * 60 * 60);
+  const hoursSinceInstall = (Date.now() - new Date(shop.installedAt).getTime()) / (1000 * 60 * 60);
   if (hoursSinceInstall < 48) return { state: "learning" };
 
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
-  const recentCount = await prisma.checkoutEvent.count({
-    where: { shopId, occurredAt: { gte: thirtyMinAgo } },
-  });
-  if (recentCount === 0) return { state: "no_data" };
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { count: recentCount } = await supabase.from("CheckoutEvent")
+    .select("*", { count: "exact", head: true })
+    .eq("shopId", shopId)
+    .gte("occurredAt", thirtyMinAgo);
+  if (!recentCount || recentCount === 0) return { state: "no_data" };
 
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-  const activeAlert = await prisma.alertLog.findFirst({
-    where: { shopId, resolvedAt: null, firedAt: { gte: twoHoursAgo } },
-    orderBy: { firedAt: "desc" },
-    select: { id: true, title: true },
-  });
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const { data: activeAlert } = await supabase.from("AlertLog")
+    .select("id, title")
+    .eq("shopId", shopId)
+    .is("resolvedAt", null)
+    .gte("firedAt", twoHoursAgo)
+    .order("firedAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (activeAlert) return { state: "critical", activeAlert };
 
   return { state: "healthy" };
@@ -288,37 +284,31 @@ export type FailedDiscount = {
   errorMessage: string | null;
 };
 
-export async function getFailedDiscounts(
-  shopId: string,
-  range: DateRange
-): Promise<FailedDiscount[]> {
-  const events = await prisma.checkoutEvent.findMany({
-    where: {
-      shopId,
-      eventType: "alert_displayed",
-      occurredAt: { gte: range.start, lte: range.end },
-    },
-    select: { discountCode: true, errorMessage: true, occurredAt: true, rawPayload: true },
-    orderBy: { occurredAt: "desc" },
-  });
+export async function getFailedDiscounts(shopId: string, range: DateRange): Promise<FailedDiscount[]> {
+  const { data: events } = await supabase.from("CheckoutEvent")
+    .select("discountCode, errorMessage, occurredAt, rawPayload")
+    .eq("shopId", shopId)
+    .eq("eventType", "alert_displayed")
+    .gte("occurredAt", range.start.toISOString())
+    .lte("occurredAt", range.end.toISOString())
+    .order("occurredAt", { ascending: false });
 
   const map = new Map<string, { count: number; lastSeen: Date; errorMessage: string | null }>();
-  for (const e of events) {
-    // Use stored discountCode, or extract from rawPayload.alert.value for older events
+  for (const e of (events ?? [])) {
     const payload = e.rawPayload as Record<string, unknown>;
     const alert = payload?.alert as Record<string, unknown> | undefined;
     const code =
       e.discountCode ||
       (alert?.target === "cart.discountCode" && alert?.value ? String(alert.value) : null);
-
     if (!code) continue;
 
+    const occurredAt = new Date(e.occurredAt);
     const existing = map.get(code);
     if (existing) {
       existing.count++;
-      if (e.occurredAt > existing.lastSeen) existing.lastSeen = e.occurredAt;
+      if (occurredAt > existing.lastSeen) existing.lastSeen = occurredAt;
     } else {
-      map.set(code, { count: 1, lastSeen: e.occurredAt, errorMessage: e.errorMessage });
+      map.set(code, { count: 1, lastSeen: occurredAt, errorMessage: e.errorMessage });
     }
   }
 
@@ -328,11 +318,12 @@ export async function getFailedDiscounts(
 }
 
 export async function getDistinctCountries(shopId: string, range: DateRange): Promise<string[]> {
-  const rows = await prisma.checkoutEvent.findMany({
-    where: { shopId, occurredAt: { gte: range.start, lte: range.end }, country: { not: null } },
-    select: { country: true },
-    distinct: ["country"],
-    take: 20,
-  });
-  return rows.map((r: any) => r.country!).filter(Boolean);
+  const { data } = await supabase.from("CheckoutEvent")
+    .select("country")
+    .eq("shopId", shopId)
+    .not("country", "is", null)
+    .gte("occurredAt", range.start.toISOString())
+    .lte("occurredAt", range.end.toISOString());
+  const unique = Array.from(new Set((data ?? []).map((r: any) => r.country).filter(Boolean))).slice(0, 20);
+  return unique as string[];
 }
