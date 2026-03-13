@@ -25,6 +25,11 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }
 
+// GET is only for UptimeRobot health pings — real events come via POST
+export async function GET() {
+  return new NextResponse("ok", { status: 200, headers: CORS_HEADERS });
+}
+
 export async function POST(req: NextRequest) {
   void processEvent(req);
   return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
