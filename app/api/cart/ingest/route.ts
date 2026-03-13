@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
 import { logIngest } from '@/lib/ingest-log';
 
@@ -27,32 +28,41 @@ export async function OPTIONS() {
 
 // GET is only for UptimeRobot health pings — real events come via POST
 export async function GET() {
-  return new NextResponse("ok", { status: 200, headers: CORS_HEADERS });
+  return new NextResponse('ok', { status: 200, headers: CORS_HEADERS });
 }
 
 export async function POST(req: NextRequest) {
-  void processEvent(req);
+  // Read body before responding — stream can't be consumed after response is sent
+  let text: string;
+  try {
+    text = await req.text();
+  } catch {
+    return NextResponse.json({ ok: false }, { headers: CORS_HEADERS });
+  }
+
+  // Respond immediately — sendBeacon doesn't care about response body
+  waitUntil(processEvent(text));
   return NextResponse.json({ ok: true }, { headers: CORS_HEADERS });
 }
 
-async function processEvent(req: NextRequest) {
+const SKIP_EVENTS = new Set([
+  'cart_fetched', 'cart_unknown_endpoint', 'cart_fetch_error',
+  'cart_xhr_error', 'cart_xhr_parse_error', 'cart_non_json_response',
+]);
+
+async function processEvent(text: string) {
   const start = Date.now();
   let shopDomain = 'unknown';
   let eventType: string | null = null;
   try {
-    const text = await req.text();
     if (!text) return;
 
     const event = JSON.parse(text);
-    ({ eventType, shopDomain: shopDomain } = event);
+    eventType = event.eventType ?? null;
+    shopDomain = event.shopDomain ?? 'unknown';
     const { sessionId, cartToken, occurredAt, url, device, country, payload = {} } = event;
 
     if (!eventType || !shopDomain || !sessionId) return;
-
-    const SKIP_EVENTS = new Set([
-      'cart_fetched', 'cart_unknown_endpoint', 'cart_fetch_error',
-      'cart_xhr_error', 'cart_xhr_parse_error', 'cart_non_json_response',
-    ]);
     if (SKIP_EVENTS.has(eventType)) return;
 
     const shopId = await resolveShopId(shopDomain);
