@@ -140,6 +140,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
+import { logIngest } from "@/lib/ingest-log";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 500;
@@ -259,12 +260,23 @@ export async function POST(req: NextRequest) {
     occurredAt: new Date(occurredAt).toISOString(),
   });
 
+  const elapsed = Date.now() - start;
+
+  logIngest({
+    endpoint: "pixel",
+    shopDomain,
+    eventType,
+    success: !insertError,
+    latencyMs: elapsed,
+    errorCode: insertError?.code ?? null,
+    errorMessage: insertError?.message ?? null,
+  });
+
   if (insertError) {
     console.error("[pixel/ingest] DB write failed:", insertError);
     return NextResponse.json({ ok: false, error: "db" }, { status: 200, headers: CORS });
   }
 
-  const elapsed = Date.now() - start;
   if (elapsed > 180) {
     console.warn(`[pixel/ingest] Slow response: ${elapsed}ms`);
   }

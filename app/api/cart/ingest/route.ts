@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { logIngest } from '@/lib/ingest-log';
 
 const shopCache = new Map<string, string>();
 
@@ -30,12 +31,16 @@ export async function POST(req: NextRequest) {
 }
 
 async function processEvent(req: NextRequest) {
+  const start = Date.now();
+  let shopDomain = 'unknown';
+  let eventType: string | null = null;
   try {
     const text = await req.text();
     if (!text) return;
 
     const event = JSON.parse(text);
-    const { eventType, shopDomain, sessionId, cartToken, occurredAt, url, device, country, payload = {} } = event;
+    ({ eventType, shopDomain: shopDomain } = event);
+    const { sessionId, cartToken, occurredAt, url, device, country, payload = {} } = event;
 
     if (!eventType || !shopDomain || !sessionId) return;
 
@@ -73,7 +78,7 @@ async function processEvent(req: NextRequest) {
     let sanitisedUrl: string | null = null;
     try { sanitisedUrl = url ? new URL(url).pathname : null; } catch {}
 
-    await supabase.from('CartEvent').insert({
+    const { error: insertError } = await supabase.from('CartEvent').insert({
       id: crypto.randomUUID(),
       shopId,
       sessionId,
@@ -95,7 +100,25 @@ async function processEvent(req: NextRequest) {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
     });
 
-  } catch (err) {
+    logIngest({
+      endpoint: 'cart',
+      shopDomain,
+      eventType,
+      success: !insertError,
+      latencyMs: Date.now() - start,
+      errorCode: insertError?.code ?? null,
+      errorMessage: insertError?.message ?? null,
+    });
+
+  } catch (err: any) {
     console.error('[cart/ingest]', err);
+    logIngest({
+      endpoint: 'cart',
+      shopDomain,
+      eventType,
+      success: false,
+      latencyMs: Date.now() - start,
+      errorMessage: err?.message ?? String(err),
+    });
   }
 }
