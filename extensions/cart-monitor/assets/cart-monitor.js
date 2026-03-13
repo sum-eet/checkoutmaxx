@@ -80,7 +80,7 @@
   }
 
   // ── Logger ────────────────────────────────────────────────────────────
-  var _confirmedActive = false;
+  console.log('[CheckoutMaxx] Loaded — shop: ' + CONFIG.shopDomain + ' ingestUrl: ' + CONFIG.logUrl);
 
   function logEvent(event) {
     if (CONFIG.debug) {
@@ -92,11 +92,7 @@
     }
 
     if (CONFIG.logUrl) {
-      var sent = navigator.sendBeacon(CONFIG.logUrl, JSON.stringify(event));
-      if (sent && !_confirmedActive) {
-        _confirmedActive = true;
-        console.log('[CheckoutMaxx] Active — session: ' + event.sessionId);
-      }
+      navigator.sendBeacon(CONFIG.logUrl, JSON.stringify(event));
     }
   }
 
