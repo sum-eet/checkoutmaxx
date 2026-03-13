@@ -326,6 +326,18 @@ export async function getSessionTimeline(shopId: string, sessionId: string): Pro
         label = 'Cleared cart';
         detail = ev.pageUrl ?? null;
         break;
+      case 'cart_drawer_opened':
+        label = 'Opened cart drawer';
+        detail = ev.pageUrl ?? null;
+        break;
+      case 'cart_drawer_closed':
+        label = 'Closed cart drawer';
+        detail = ev.pageUrl ?? null;
+        break;
+      case 'cart_atc_clicked':
+        label = 'Clicked add to cart';
+        detail = ev.pageUrl ?? null;
+        break;
       default:
         label = ev.eventType;
         detail = ev.pageUrl ?? null;

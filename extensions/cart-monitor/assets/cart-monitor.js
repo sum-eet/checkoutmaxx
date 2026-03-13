@@ -514,7 +514,7 @@
     return _originalSend.apply(this, arguments);
   };
 
-  // ── Checkout Navigation Capture ───────────────────────────────────────
+  // ── Checkout + ATC Click Capture ─────────────────────────────────────
   document.addEventListener('click', function (e) {
     var target = e.target.closest('a, button');
     if (!target) return;
@@ -538,6 +538,25 @@
         triggerElement: target.tagName,
         triggerText: target.innerText ? target.innerText.trim().slice(0, 50) : null,
       }));
+      return;
+    }
+
+    // ATC button detection — covers Dawn, Debut, and common custom themes
+    var isAtcButton =
+      target.getAttribute('name') === 'add' ||
+      target.getAttribute('data-add-to-cart') !== null ||
+      target.getAttribute('data-product-add') !== null ||
+      target.classList.contains('product-form__cart-submit') ||
+      target.classList.contains('add-to-cart') ||
+      (target.tagName === 'BUTTON' && target.form &&
+        target.form.action && target.form.action.indexOf('/cart/add') !== -1);
+
+    if (isAtcButton) {
+      logEvent(buildEvent('cart_atc_clicked', {
+        cartToken: cartToken,
+        pageUrl: window.location.pathname,
+        triggerText: target.innerText ? target.innerText.trim().slice(0, 50) : null,
+      }));
     }
   });
 
@@ -547,6 +566,74 @@
       logEvent(buildEvent('cart_page_hidden', { cartToken: cartToken }));
     }
   });
+
+  // ── Cart Drawer Observer ───────────────────────────────────────────────
+  // Detects open/close of cart drawer via attribute changes on the drawer element.
+  // Covers Dawn (cart-drawer web component), Rebuy (.rebuy-cart__flyout),
+  // and most other themes that use aria-hidden or CSS class toggles.
+  var _drawerOpen = false;
+
+  function checkDrawerVisible(el) {
+    if (!el) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.hasAttribute('inert')) return false;
+    var style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    // Also check common "open" class names as a positive signal
+    var cls = (el.getAttribute('class') || '') + ' ' + (el.getAttribute('data-state') || '');
+    var hasOpenClass = /\bis-open\b|\bactive\b|\bopen\b|\bvisible\b|\bis-active\b/i.test(cls);
+    // If no aria-hidden and not display:none, treat as open when it has an open class
+    // or when aria-hidden is explicitly "false"
+    if (el.getAttribute('aria-hidden') === 'false') return true;
+    return hasOpenClass;
+  }
+
+  function observeCartDrawer() {
+    var selectors = [
+      'cart-drawer',
+      '#CartDrawer',
+      '.cart-drawer',
+      '.rebuy-cart__flyout',
+      '[data-cart-drawer]',
+      '#cart-drawer',
+      '.cart-notification__wrapper',
+    ];
+
+    var drawerEl = null;
+    for (var i = 0; i < selectors.length; i++) {
+      drawerEl = document.querySelector(selectors[i]);
+      if (drawerEl) break;
+    }
+
+    if (!drawerEl) {
+      // Drawer not in DOM yet — retry after a short delay (SPAs, lazy-loaded drawers)
+      setTimeout(observeCartDrawer, 2500);
+      return;
+    }
+
+    var observer = new MutationObserver(function() {
+      var nowVisible = checkDrawerVisible(drawerEl);
+      if (nowVisible && !_drawerOpen) {
+        _drawerOpen = true;
+        logEvent(buildEvent('cart_drawer_opened', { cartToken: cartToken, pageUrl: window.location.pathname }));
+      } else if (!nowVisible && _drawerOpen) {
+        _drawerOpen = false;
+        logEvent(buildEvent('cart_drawer_closed', { cartToken: cartToken, pageUrl: window.location.pathname }));
+      }
+    });
+
+    observer.observe(drawerEl, {
+      attributes: true,
+      attributeFilter: ['class', 'aria-hidden', 'style', 'inert', 'data-state'],
+    });
+  }
+
+  // Run after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', observeCartDrawer);
+  } else {
+    observeCartDrawer();
+  }
 
   // ── Init ──────────────────────────────────────────────────────────────
   // Store our session ID as a cart attribute so the checkout Web Pixel

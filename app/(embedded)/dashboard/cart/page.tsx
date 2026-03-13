@@ -89,6 +89,20 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDuration(ms: number): string {
+  if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+  const m = Math.floor(ms / 60000);
+  const s = Math.round((ms % 60000) / 1000);
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function formatElapsed(ms: number): string {
+  if (ms < 60000) return `+${Math.round(ms / 1000)}s`;
+  const m = Math.floor(ms / 60000);
+  const s = Math.round((ms % 60000) / 1000);
+  return s > 0 ? `+${m}m ${s}s` : `+${m}m`;
+}
+
 function successRate(successes: number, attempts: number): string {
   if (attempts === 0) return '—';
   return Math.round((successes / attempts) * 100) + '%';
@@ -204,12 +218,20 @@ function TimelineModal({
             <Text as="p" tone="subdued">No events found</Text>
           ) : (
             <BlockStack gap="200">
-              {timeline.map((ev, i) => (
+              {timeline.map((ev, i) => {
+                const prevTime = i > 0 ? new Date(timeline[i - 1].occurredAt).getTime() : null;
+                const elapsed = prevTime !== null ? new Date(ev.occurredAt).getTime() - prevTime : null;
+                return (
                 <InlineStack key={i} gap="300" align="start" blockAlign="start">
-                  <Box minWidth="50px">
+                  <Box minWidth="60px">
                     <Text variant="bodySm" as="p" tone="subdued">
                       {formatTime(ev.occurredAt)}
                     </Text>
+                    {elapsed !== null && elapsed > 0 && (
+                      <Text variant="bodySm" as="p" tone="subdued">
+                        {formatElapsed(elapsed)}
+                      </Text>
+                    )}
                   </Box>
 
                   <Badge tone={ev.source === 'checkout' ? 'info' : undefined}>
@@ -237,7 +259,8 @@ function TimelineModal({
                     )}
                   </BlockStack>
                 </InlineStack>
-              ))}
+                );
+              })}
             </BlockStack>
           )}
         </Box>
@@ -287,7 +310,12 @@ export default function CartActivityPage() {
   ];
 
   const sessionRows = sessions.map((s) => [
-    <Text as="span" variant="bodySm">{formatTime(s.firstSeen)}</Text>,
+    <BlockStack gap="0">
+      <Text as="span" variant="bodySm">{formatTime(s.firstSeen)}</Text>
+      <Text as="span" variant="bodySm" tone="subdued">
+        {formatDuration(new Date(s.lastSeen).getTime() - new Date(s.firstSeen).getTime())}
+      </Text>
+    </BlockStack>,
 
     <Text as="span" variant="bodySm" tone="subdued">
       {s.country ?? '—'}
