@@ -205,7 +205,7 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
     const hasCartValue = evs.some((e: any) => e.cartValue != null && e.cartValue > 0);
     if (!hasMeaningfulEvent && !hasCheckoutEvents && !hasCartValue) continue;
 
-    const lastWithValue = [...evs].reverse().find((e) => e.cartValue != null);
+    const lastWithValue = [...evs].reverse().find((e: any) => e.cartValue != null && e.cartValue > 0);
     const firstWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0);
     const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
     const cartCountry = evs.find((e: any) => e.country != null)?.country ?? null;
@@ -279,15 +279,15 @@ export async function getSessionTimeline(shopId: string, sessionId: string): Pro
     switch (ev.eventType) {
       case 'cart_item_added':
         label = 'Added item to cart';
-        detail = ev.cartValue != null ? `Cart: ${formatCents(ev.cartValue)}` : null;
+        detail = ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null;
         break;
       case 'cart_item_changed':
         label = `Changed quantity to ${ev.newQuantity}`;
-        detail = ev.cartValue != null ? `Cart: ${formatCents(ev.cartValue)}` : null;
+        detail = ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null;
         break;
       case 'cart_item_removed':
         label = 'Removed item';
-        detail = ev.cartValue != null ? `Cart: ${formatCents(ev.cartValue)}` : null;
+        detail = ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null;
         break;
       case 'cart_coupon_applied':
         label = `Applied coupon ${ev.couponCode}`;
@@ -309,19 +309,31 @@ export async function getSessionTimeline(shopId: string, sessionId: string): Pro
         break;
       case 'cart_checkout_clicked':
         label = 'Clicked checkout';
+        detail = ev.pageUrl ?? null;
         break;
       case 'cart_page_hidden':
         label = 'Left the page';
+        detail = ev.pageUrl ?? null;
         break;
       case 'cart_bulk_updated':
-        label = ev.cartValue != null && ev.cartValue > 0 ? 'Cart updated' : 'Opened page (empty cart)';
-        detail = ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null;
+        label = ev.cartValue != null && ev.cartValue > 0 ? 'Cart updated' : 'Opened page';
+        detail = [
+          ev.cartValue != null && ev.cartValue > 0 ? `Cart: ${formatCents(ev.cartValue)}` : null,
+          ev.pageUrl ?? null,
+        ].filter(Boolean).join(' · ') || null;
         break;
       case 'cart_cleared':
         label = 'Cleared cart';
+        detail = ev.pageUrl ?? null;
         break;
       default:
         label = ev.eventType;
+        detail = ev.pageUrl ?? null;
+    }
+
+    // Append page URL to detail for item/coupon events where it adds context
+    if (ev.pageUrl && ['cart_item_added', 'cart_item_changed', 'cart_item_removed'].includes(ev.eventType)) {
+      detail = detail ? `${detail} · ${ev.pageUrl}` : ev.pageUrl;
     }
 
     timeline.push({ source: 'cart', eventType: ev.eventType, occurredAt: new Date(ev.occurredAt), label, detail, isPositive });

@@ -165,10 +165,10 @@ function TimelineModal({
         <BlockStack gap="200">
           <InlineStack gap="400">
             <Text as="p" variant="bodyMd">
-              <strong>Cart value:</strong> {formatCents(session.cartValue)}
+              <strong>Cart value:</strong> {session.cartValue && session.cartValue > 0 ? formatCents(session.cartValue) : '—'}
             </Text>
             <Text as="p" variant="bodyMd">
-              <strong>Items:</strong> {session.cartItemCount ?? '—'}
+              <strong>Items:</strong> {session.lineItems.length > 0 ? session.lineItems.length : session.cartItemCount ?? '—'}
             </Text>
             <Text as="p" variant="bodyMd">
               <strong>Outcome:</strong>{' '}
