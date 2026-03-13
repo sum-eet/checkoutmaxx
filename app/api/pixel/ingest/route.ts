@@ -138,6 +138,7 @@
 // }
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
 import { logIngest } from "@/lib/ingest-log";
@@ -157,8 +158,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const start = Date.now();
-
+  // Parse body synchronously before responding
   let text: string;
   try {
     text = await req.text();
@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: CORS });
   }
 
-  // Rate limiting
+  // Rate limiting — synchronous, no DB needed
   const key = shopDomain || req.headers.get("x-forwarded-for") || "unknown";
   const now = Date.now();
   const entry = rateLimitMap.get(key);
@@ -201,7 +201,30 @@ export async function POST(req: NextRequest) {
     rateLimitMap.set(key, { count: 1, resetAt: now + WINDOW_MS });
   }
 
-  // Look up shop via Supabase JS client — no Prisma, no TCP, no pool
+  // Respond immediately — Web Pixel must not be blocked waiting for DB
+  waitUntil(processEvent({ shopDomain, eventType, sessionId, occurredAt, deviceType, country, data }));
+  return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
+}
+
+async function processEvent({
+  shopDomain,
+  eventType,
+  sessionId,
+  occurredAt,
+  deviceType,
+  country,
+  data,
+}: {
+  shopDomain: string;
+  eventType: string;
+  sessionId: string | null;
+  occurredAt: string;
+  deviceType: string | null;
+  country: string | null;
+  data: Record<string, unknown>;
+}) {
+  const start = Date.now();
+
   const { data: shop, error: shopError } = await supabase
     .from("Shop")
     .select("id, isActive")
@@ -209,7 +232,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (shopError || !shop || !shop.isActive) {
-    return NextResponse.json({ ok: false }, { status: 404, headers: CORS });
+    logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found" });
+    return;
   }
 
   // Extract enrichment fields
@@ -242,7 +266,6 @@ export async function POST(req: NextRequest) {
 
   const safePayload = sanitizePayload(data);
 
-  // Write to DB via Supabase JS client
   const { error: insertError } = await supabase.from("CheckoutEvent").insert({
     id: crypto.randomUUID(),
     shopId: shop.id,
@@ -260,26 +283,17 @@ export async function POST(req: NextRequest) {
     occurredAt: new Date(occurredAt).toISOString(),
   });
 
-  const elapsed = Date.now() - start;
-
   logIngest({
     endpoint: "pixel",
     shopDomain,
     eventType,
     success: !insertError,
-    latencyMs: elapsed,
+    latencyMs: Date.now() - start,
     errorCode: insertError?.code ?? null,
     errorMessage: insertError?.message ?? null,
   });
 
   if (insertError) {
     console.error("[pixel/ingest] DB write failed:", insertError);
-    return NextResponse.json({ ok: false, error: "db" }, { status: 200, headers: CORS });
   }
-
-  if (elapsed > 180) {
-    console.warn(`[pixel/ingest] Slow response: ${elapsed}ms`);
-  }
-
-  return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
 }
