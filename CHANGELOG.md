@@ -177,6 +177,28 @@ response was sent, which is invalid on a consumed request stream.
 
 ---
 
+## 2026-03-14: Fix 24h Refresh showing stale data + session ping confirmed working
+
+**Refresh button bug:** Refresh called `/api/cart/all?shop=...&refresh=1` without
+date range params. Server cache key is `shopId:startParam` — without the start
+param it invalidated the wrong key (`today`), leaving the 24h cached response
+stale. Fix: pass current `rangeQuery` in the refresh call so the correct cache
+entry is invalidated.
+
+**Session ping confirmed end-to-end:** cart_session_started and
+checkout_session_started both writing to SessionPing table. IngestLog shows
+success=true after SessionPing table was created in Supabase SQL editor.
+
+**Coupon tracking confirmed:** Full coupon session captured —
+HYDRATEFIRST failed, BRUH failed + removed, NAHICHALEGA failed.
+Correct cart value $124.98, reached checkout. Timeline shows +elapsed between
+events. Country=IN confirmed.
+
+**Files changed:**
+- app/(embedded)/dashboard/cart/page.tsx (Refresh passes rangeQuery)
+
+---
+
 ## 2026-03-14: Session init ping — SessionPing table + /api/session/ping
 
 **What changed:** Added guaranteed pipeline confirmation signal.

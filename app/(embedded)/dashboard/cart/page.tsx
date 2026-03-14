@@ -323,7 +323,7 @@ export default function CartActivityPage() {
 
   function handleRefresh() {
     setRefreshKey((k) => k + 1);
-    fetch(`/api/cart/all?shop=${shop}&refresh=1`).then((r) => r.json()).then(() => mutate());
+    fetch(`/api/cart/all?shop=${shop}&${rangeQuery}&refresh=1`).then((r) => r.json()).then(() => mutate());
   }
 
   const tabs = [
