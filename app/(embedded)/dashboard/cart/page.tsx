@@ -408,24 +408,6 @@ export default function CartActivityPage() {
     </Text>,
   ]);
 
-  if (loading) {
-    return (
-      <Page title="Cart Activity" subtitle="Cart sessions"
-        primaryAction={<Button icon={RefreshIcon} onClick={handleRefresh} loading>Refresh</Button>}
-      >
-        <Layout>
-          <Layout.Section>
-            <Card>
-              <Box padding="800">
-                <InlineStack align="center"><Spinner /></InlineStack>
-              </Box>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </Page>
-    );
-  }
-
   return (
     <Page
       title="Cart Activity"
@@ -453,49 +435,58 @@ export default function CartActivityPage() {
         )}
 
         <Layout.Section>
-          <InlineStack gap="400" wrap>
-            <KPICard
-              label="Carts opened"
-              value={kpis?.cartsOpened ?? 0}
-              sub={kpis ? `${kpis.cartsWithProducts} with products · ${kpis.emptyCartOpens} empty` : undefined}
-            />
-            <KPICard
-              label="With products"
-              value={kpis?.cartsWithProducts ?? 0}
-              sub={
-                kpis && kpis.cartsOpened > 0
-                  ? `${Math.round((kpis.cartsWithProducts / kpis.cartsOpened) * 100)}% of sessions`
-                  : undefined
-              }
-              onClick={() => handleKpiClick('withProducts')}
-              active={activeFilter === 'withProducts'}
-            />
-            <KPICard
-              label="Coupon attempted"
-              value={kpis?.cartsWithCoupon ?? 0}
-              sub={
-                kpis && kpis.cartsWithProducts > 0
-                  ? `${Math.round((kpis.cartsWithCoupon / kpis.cartsWithProducts) * 100)}% of product carts`
-                  : undefined
-              }
-              onClick={() => handleKpiClick('withCoupon')}
-              active={activeFilter === 'withCoupon'}
-            />
-            <KPICard
-              label="Reached checkout"
-              value={kpis?.cartsCheckedOut ?? 0}
-              sub={
-                kpis && kpis.cartsWithProducts > 0
-                  ? `${((kpis.cartsCheckedOut / kpis.cartsWithProducts) * 100).toFixed(1)}% of product carts`
-                  : undefined
-              }
-              onClick={() => handleKpiClick('checkedOut')}
-              active={activeFilter === 'checkedOut'}
-            />
-          </InlineStack>
+          {loading ? (
+            <InlineStack gap="400" wrap>
+              <div style={{ flex: 1, minWidth: 140 }}><Card><SkeletonBodyText lines={3} /></Card></div>
+              <div style={{ flex: 1, minWidth: 140 }}><Card><SkeletonBodyText lines={3} /></Card></div>
+              <div style={{ flex: 1, minWidth: 140 }}><Card><SkeletonBodyText lines={3} /></Card></div>
+              <div style={{ flex: 1, minWidth: 140 }}><Card><SkeletonBodyText lines={3} /></Card></div>
+            </InlineStack>
+          ) : (
+            <InlineStack gap="400" wrap>
+              <KPICard
+                label="Carts opened"
+                value={kpis?.cartsOpened ?? 0}
+                sub={kpis ? `${kpis.cartsWithProducts} with products · ${kpis.emptyCartOpens} empty` : undefined}
+              />
+              <KPICard
+                label="With products"
+                value={kpis?.cartsWithProducts ?? 0}
+                sub={
+                  kpis && kpis.cartsOpened > 0
+                    ? `${Math.round((kpis.cartsWithProducts / kpis.cartsOpened) * 100)}% of sessions`
+                    : undefined
+                }
+                onClick={() => handleKpiClick('withProducts')}
+                active={activeFilter === 'withProducts'}
+              />
+              <KPICard
+                label="Coupon attempted"
+                value={kpis?.cartsWithCoupon ?? 0}
+                sub={
+                  kpis && kpis.cartsWithProducts > 0
+                    ? `${Math.round((kpis.cartsWithCoupon / kpis.cartsWithProducts) * 100)}% of product carts`
+                    : undefined
+                }
+                onClick={() => handleKpiClick('withCoupon')}
+                active={activeFilter === 'withCoupon'}
+              />
+              <KPICard
+                label="Reached checkout"
+                value={kpis?.cartsCheckedOut ?? 0}
+                sub={
+                  kpis && kpis.cartsWithProducts > 0
+                    ? `${((kpis.cartsCheckedOut / kpis.cartsWithProducts) * 100).toFixed(1)}% of product carts`
+                    : undefined
+                }
+                onClick={() => handleKpiClick('checkedOut')}
+                active={activeFilter === 'checkedOut'}
+              />
+            </InlineStack>
+          )}
         </Layout.Section>
 
-        {kpis && kpis.recoveredCarts > 0 && (
+        {!loading && kpis && kpis.recoveredCarts > 0 && (
           <Layout.Section>
             <Banner tone="success">
               <Text as="p" variant="bodyMd">
@@ -514,7 +505,9 @@ export default function CartActivityPage() {
             <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
               <Box padding="400">
 
-                {selectedTab === 0 && (
+                {loading ? (
+                  <SkeletonBodyText lines={6} />
+                ) : selectedTab === 0 ? (
                   filteredSessions.length === 0 ? (
                     <EmptyState heading={activeFilter ? 'No sessions match this filter' : 'No cart sessions today yet'} image="">
                       <Text as="p">
@@ -529,9 +522,7 @@ export default function CartActivityPage() {
                       rows={sessionRows}
                     />
                   )
-                )}
-
-                {selectedTab === 1 && (
+                ) : (
                   couponStats.length === 0 ? (
                     <EmptyState heading="No coupon data yet" image="">
                       <Text as="p">

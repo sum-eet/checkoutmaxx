@@ -177,6 +177,164 @@ response was sent, which is invalid on a consumed request stream.
 
 ---
 
+## 2026-03-14: Fix date range filter — DateRangeSelector no longer resets on range switch
+
+**Bug:** Switching ranges (e.g. 24h → 1h → 24h) reset the active button back to
+24h every time. Root cause: the `if (loading) return (...)` early return rendered
+a completely different component tree that didn't include DateRangeSelector.
+React unmounted it on every range switch (new SWR key = isLoading=true = early
+return fires), wiping its local `active` state back to "24h".
+
+**Fix:** Removed the early return entirely. Page now always renders the same
+component tree. Loading state is handled inline — KPI cards show skeleton cards,
+the session table shows SkeletonBodyText, DateRangeSelector stays mounted and
+never loses its active preset state.
+
+**Files changed:**
+- app/(embedded)/dashboard/cart/page.tsx
+
+---
+
+## 2026-03-14: Current state of all dashboard pages — what each page shows
+
+### Navigation structure
+4 pages in the embedded app sidebar:
+1. Converted Carts (`/dashboard/converted`) — default landing page
+2. Abandoned Carts (`/dashboard/abandoned`)
+3. Cart Activity (`/dashboard/cart`)
+4. Notifications (`/dashboard/notifications`) + Settings (`/dashboard/settings`)
+
+---
+
+### Page 1 — Converted Carts (`/dashboard/converted`)
+
+**Data sources:** `/api/metrics` (checkout funnel) + `/api/cart/all` (cart KPIs)
+
+**KPI row (3 cards):**
+- **Cart Additions** — total cart sessions opened in the selected range. Sparkline
+  shows hourly distribution across the day. Sub-label: "X% reached checkout".
+  Clicking navigates to Cart Activity page.
+- **Checkout Starts** — sessions that reached Shopify checkout (from CheckoutEvent
+  where eventType = checkout_started). Sub-label: "X% of cart additions".
+- **Checkout Completes** — completed orders (checkout_completed events). Shows CVR%
+  as sub-label and a +/- delta badge vs baseline CVR (previous period comparison).
+
+**Funnel chart:** Line chart showing % of sessions surviving each checkout step:
+Cart → Checkout → Contact → Address → Shipping → Payment → Completed.
+Dashed reference line shows baseline CVR. Note: Completed can exceed Payment
+because Shop Pay / Apple Pay skip intermediate steps.
+
+**Funnel Steps table:** Same data as chart in tabular form — step name, session
+count, % of total.
+
+**Checkout CVR table:** Raw numbers — checkoutsStarted, completedOrders, CVR,
+baselineCVR, cvrDelta in percentage points.
+
+---
+
+### Page 2 — Abandoned Carts (`/dashboard/abandoned`)
+
+**Data sources:** `/api/metrics` (funnel, errors, dropped products, failed discounts)
+
+**KPI row (4 cards):**
+- Sessions Started — checkouts that began
+- Sessions Dropped — sessions that didn't complete
+- Drop Rate — % dropped
+- Completed — orders that went through
+
+**Checkout Funnel (visual bar chart):**
+Each checkout step shown as a horizontal bar, sized relative to the first step.
+Between steps: drop count and drop % (red if ≥30% dropped, grey otherwise).
+Steps: Cart → Checkout → Contact → Address → Shipping → Payment → Completed.
+This is the most important view for identifying where customers abandon.
+
+**Top Errors table:** Errors fired during checkout (from Web Pixel alert_displayed
+events). Shows error type and count. Examples: invalid discount code, payment
+failure, address validation error.
+
+**Dropped Products table:** Products that were in the cart when a session abandoned.
+Shows product title, how many carts contained it at drop, and % of total drops.
+Tells you which products have high abandonment association.
+
+**Failed Discount Codes table:** Discount codes that returned errors during checkout.
+Shows code, attempt count, last seen date, and the raw error message from Shopify.
+
+---
+
+### Page 3 — Cart Activity (`/dashboard/cart`)
+
+**Data sources:** `/api/cart/all` (sessions, KPIs, coupons from CartEvent table)
+
+**Date range selector:** 1h / 24h / 7d / 30d / Custom. Stays mounted across
+range switches — no longer resets. Refresh button passes range params to
+correctly bust server-side cache.
+
+**KPI row (4 cards, 3 are clickable filters):**
+- **Carts opened** — total distinct sessions. Sub-label: "X with products · Y empty".
+  Not clickable (shows everything).
+- **With products** *(clickable)* — sessions where cart had at least one item
+  (cartValue > 0 or lineItems present or cartItemCount > 0). Click filters the
+  session list to only these. Active state shows blue outline.
+- **Coupon attempted** *(clickable)* — sessions where at least one coupon event
+  fired (applied, failed, or recovered). Click filters to coupon sessions only.
+- **Reached checkout** *(clickable)* — sessions where cart_checkout_clicked fired
+  OR any CheckoutEvent exists. Click filters to checkout sessions only.
+
+**Recovery banner:** Only shown when recoveredCarts > 0. Shows "X customers
+unlocked a discount by adding items after a failed coupon — $Y recovered".
+
+**Cart Sessions tab (default):**
+Table with columns: Time (start + session duration), Country, Device, Products
+(line items or item count or "Empty cart"), Cart value (start → end if changed,
+"—" if $0), Coupons (pills — green if applied, red if failed, ^ prefix if
+recovered), Outcome (Ordered / Checkout / Abandoned badge), View link.
+When filter is active, only matching sessions shown. Empty state has "Clear
+filter" button.
+
+**Session timeline modal (opened via View):**
+Header: cart value, item count, outcome (Abandoned / Reached checkout / Order completed).
+Products in cart section: line items with quantity and price.
+Full journey section: every CartEvent + CheckoutEvent for the session in
+chronological order. Each event shows: timestamp, elapsed since previous event
+(+Xs / +Xm Ys), Cart/Checkout badge, human-readable label, detail line (cart
+value, page URL). Events colour-coded: green for positive (coupon applied,
+order complete), red for negative (coupon failed).
+
+**Coupon Intelligence tab:**
+Table: Code, Attempts, Success rate (green if ≥50%, red if <50%), Avg cart
+value, "Unlocked after fail" (sessions where customer added items to qualify),
+Last used date.
+
+---
+
+### Data collection — what feeds the DB
+
+**cart-monitor.js (theme extension, runs on every storefront page):**
+Intercepts fetch + XHR calls to /cart/, /cart.js, /discount/ endpoints.
+Fires these events to /api/cart/ingest:
+- cart_item_added, cart_item_changed, cart_item_removed
+- cart_coupon_applied, cart_coupon_failed, cart_coupon_recovered, cart_coupon_removed
+- cart_bulk_updated (Rebuy/theme attribute syncs — mostly noise)
+- cart_checkout_clicked (click listener on checkout buttons)
+- cart_page_hidden (visibilitychange = tab switch / close)
+- cart_drawer_opened, cart_drawer_closed (MutationObserver on drawer element)
+- cart_atc_clicked (click listener on add-to-cart buttons)
+Also fires a session ping to /api/session/ping on every page load.
+Console log on load: `[CheckoutMaxx] Loaded — shop: X session: cart_XXXXX`
+
+**checkout-monitor.js (Web Pixel, runs in Shopify checkout sandbox):**
+Subscribes to Shopify analytics events and sends to /api/pixel/ingest:
+- checkout_started, checkout_contact_info_submitted,
+  checkout_address_info_submitted, checkout_shipping_info_submitted,
+  payment_info_submitted, checkout_completed
+- alert_displayed (discount errors, payment failures)
+- ui_extension_errored
+Also fires a session ping to /api/session/ping on checkout_started.
+Console log: `[CheckoutMaxx] Checkout active — session: cart_XXXXX`
+Session ID is shared with cart session via cart attribute `_cmx_sid`.
+
+---
+
 ## 2026-03-14: Fix 24h Refresh showing stale data + session ping confirmed working
 
 **Refresh button bug:** Refresh called `/api/cart/all?shop=...&refresh=1` without
