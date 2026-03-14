@@ -324,6 +324,7 @@ export async function GET(req: NextRequest) {
   const prev = computeKPIs(prevCartEvents, prevCheckoutEvents);
 
   const sparklines = buildSparklines(cartEvents, checkoutEvents, start, end, granularity);
+  const prevSparklines = buildSparklines(prevCartEvents, prevCheckoutEvents, prevStart, prevEnd, granularity);
 
   const currentFunnel = computeFunnel(checkoutEvents);
   const previousFunnel = computeFunnel(prevCheckoutEvents);
@@ -358,6 +359,7 @@ export async function GET(req: NextRequest) {
         previous: prev.cartSessions,
         delta: pctChange(curr.cartSessions, prev.cartSessions),
         sparkline: sparklines.cartSessions,
+        prevSparkline: prevSparklines.cartSessions,
       },
       checkoutRate: {
         value: Math.round(curr.checkoutRate * 10) / 10,
@@ -366,6 +368,7 @@ export async function GET(req: NextRequest) {
         numerator: curr.checkoutNumerator,
         denominator: curr.checkoutDenominator,
         sparkline: sparklines.checkoutRate,
+        prevSparkline: prevSparklines.checkoutRate,
       },
       cvr: {
         value: Math.round(curr.cvr * 10) / 10,
@@ -374,6 +377,7 @@ export async function GET(req: NextRequest) {
         numerator: curr.cvrNumerator,
         denominator: curr.cvrDenominator,
         sparkline: sparklines.cvr,
+        prevSparkline: prevSparklines.cvr,
       },
       aov: {
         value: Math.round(curr.aov * 100) / 100,
@@ -381,6 +385,7 @@ export async function GET(req: NextRequest) {
         delta: dollarChange(curr.aov, prev.aov),
         orderCount: curr.aovCount,
         sparkline: sparklines.aov,
+        prevSparkline: prevSparklines.aov,
       },
     },
     funnel: {

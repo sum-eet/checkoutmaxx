@@ -47,12 +47,52 @@ function deltaColor(delta: number, threshold = 0): string {
 
 type SparkPoint = { label: string; value: number };
 
-function Sparkline({ data }: { data: SparkPoint[] }) {
-  if (!data || data.length < 2) return <div style={{ height: 40 }} />;
+type SparklineProps = {
+  current: SparkPoint[];
+  previous: SparkPoint[];
+  yLabel: string;
+  valueFormatter?: (v: number) => string;
+};
+
+function KpiSparkline({ current, previous, yLabel, valueFormatter }: SparklineProps) {
+  if (!current || current.length < 2) return <div style={{ height: 80 }} />;
+
+  // Merge current + previous by index so both lines share the same x-axis points
+  const merged = current.map((pt, i) => ({
+    label: pt.label,
+    current: pt.value,
+    previous: previous[i]?.value ?? null,
+  }));
+
+  const fmt = valueFormatter ?? ((v: number) => String(v));
+
   return (
-    <ResponsiveContainer width="100%" height={40}>
-      <LineChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <Line type="monotone" dataKey="value" dot={false} stroke="#2c6ecb" strokeWidth={1.5} />
+    <ResponsiveContainer width="100%" height={80}>
+      <LineChart data={merged} margin={{ top: 4, right: 4, bottom: 16, left: 28 }}>
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 9, fill: '#9ba0a5' }}
+          tickLine={false}
+          axisLine={false}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          tick={{ fontSize: 9, fill: '#9ba0a5' }}
+          tickLine={false}
+          axisLine={false}
+          width={26}
+          label={{ value: yLabel, angle: -90, position: 'insideLeft', fontSize: 9, fill: '#9ba0a5', dx: -2 }}
+          tickFormatter={(v) => fmt(v)}
+        />
+        <RechartsTooltip
+          contentStyle={{ fontSize: 11, padding: '4px 8px' }}
+          formatter={(value, name) => [
+            fmt(Number(value)),
+            name === 'current' ? 'This period' : 'Previous period',
+          ]}
+        />
+        <Line type="monotone" dataKey="current" dot={false} stroke="#2c6ecb" strokeWidth={1.5} />
+        <Line type="monotone" dataKey="previous" dot={false} stroke="#c4c4c4" strokeWidth={1} strokeDasharray="3 2" />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -66,10 +106,13 @@ type KpiCardProps = {
   deltaType: 'pct' | 'pp' | 'dollar';
   deltaThreshold?: number;
   sparkline: SparkPoint[];
+  prevSparkline: SparkPoint[];
+  yLabel: string;
+  valueFormatter?: (v: number) => string;
   loading: boolean;
 };
 
-function KpiCard({ label, value, subLabel, delta, deltaType, deltaThreshold = 0, sparkline, loading }: KpiCardProps) {
+function KpiCard({ label, value, subLabel, delta, deltaType, deltaThreshold = 0, sparkline, prevSparkline, yLabel, valueFormatter, loading }: KpiCardProps) {
   return (
     <Card>
       <BlockStack gap="200">
@@ -79,16 +122,23 @@ function KpiCard({ label, value, subLabel, delta, deltaType, deltaThreshold = 0,
         ) : (
           <Text as="p" variant="headingLg" fontWeight="bold">{value}</Text>
         )}
-        <Sparkline data={loading ? [] : sparkline} />
+        {loading ? (
+          <div style={{ height: 80 }} />
+        ) : (
+          <KpiSparkline current={sparkline} previous={prevSparkline} yLabel={yLabel} valueFormatter={valueFormatter} />
+        )}
         {loading ? (
           <SkeletonBodyText lines={1} />
         ) : (
-          <InlineStack gap="200" blockAlign="center">
-            <span style={{ fontSize: 12, color: deltaColor(delta, deltaThreshold), fontWeight: 500 }}>
-              {formatDelta(delta, deltaType)}
-            </span>
+          <BlockStack gap="100">
+            <InlineStack gap="200" blockAlign="center">
+              <span style={{ fontSize: 12, color: deltaColor(delta, deltaThreshold), fontWeight: 600 }}>
+                {formatDelta(delta, deltaType)}
+              </span>
+              <Text as="p" variant="bodySm" tone="subdued">vs previous period</Text>
+            </InlineStack>
             <Text as="p" variant="bodySm" tone="subdued">{subLabel}</Text>
-          </InlineStack>
+          </BlockStack>
         )}
       </BlockStack>
     </Card>
@@ -164,6 +214,8 @@ export default function OverviewPage() {
               deltaType="pct"
               deltaThreshold={2}
               sparkline={kpis?.cartSessions?.sparkline ?? []}
+              prevSparkline={kpis?.cartSessions?.prevSparkline ?? []}
+              yLabel="sessions"
               loading={isLoading}
             />
             <KpiCard
@@ -178,6 +230,9 @@ export default function OverviewPage() {
               deltaType="pp"
               deltaThreshold={1}
               sparkline={kpis?.checkoutRate?.sparkline ?? []}
+              prevSparkline={kpis?.checkoutRate?.prevSparkline ?? []}
+              yLabel="%"
+              valueFormatter={(v) => `${v.toFixed(0)}%`}
               loading={isLoading}
             />
             <KpiCard
@@ -192,6 +247,9 @@ export default function OverviewPage() {
               deltaType="pp"
               deltaThreshold={1}
               sparkline={kpis?.cvr?.sparkline ?? []}
+              prevSparkline={kpis?.cvr?.prevSparkline ?? []}
+              yLabel="%"
+              valueFormatter={(v) => `${v.toFixed(0)}%`}
               loading={isLoading}
             />
             <KpiCard
@@ -201,6 +259,9 @@ export default function OverviewPage() {
               delta={kpis?.aov?.delta ?? 0}
               deltaType="dollar"
               sparkline={kpis?.aov?.sparkline ?? []}
+              prevSparkline={kpis?.aov?.prevSparkline ?? []}
+              yLabel="$"
+              valueFormatter={(v) => `$${v.toFixed(0)}`}
               loading={isLoading}
             />
           </div>
