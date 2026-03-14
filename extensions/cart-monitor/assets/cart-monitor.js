@@ -37,6 +37,23 @@
     return id;
   }
 
+  // ── UTM / Traffic Source ──────────────────────────────────────────────
+  // Capture once on first page load, persist in sessionStorage for the session.
+  function getUtm() {
+    var stored = sessionStorage.getItem('_cmx_utm');
+    if (stored) { try { return JSON.parse(stored); } catch (e) {} }
+    var p = new URLSearchParams(window.location.search);
+    var utm = {
+      source: p.get('utm_source') || null,
+      medium: p.get('utm_medium') || null,
+      campaign: p.get('utm_campaign') || null,
+      referrer: document.referrer || null,
+    };
+    sessionStorage.setItem('_cmx_utm', JSON.stringify(utm));
+    return utm;
+  }
+  var _utm = getUtm();
+
   // ── Cart Token + State ────────────────────────────────────────────────
   var cartToken = null;
   // Track last known cart state to deduplicate cart_fetched spam.
@@ -78,6 +95,10 @@
       url: window.location.href,
       device: _deviceType,
       country: _country,
+      utmSource: _utm.source,
+      utmMedium: _utm.medium,
+      utmCampaign: _utm.campaign,
+      utmReferrer: _utm.referrer,
       payload: payload,
     };
   }

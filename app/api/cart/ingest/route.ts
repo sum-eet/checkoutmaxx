@@ -60,7 +60,7 @@ async function processEvent(text: string) {
     const event = JSON.parse(text);
     eventType = event.eventType ?? null;
     shopDomain = event.shopDomain ?? 'unknown';
-    const { sessionId, cartToken, occurredAt, url, device, country, payload = {} } = event;
+    const { sessionId, cartToken, occurredAt, url, device, country, utmSource, utmMedium, utmCampaign, utmReferrer, payload = {} } = event;
 
     if (!eventType || !shopDomain || !sessionId) return;
     if (SKIP_EVENTS.has(eventType)) return;
@@ -112,6 +112,10 @@ async function processEvent(text: string) {
       pageUrl: sanitisedUrl,
       device: typeof device === 'string' ? device : null,
       country: typeof country === 'string' ? country : null,
+      utmSource: typeof utmSource === 'string' ? utmSource : null,
+      utmMedium: typeof utmMedium === 'string' ? utmMedium : null,
+      utmCampaign: typeof utmCampaign === 'string' ? utmCampaign : null,
+      utmReferrer: typeof utmReferrer === 'string' ? utmReferrer : null,
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
     });
 

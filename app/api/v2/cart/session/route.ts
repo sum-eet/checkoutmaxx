@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
   const [cartRes, checkoutRes] = await Promise.all([
     supabase
       .from('CartEvent')
-      .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, pageUrl, newQuantity')
+      .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, pageUrl, newQuantity, utmSource, utmMedium, utmCampaign')
       .eq('shopId', shop.id)
       .eq('sessionId', sessionId)
       .order('occurredAt', { ascending: true }),
@@ -179,6 +179,11 @@ export async function GET(req: NextRequest) {
   const country = cartEvents.find((e) => e.country)?.country ?? null;
   const device = cartEvents.find((e) => e.device)?.device ?? null;
 
+  const utmEvent = cartEvents.find((e: any) => e.utmSource || e.utmMedium || e.utmCampaign);
+  const utmSource = (utmEvent as any)?.utmSource ?? null;
+  const utmMedium = (utmEvent as any)?.utmMedium ?? null;
+  const utmCampaign = (utmEvent as any)?.utmCampaign ?? null;
+
   const coupons = Array.from(couponMap.values());
   const outcome = buildOutcome(hasCompleted, hasCheckout, hasProducts);
 
@@ -195,6 +200,9 @@ export async function GET(req: NextRequest) {
     coupons,
     outcome,
     summary: '',
+    utmSource,
+    utmMedium,
+    utmCampaign,
   };
   session.summary = buildSessionSummary(session);
 

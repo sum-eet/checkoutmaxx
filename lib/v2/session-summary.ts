@@ -24,7 +24,34 @@ export type CartSessionV2 = {
   coupons: CouponSummary[];
   outcome: 'ordered' | 'checkout' | 'abandoned';
   summary: string;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
 };
+
+/** Maps utm_source + utm_medium to a canonical display label for the UI. */
+export function deriveSourceLabel(utmSource: string | null, utmMedium: string | null): string {
+  const src = (utmSource ?? '').toLowerCase();
+  const med = (utmMedium ?? '').toLowerCase();
+
+  if (!src && !med) return 'Direct';
+
+  if (src === 'instagram') return 'Instagram';
+  if (src === 'facebook' || src === 'fb') return 'Facebook';
+  if (src === 'google' && (med === 'cpc' || med === 'ppc' || med === 'paidsearch')) return 'Google Ads';
+  if (src === 'google') return 'Google';
+  if (src === 'tiktok' || src === 'tiktok_ads') return 'TikTok';
+  if (src === 'youtube') return 'YouTube';
+  if (src === 'twitter' || src === 'x') return 'Twitter/X';
+  if (src === 'pinterest') return 'Pinterest';
+  if (src === 'snapchat') return 'Snapchat';
+  if (med === 'email' || src === 'klaviyo' || src === 'mailchimp' || src === 'email') return 'Email';
+  if (med === 'sms' || src === 'sms' || src === 'attentive' || src === 'postscript') return 'SMS';
+  if (med === 'organic') return 'Organic';
+  if (med === 'referral') return 'Referral';
+  if (src) return src.charAt(0).toUpperCase() + src.slice(1);
+  return 'Other';
+}
 
 export function buildSessionSummary(session: CartSessionV2): string {
   const product = session.products[0]?.productTitle ?? null;

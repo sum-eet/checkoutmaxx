@@ -9,6 +9,28 @@ import {
   type LineItem,
 } from '@/lib/v2/session-summary';
 
+/** Maps utm_source + utm_medium to a canonical display label. */
+function deriveSourceLabel(utmSource: string | null, utmMedium: string | null): string {
+  const src = (utmSource ?? '').toLowerCase();
+  const med = (utmMedium ?? '').toLowerCase();
+
+  if (!src && !med) return 'direct';
+
+  if (src === 'facebook' || src === 'instagram' || src === 'fb') return src === 'instagram' ? 'instagram' : 'facebook';
+  if (src === 'google' && (med === 'cpc' || med === 'ppc' || med === 'paidsearch')) return 'google ads';
+  if (src === 'google') return 'google';
+  if (src === 'tiktok' || src === 'tiktok_ads') return 'tiktok';
+  if (src === 'youtube') return 'youtube';
+  if (src === 'twitter' || src === 'x') return 'twitter/x';
+  if (src === 'pinterest') return 'pinterest';
+  if (src === 'snapchat') return 'snapchat';
+  if (med === 'email' || src === 'klaviyo' || src === 'mailchimp' || src === 'email') return 'email';
+  if (med === 'sms' || src === 'sms' || src === 'attentive' || src === 'postscript') return 'sms';
+  if (med === 'organic' || med === 'referral') return med;
+  if (src) return src;
+  return 'other';
+}
+
 function subDays(date: Date, days: number): Date {
   return new Date(date.getTime() - days * 24 * 60 * 60 * 1000);
 }
@@ -38,11 +60,12 @@ export async function GET(req: NextRequest) {
   const maxCart = req.nextUrl.searchParams.get('maxCart'); // dollars
   const hasCoupon = req.nextUrl.searchParams.get('hasCoupon') ?? ''; // any | failed | recovered | no
   const product = req.nextUrl.searchParams.get('product') ?? '';
+  const source = req.nextUrl.searchParams.get('source') ?? ''; // e.g. facebook, google, email, direct, organic
 
   // Fetch all cart events for the period
   let cartQuery = supabase
     .from('CartEvent')
-    .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, pageUrl')
+    .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, pageUrl, utmSource, utmMedium, utmCampaign, utmReferrer')
     .eq('shopId', shop.id)
     .gte('occurredAt', start.toISOString())
     .lte('occurredAt', end.toISOString())
@@ -157,6 +180,13 @@ export async function GET(req: NextRequest) {
     const device_ =
       events.find((e) => e.device)?.device ?? null;
 
+    // UTM — take from first event that has any UTM data
+    const utmEvent = events.find((e: any) => e.utmSource || e.utmMedium || e.utmCampaign || e.utmReferrer);
+    const utmSource_ = (utmEvent as any)?.utmSource ?? null;
+    const utmMedium_ = (utmEvent as any)?.utmMedium ?? null;
+    const utmCampaign_ = (utmEvent as any)?.utmCampaign ?? null;
+    const utmReferrer_ = (utmEvent as any)?.utmReferrer ?? null;
+
     const sess: CartSessionV2 = {
       sessionId,
       startTime: events[0].occurredAt,
@@ -170,6 +200,9 @@ export async function GET(req: NextRequest) {
       coupons,
       outcome: outcomeVal,
       summary: '',
+      utmSource: utmSource_,
+      utmMedium: utmMedium_,
+      utmCampaign: utmCampaign_,
     };
     sess.summary = buildSessionSummary(sess);
 
@@ -199,6 +232,12 @@ export async function GET(req: NextRequest) {
         (p.productTitle ?? '').toLowerCase().includes(term)
       );
       if (!match) return false;
+    }
+
+    // Source filter — match against normalized traffic source label
+    if (source) {
+      const label = deriveSourceLabel(s.utmSource, s.utmMedium).toLowerCase();
+      if (label !== source.toLowerCase()) return false;
     }
 
     return true;

@@ -92,7 +92,8 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
     supabase.from('CartEvent')
       .select('sessionId, occurredAt')
       .eq('shopId', shopId)
-      .gte('occurredAt', since_),
+      .gte('occurredAt', since_)
+      .limit(10000),
     supabase.from('CartEvent')
       .select('sessionId')
       .eq('shopId', shopId)
@@ -160,7 +161,8 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
     .select('*')
     .eq('shopId', shopId)
     .gte('occurredAt', since_)
-    .order('occurredAt', { ascending: true });
+    .order('occurredAt', { ascending: false })
+    .limit(10000);
 
   if (!events || events.length === 0) return [];
 

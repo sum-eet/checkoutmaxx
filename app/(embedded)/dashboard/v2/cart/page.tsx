@@ -22,7 +22,7 @@ import {
 } from '@shopify/polaris';
 import { useShop } from '@/hooks/useShop';
 import { DateRangeSelector, type DateRange } from '@/components/monitor/DateRangeSelector';
-import { formatDuration } from '@/lib/v2/session-summary';
+import { formatDuration, deriveSourceLabel } from '@/lib/v2/session-summary';
 import type { CartSessionV2, CouponSummary } from '@/lib/v2/session-summary';
 
 function subDays(d: Date, n: number): Date {
@@ -115,6 +115,12 @@ function TimelineModal({ sessionId, shop, open, onClose }: {
                 )}
                 {session.country && <Text as="p" tone="subdued">{session.country}</Text>}
                 {session.device && <Text as="p" tone="subdued">{session.device}</Text>}
+                {(session.utmSource || session.utmMedium) && (
+                  <Text as="p" tone="subdued">
+                    via {deriveSourceLabel(session.utmSource ?? null, session.utmMedium ?? null)}
+                    {session.utmCampaign ? ` · ${session.utmCampaign}` : ''}
+                  </Text>
+                )}
               </InlineStack>
             </BlockStack>
 
@@ -206,6 +212,7 @@ export default function CartSessionsPage() {
   const [maxCart, setMaxCart] = useState('');
   const [hasCoupon, setHasCoupon] = useState('');
   const [product, setProduct] = useState('');
+  const [source, setSource] = useState('');
 
   const rangeQuery = `start=${range.start.toISOString()}&end=${range.end.toISOString()}`;
   const filterQuery = [
@@ -216,6 +223,7 @@ export default function CartSessionsPage() {
     maxCart ? `maxCart=${maxCart}` : '',
     hasCoupon ? `hasCoupon=${hasCoupon}` : '',
     product ? `product=${encodeURIComponent(product)}` : '',
+    source ? `source=${encodeURIComponent(source)}` : '',
     `page=${page}`,
   ].filter(Boolean).join('&');
 
@@ -243,10 +251,11 @@ export default function CartSessionsPage() {
     setMaxCart('');
     setHasCoupon('');
     setProduct('');
+    setSource('');
     setPage(1);
   };
 
-  const hasActiveFilters = outcome !== 'all' || country || device || minCart || maxCart || hasCoupon || product;
+  const hasActiveFilters = outcome !== 'all' || country || device || minCart || maxCart || hasCoupon || product || source;
 
   return (
     <Page
@@ -333,6 +342,30 @@ export default function CartSessionsPage() {
                     type="number"
                   />
                 </div>
+                <div style={{ minWidth: 160 }}>
+                  <Select
+                    label="Traffic source"
+                    options={[
+                      { label: 'All sources', value: '' },
+                      { label: 'Direct', value: 'direct' },
+                      { label: 'Facebook', value: 'facebook' },
+                      { label: 'Instagram', value: 'instagram' },
+                      { label: 'Google', value: 'google' },
+                      { label: 'Google Ads', value: 'google ads' },
+                      { label: 'TikTok', value: 'tiktok' },
+                      { label: 'YouTube', value: 'youtube' },
+                      { label: 'Email', value: 'email' },
+                      { label: 'SMS', value: 'sms' },
+                      { label: 'Twitter/X', value: 'twitter/x' },
+                      { label: 'Pinterest', value: 'pinterest' },
+                      { label: 'Snapchat', value: 'snapchat' },
+                      { label: 'Organic', value: 'organic' },
+                      { label: 'Referral', value: 'referral' },
+                    ]}
+                    value={source}
+                    onChange={(v) => { setSource(v); setPage(1); }}
+                  />
+                </div>
                 <div style={{ minWidth: 180 }}>
                   <TextField
                     label="Product"
@@ -385,7 +418,7 @@ export default function CartSessionsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #e1e3e5' }}>
-                      {['Time', 'Country / Device', 'Products', 'Cart Value', 'Coupons', 'Outcome', ''].map((h) => (
+                      {['Time', 'Source', 'Country / Device', 'Products', 'Cart Value', 'Coupons', 'Outcome', ''].map((h) => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: '#6d7175', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -413,6 +446,30 @@ export default function CartSessionsPage() {
                           <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                             <div style={{ fontWeight: 500 }}>{formatTime(sess.startTime)}</div>
                             <div style={{ color: '#6d7175', fontSize: 12 }}>{formatDuration(sess.duration)}</div>
+                          </td>
+                          <td style={{ padding: '10px 12px', verticalAlign: 'top', whiteSpace: 'nowrap' }}>
+                            {(() => {
+                              const label = deriveSourceLabel(sess.utmSource ?? null, sess.utmMedium ?? null);
+                              const isKnown = label !== 'Direct' && label !== 'Other';
+                              return (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 7px',
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: 500,
+                                  background: isKnown ? '#e8f0fe' : '#f4f6f8',
+                                  color: isKnown ? '#1a73e8' : '#6d7175',
+                                }}>
+                                  {label}
+                                </span>
+                              );
+                            })()}
+                            {sess.utmCampaign && (
+                              <div style={{ fontSize: 11, color: '#6d7175', marginTop: 2 }} title={sess.utmCampaign}>
+                                {sess.utmCampaign.slice(0, 18)}{sess.utmCampaign.length > 18 ? '…' : ''}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '10px 12px', verticalAlign: 'top' }}>
                             <div>{sess.country ?? '—'}</div>
