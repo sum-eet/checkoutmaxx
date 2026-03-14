@@ -195,7 +195,394 @@ never loses its active preset state.
 
 ---
 
-## 2026-03-14: Current state of all dashboard pages — what each page shows
+## 2026-03-14: Information Architecture — screens, navigation, metrics, math
+
+---
+
+### NAVIGATION
+
+Embedded Shopify app. 4 nav items in the sidebar:
+1. **Converted Carts** — `/dashboard/converted` (default, redirected from `/dashboard`)
+2. **Abandoned Carts** — `/dashboard/abandoned`
+3. **Cart Activity** — `/dashboard/cart`
+4. **Notifications** — `/dashboard/notifications` (alert rules config)
+5. **Settings** — `/dashboard/settings` (shop config)
+
+All pages: date range selector (1h / 24h / 7d / 30d / Custom) + Refresh button.
+All pages share the same `useShop()` hook to get the shop domain from the
+embedded app session, then pass it as `?shop=` to all API routes.
+
+---
+
+### DATA TABLES IN SUPABASE
+
+- **Shop** — one row per installed store. id, shopDomain, installedAt, plan, settings.
+- **CartEvent** — one row per cart-side event. shopId, sessionId, cartToken, eventType,
+  cartValue (cents), cartItemCount, lineItems (JSON), couponCode, couponSuccess,
+  couponFailReason, couponRecovered, discountAmount, lineIndex, newQuantity,
+  pageUrl, device, country, occurredAt.
+- **CheckoutEvent** — one row per checkout-side event. shopId, sessionId, eventType,
+  deviceType, country, discountCode, totalPrice, currency, errorMessage,
+  rawPayload (full JSON), occurredAt.
+- **AlertLog** — one row per fired alert. shopId, title, firedAt, resolvedAt.
+- **IngestLog** — one row per ingest attempt. endpoint, shopDomain, eventType,
+  success, latencyMs, errorCode, errorMessage, occurredAt. Operational only.
+- **SessionPing** — one row per page load (cart) or checkout start (checkout).
+  sessionId, source (cart|checkout), shopDomain, country, device, pageUrl,
+  occurredAt. Pipeline liveness signal.
+- **Baseline** — one row per computed baseline metric. shopId, metricName,
+  value, computedAt. Currently only "checkout_cvr".
+
+---
+
+### SCREEN 1 — CONVERTED CARTS
+
+**Purpose:** Top-level funnel health. Did checkouts convert?
+
+**API calls:**
+- `GET /api/metrics?shop=X&metric=kpi&start=Y&end=Z`
+- `GET /api/metrics?shop=X&metric=funnel&start=Y&end=Z`
+- `GET /api/cart/all?shop=X` (for cart additions KPI, no date range)
+
+---
+
+#### KPI Cards (row of 3)
+
+**Card 1 — Cart Additions**
+```
+value  = COUNT(DISTINCT sessionId) FROM CartEvent WHERE occurredAt IN range
+spark  = hourlyBuckets[0..23] — count of sessions by hour of first event
+sub    = ROUND(cartsCheckedOut / cartsOpened * 100) + "% reached checkout"
+```
+Clicking navigates to Cart Activity page.
+
+**Card 2 — Checkout Starts**
+```
+value  = COUNT(DISTINCT sessionId) FROM CheckoutEvent
+         WHERE eventType = 'checkout_started'
+         UNION sessionIds from checkout_completed
+         (Shop Pay / Apple Pay complete without starting — union ensures they count)
+sub    = ROUND(checkoutsStarted / cartsOpened * 100) + "% of cart additions"
+spark  = funnel step session counts [checkout→contact→address→shipping→payment→complete]
+```
+
+**Card 3 — Checkout Completes**
+```
+value  = COUNT(DISTINCT sessionId) WHERE eventType = 'checkout_completed'
+sub    = "CVR: X.X%"  where CVR = completedOrders / checkoutsStarted
+badge  = +/- X.Xpts vs baseline (green if ≥0, red if <0)
+         cvrDelta = CVR - baselineCvr
+         baselineCvr = latest value FROM Baseline WHERE metricName = 'checkout_cvr'
+spark  = funnel step pct values [100%, ..., CVR%]
+```
+
+---
+
+#### Funnel Line Chart
+
+X-axis: checkout step labels (Checkout Started → Contact → Address → Shipping → Payment → Completed)
+Y-axis: % of sessions surviving that step (0–100%)
+Dashed reference line: baseline CVR (from Baseline table)
+
+```
+Math per step:
+  total    = COUNT(DISTINCT checkout_started sessions UNION checkout_completed sessions)
+  step_n   = COUNT(DISTINCT sessionId WHERE eventType = step_n_event), capped at total
+  pct[n]   = ROUND(step_n / total * 100)
+  drop[n]  = step[n-1].sessions - step[n].sessions
+  dropPct  = ROUND(drop[n] / total * 100)
+  highDrop = dropPct >= 30  (bar turns red in abandoned page)
+```
+Note: Completed can exceed Payment because Shop Pay / Apple Pay skip intermediate steps.
+
+---
+
+#### Funnel Steps Table
+
+Columns: Step label | Sessions count | Pct
+Math: same as chart above.
+
+#### Checkout CVR Table
+
+Rows: Checkouts Started | Completed Orders | CVR | Baseline CVR | CVR Delta
+```
+CVR        = completedOrders / checkoutsStarted  (shown as X.X%)
+BaselineCVR = latest Baseline.value for 'checkout_cvr'
+CVR Delta  = CVR - baselineCVR  (shown as X.XXpts)
+```
+
+---
+
+### SCREEN 2 — ABANDONED CARTS
+
+**Purpose:** Where in checkout do people drop? What errors and products are associated?
+
+**API calls:**
+- `GET /api/metrics?shop=X&metric=funnel`
+- `GET /api/metrics?shop=X&metric=errors`
+- `GET /api/metrics?shop=X&metric=dropped-products`
+- `GET /api/metrics?shop=X&metric=failed-discounts`
+
+---
+
+#### KPI Cards (row of 4)
+
+```
+Sessions Started  = funnel[0].sessions  (checkout_started UNION checkout_completed)
+Sessions Dropped  = Started - Completed
+Drop Rate         = ROUND((Dropped / Started) * 100, 1) + "%"
+Completed         = COUNT(DISTINCT sessionId WHERE eventType = 'checkout_completed')
+```
+
+---
+
+#### Checkout Funnel (visual bar chart)
+
+Horizontal bars per step. Bar width = step.sessions / step[0].sessions * 100%.
+
+```
+Bar colour:
+  last step (Completed) → green gradient
+  any step with dropPct >= 30% → red gradient
+  all others → blue gradient
+
+Between-step connector:
+  dropped = step[i-1].sessions - step[i].sessions
+  dropPct = ROUND(dropped / step[i-1].sessions * 100)
+  colour  = red if dropPct >= 30, grey otherwise
+```
+
+---
+
+#### Top Errors Table
+
+Columns: Error Type | Count
+```
+Discount code error = COUNT(*) FROM CheckoutEvent WHERE eventType = 'alert_displayed'
+Payment drop-off    = COUNT(DISTINCT sessionId WHERE payment_info_submitted)
+                    - COUNT(DISTINCT sessionId WHERE checkout_completed)
+                    = sessions that entered payment but never completed
+Extension error     = COUNT(*) WHERE eventType = 'ui_extension_errored'
+```
+Only rows with count > 0 are shown.
+
+---
+
+#### Dropped Products Table
+
+Columns: Product | Carts | % of Drops
+```
+abandoned sessions = checkout_started sessions NOT IN checkout_completed sessions
+                     (deduplicated by sessionId — first occurrence only)
+
+For each abandoned session, read rawPayload.checkout.lineItems[]
+Count each product title (+ variant if not "Default Title") across all abandoned sessions
+
+pctOfDrops = ROUND(product_count / total_line_items_across_all_abandoned * 100)
+Sorted by count DESC, top 10 only.
+```
+
+---
+
+#### Failed Discount Codes Table
+
+Columns: Code | Count | Last Seen | Error Message
+```
+Source: CheckoutEvent WHERE eventType = 'alert_displayed'
+Code extracted from: discountCode field OR rawPayload.alert.value
+  (when rawPayload.alert.target = 'cart.discountCode')
+Count = how many alert_displayed events fired for that code in range
+Last Seen = most recent occurredAt for that code
+Error Message = errorMessage from most recent event
+Sorted by count DESC.
+```
+
+---
+
+### SCREEN 3 — CART ACTIVITY
+
+**Purpose:** Session-level cart behaviour. Coupon usage. Full journey per visitor.
+
+**API calls:**
+- `GET /api/cart/all?shop=X&start=Y&end=Z` — returns kpis + sessions + couponStats
+  (60s server-side cache keyed by shopId:startParam, busted by ?refresh=1 with range)
+
+---
+
+#### KPI Cards (row of 4, 3 are clickable filters)
+
+**Carts opened** (not a filter)
+```
+value = COUNT(DISTINCT sessionId) FROM CartEvent WHERE occurredAt IN range
+sub   = "{cartsWithProducts} with products · {emptyCartOpens} empty"
+```
+
+**With products** (click = filter session list)
+```
+value = COUNT(DISTINCT sessionId) FROM CartEvent
+        WHERE cartValue > 0 AND occurredAt IN range
+sub   = ROUND(cartsWithProducts / cartsOpened * 100) + "% of sessions"
+filter logic: lineItems.length > 0 OR cartItemCount > 0 OR cartValue > 0
+```
+
+**Coupon attempted** (click = filter session list)
+```
+value = COUNT(DISTINCT sessionId) WHERE eventType IN
+        ('cart_coupon_applied','cart_coupon_failed',
+         'cart_coupon_recovered','cart_coupon_removed')
+sub   = ROUND(cartsWithCoupon / cartsWithProducts * 100) + "% of product carts"
+filter logic: session.couponsAttempted.length > 0
+```
+
+**Reached checkout** (click = filter session list)
+```
+value = COUNT(DISTINCT sessionId) WHERE eventType = 'cart_checkout_clicked'
+sub   = (cartsCheckedOut / cartsWithProducts * 100).toFixed(1) + "% of product carts"
+filter logic: session.checkedOut === true OR session.orderCompleted === true
+```
+
+**Recovered carts banner** (only shown when recoveredCarts > 0)
+```
+recoveredCarts   = COUNT(DISTINCT sessionId WHERE eventType = 'cart_coupon_recovered')
+recoveredRevenue = SUM(first cartValue per session for cart_coupon_recovered events)
+```
+
+---
+
+#### Cart Sessions Table
+
+Columns: Time | Country | Device | Products | Cart value | Coupons | Outcome | View
+
+```
+Time          = formatTime(firstSeen) + "\n" + formatDuration(lastSeen - firstSeen)
+Products      = lineItems[].productTitle ×quantity joined by ", "
+                OR "{cartItemCount} item(s)" if no lineItems
+                OR "Empty cart" (subdued) if nothing
+Cart value    = if cartValue > 0:
+                  if startingCartValue != cartValue → "{start} → {end}"
+                  else → "{cartValue}"
+                else → "—"
+Coupons       = pills per couponAttempted entry
+                  green badge if success, red if failed
+                  "^ " prefix if recovered (coupon unlocked after adding items)
+                  "-${discountAmount}" appended if success and discount known
+Outcome       = "Ordered" (green) if orderCompleted
+                "Checkout" (yellow) if checkedOut
+                "Abandoned" (red) otherwise
+```
+
+Session build logic (lib/cart-metrics.ts getCartSessions):
+```
+Group all CartEvent rows by sessionId.
+Filter out sessions with no meaningful events:
+  meaningful = cart_item_added/changed/removed, coupon events,
+               cart_checkout_clicked, cart_page_hidden
+A session passes if: has meaningful event OR has CheckoutEvents OR has cartValue > 0
+
+lastWithValue  = last event WHERE cartValue > 0  (cart value shown)
+firstWithValue = first event WHERE cartValue > 0 (starting value for arrow display)
+lastWithItems  = last event WHERE lineItems IS NOT NULL
+checkedOut     = has cart_checkout_clicked OR has any CheckoutEvent
+orderCompleted = CheckoutEvent WHERE eventType = 'checkout_completed' exists
+country        = first non-null CartEvent.country, fallback to CheckoutEvent.country
+```
+
+---
+
+#### Session Timeline Modal
+
+Header row:
+```
+Cart value = last event with cartValue > 0, shown as formatCents(cents) = "$X.XX"
+Items      = lineItems.length if > 0, else cartItemCount
+Outcome    = "Order completed" / "Reached checkout" / "Abandoned"
+```
+
+Products in cart: lineItems[].productTitle × quantity — price
+
+Full journey (merged CartEvent + CheckoutEvent sorted by occurredAt ASC):
+```
+Per event row:
+  timestamp   = HH:MM (local time)
+  elapsed     = event[i].occurredAt - event[i-1].occurredAt
+                formatted as "+Xs" (<60s) or "+Xm Ys" (≥60s)
+                not shown for first event
+  badge       = "Cart" (grey) or "Checkout" (blue info)
+  label       = human string (see event label map below)
+  detail      = secondary line: cart value, page URL, or both
+  colour      = green if isPositive=true, red if isPositive=false, grey otherwise
+```
+
+Event label map:
+```
+cart_item_added        → "Added item to cart"         detail: "Cart: $X · /page"
+cart_item_changed      → "Changed quantity to N"      detail: "Cart: $X · /page"
+cart_item_removed      → "Removed item"               detail: "Cart: $X · /page"
+cart_coupon_applied    → "Applied coupon CODE"        detail: "Saved $X"  (green)
+cart_coupon_failed     → "Tried coupon CODE"          detail: "Not applicable"  (red)
+cart_coupon_recovered  → "Coupon CODE unlocked"       detail: "Added items to qualify — saved $X"  (green)
+cart_coupon_removed    → "Removed coupon CODE"
+cart_checkout_clicked  → "Clicked checkout"           detail: /page
+cart_page_hidden       → "Left the page"              detail: /page
+cart_bulk_updated      → "Cart updated" (if cartValue>0) OR "Opened page"
+                         detail: "Cart: $X · /page"
+cart_cleared           → "Cleared cart"               detail: /page
+cart_drawer_opened     → "Opened cart drawer"         detail: /page
+cart_drawer_closed     → "Closed cart drawer"         detail: /page
+cart_atc_clicked       → "Clicked add to cart"        detail: /page
+checkout_started       → "Reached checkout"           (blue Checkout badge)
+checkout_contact_...   → "Filled contact info"
+checkout_address_...   → "Filled shipping address"
+checkout_shipping_...  → "Selected shipping method"
+payment_info_submitted → "Entered payment"
+checkout_completed     → "Order completed"            (green)
+```
+
+---
+
+#### Coupon Intelligence Table
+
+Columns: Code | Attempts | Success rate | Avg cart value | Unlocked after fail | Last used
+```
+attempts     = COUNT(*) for this code WHERE eventType IN (applied|failed|recovered)
+successes    = COUNT(*) WHERE couponSuccess = true
+success rate = ROUND(successes / attempts * 100) + "%"
+               badge: green if ≥50%, red if <50%
+avgCartValue = MEAN(cartValue) across all events for this code (cents, shown as $X.XX)
+recoveries   = COUNT(*) WHERE couponRecovered = true
+               shown as "X unlocked after adding items" (yellow badge) or "—"
+lastSeen     = MAX(occurredAt) for this code
+Sorted by attempts DESC.
+```
+
+---
+
+### SCREEN 4 — NOTIFICATIONS
+
+Alert rules for the store. Not yet documented in detail (uses AlertLog table).
+
+---
+
+### SESSION ID SYSTEM
+
+Cart sessions and checkout sessions share a session ID via a cart attribute.
+
+```
+cart-monitor.js on init:
+  sessionId = sessionStorage.getItem('_cmx_sid')
+              || 'cart_' + Date.now() + '_' + Math.random().toString(36).slice(2,9)
+  sessionStorage.setItem('_cmx_sid', sessionId)
+  fires: POST /cart/update.js with attributes: { _cmx_sid: sessionId }
+
+checkout-monitor.js (Web Pixel) on checkout_started:
+  sessionId = checkout.customAttributes.find(a => a.key === '_cmx_sid')?.value
+              || checkout.token
+              || checkout.id
+```
+Both cart and checkout events for the same visit share the same sessionId.
+This is how the session timeline modal can show both Cart and Checkout events in one view.
+
+---
 
 ### Navigation structure
 4 pages in the embedded app sidebar:
