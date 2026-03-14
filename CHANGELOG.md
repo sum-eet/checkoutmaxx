@@ -868,3 +868,61 @@ Visible in DevTools on any store running the extension. Costs nothing. Catches
 - app/api/cart/session/route.ts, sessions, kpis, coupons (Prisma → Supabase)
 - lib/cart-metrics.ts (hasCartValue filter fix)
 - package.json (@vercel/functions added)
+
+## 2026-03-14: V2 Dashboard — Preview build at /dashboard/v2/*
+
+**What changed:** Built complete new dashboard at /dashboard/v2/* routes.
+Old /dashboard/* routes completely untouched.
+
+**Pages built:**
+- /dashboard/v2/overview — 4 KPI cards (Cart Sessions, Checkout Rate, CVR, AOV), sparklines, delta badges, checkout funnel line chart with comparison period, steps table, drop analysis table, recent alerts strip
+- /dashboard/v2/cart — session table with 7 filters (outcome, device, coupon, country, min/max cart, product), scoped counts, pagination, timeline modal (full cart + checkout event history per session)
+- /dashboard/v2/performance — converted vs abandoned comparison table (7 metrics), conversion rate by cart value band (bar chart), revenue per session by coupon (horizontal bar chart + exact table)
+- /dashboard/v2/discounts — codes table with status dots, success rate, recoveries, rev/session; code detail panel (trend chart, summary stats 2x2 grid, recovery detail, recent sessions)
+- /dashboard/v2/notifications — severity-ranked alerts (critical/warning/info), date filter, tab filter, optimistic mark-as-read, client-side dismiss
+
+**New API routes:**
+- GET /api/v2/overview — KPI cards + sparklines + deltas + funnel + recent alerts
+- GET /api/v2/cart/sessions — paginated session list with 7 filter params + scoped counts
+- GET /api/v2/cart/session — single session full timeline (cart + checkout merged)
+- GET /api/v2/performance — comparison table + conversion bands + revenue per coupon
+- GET /api/v2/discounts — codes table with status, rev/session, recoveries
+- GET /api/v2/discounts/[code] — code detail: trend, summary, recovery, recent sessions
+- GET /api/v2/notifications — alerts list with isRead, severity, linkType
+- POST /api/v2/notifications/[id]/read — mark alert read (idempotent, handles missing isRead column)
+
+**New utility files:**
+- lib/v2/session-summary.ts — buildSessionSummary, buildOutcome, formatDuration, sparklineLabel, getGranularity
+- supabase/alertlog-isread.sql — ADD COLUMN IF NOT EXISTS "isRead" boolean NOT NULL DEFAULT false
+
+**DB change:** AlertLog.isRead column — run supabase/alertlog-isread.sql manually before using notifications page. API handles missing column gracefully (null treated as false, returns 503 with clear message on POST).
+
+**Key decisions:**
+- All reads: Supabase JS client only — no Prisma in v2
+- /dashboard/v2/* has its own layout.tsx — sidebar nav, does not affect existing embedded layout or NavMenu
+- Recharts used for all charts (polaris-viz not in dependencies)
+- Sparkline granularity: hourly if range ≤ 1d, daily if ≤ 60d, weekly if > 60d
+- Comparison period: prev duration of same length ending at range start
+- CartEvent.cartValue is cents — divide by 100. CheckoutEvent.totalPrice is dollars — display as-is
+- Optimistic UI for mark-as-read — reverts on API error
+- Dismiss is client-side only in v2 preview (does not persist across refreshes)
+- No LLMs anywhere — all text is template-generated from spec rules
+- AlertLog uses firedAt (not occurredAt) — all alert queries use firedAt field
+
+**Files created:**
+- app/(embedded)/dashboard/v2/layout.tsx
+- app/(embedded)/dashboard/v2/overview/page.tsx
+- app/(embedded)/dashboard/v2/cart/page.tsx
+- app/(embedded)/dashboard/v2/performance/page.tsx
+- app/(embedded)/dashboard/v2/discounts/page.tsx
+- app/(embedded)/dashboard/v2/notifications/page.tsx
+- app/api/v2/overview/route.ts
+- app/api/v2/cart/sessions/route.ts
+- app/api/v2/cart/session/route.ts
+- app/api/v2/performance/route.ts
+- app/api/v2/discounts/route.ts
+- app/api/v2/discounts/[code]/route.ts
+- app/api/v2/notifications/route.ts
+- app/api/v2/notifications/[id]/read/route.ts
+- lib/v2/session-summary.ts
+- supabase/alertlog-isread.sql
