@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     .eq('shopId', shop.id)
     .gte('occurredAt', start.toISOString())
     .lte('occurredAt', end.toISOString())
-    .order('occurredAt', { ascending: true })
+    .order('occurredAt', { ascending: false })
     .limit(10000);
 
   if (country) cartQuery = cartQuery.eq('country', country);
@@ -103,14 +103,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Cart values
+    // Cart values + item count
     let cartValueStart: number | null = null;
     let cartValueEnd: number | null = null;
+    let cartItemCount: number | null = null;
     for (const e of events) {
       if ((e.cartValue ?? 0) > 0) {
         if (cartValueStart === null) cartValueStart = (e.cartValue ?? 0) / 100;
         cartValueEnd = (e.cartValue ?? 0) / 100;
       }
+      if ((e.cartItemCount ?? 0) > 0) cartItemCount = e.cartItemCount ?? null;
     }
 
     // Coupons
@@ -162,6 +164,7 @@ export async function GET(req: NextRequest) {
       country: country_,
       device: device_,
       products,
+      cartItemCount,
       cartValueStart,
       cartValueEnd,
       coupons,

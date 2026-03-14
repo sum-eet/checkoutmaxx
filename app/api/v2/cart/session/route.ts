@@ -137,11 +137,13 @@ export async function GET(req: NextRequest) {
 
   let cartValueStart: number | null = null;
   let cartValueEnd: number | null = null;
+  let cartItemCount: number | null = null;
   for (const e of cartEvents) {
     if ((e.cartValue ?? 0) > 0) {
       if (cartValueStart === null) cartValueStart = (e.cartValue ?? 0) / 100;
       cartValueEnd = (e.cartValue ?? 0) / 100;
     }
+    if ((e.cartItemCount ?? 0) > 0) cartItemCount = e.cartItemCount ?? null;
   }
 
   const couponMap = new Map<string, CouponSummary>();
@@ -187,6 +189,7 @@ export async function GET(req: NextRequest) {
     country,
     device,
     products,
+    cartItemCount,
     cartValueStart,
     cartValueEnd,
     coupons,

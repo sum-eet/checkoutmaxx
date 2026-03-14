@@ -392,9 +392,14 @@ export default function CartSessionsPage() {
                   </thead>
                   <tbody>
                     {sessions.map((sess) => {
+                      const fullProductStr = sess.products.map((p) => p.productTitle ?? 'item').join(', ');
                       const productsStr = sess.products.length > 0
-                        ? sess.products.map((p) => p.productTitle ?? 'item').join(', ').slice(0, 40) + (sess.products.map((p) => p.productTitle ?? '').join(', ').length > 40 ? '…' : '')
-                        : sess.cartValueEnd ? `${sess.products.length} items` : 'Empty cart';
+                        ? fullProductStr.slice(0, 40) + (fullProductStr.length > 40 ? '…' : '')
+                        : sess.cartItemCount != null && sess.cartItemCount > 0
+                        ? `${sess.cartItemCount} item${sess.cartItemCount !== 1 ? 's' : ''} (no detail captured)`
+                        : sess.cartValueEnd
+                        ? 'Items in cart (no detail captured)'
+                        : 'Empty cart';
 
                       const cartDisplay =
                         sess.cartValueStart !== null && sess.cartValueEnd !== null && Math.abs((sess.cartValueEnd ?? 0) - (sess.cartValueStart ?? 0)) > 0.01

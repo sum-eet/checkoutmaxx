@@ -18,6 +18,7 @@ export type CartSessionV2 = {
   country: string | null;
   device: string | null;
   products: LineItem[];
+  cartItemCount: number | null;
   cartValueStart: number | null;
   cartValueEnd: number | null;
   coupons: CouponSummary[];
