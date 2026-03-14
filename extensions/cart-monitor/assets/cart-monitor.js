@@ -83,7 +83,7 @@
   }
 
   // ── Logger ────────────────────────────────────────────────────────────
-  console.log('[CheckoutMaxx] Loaded — shop: ' + CONFIG.shopDomain + ' ingestUrl: ' + CONFIG.logUrl);
+  console.log('[CheckoutMaxx] Loaded — shop: ' + CONFIG.shopDomain + ' session: ' + getSessionId());
 
   // Session init ping — fires once per page load
   // Confirms: script loaded → sendBeacon working → ingest endpoint reachable → DB alive
