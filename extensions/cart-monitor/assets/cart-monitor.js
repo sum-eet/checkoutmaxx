@@ -21,6 +21,9 @@
     logUrl: script && script.dataset && script.dataset.ingestUrl
       ? script.dataset.ingestUrl
       : null,
+    pingUrl: script && script.dataset && script.dataset.pingUrl
+      ? script.dataset.pingUrl
+      : null,
     debug: false, // Phase 2: console logging off in production
   };
 
@@ -81,6 +84,28 @@
 
   // ── Logger ────────────────────────────────────────────────────────────
   console.log('[CheckoutMaxx] Loaded — shop: ' + CONFIG.shopDomain + ' ingestUrl: ' + CONFIG.logUrl);
+
+  // Session init ping — fires once per page load
+  // Confirms: script loaded → sendBeacon working → ingest endpoint reachable → DB alive
+  if (CONFIG.pingUrl) {
+    try {
+      var pingPayload = JSON.stringify({
+        sessionId: getSessionId(),
+        source: 'cart',
+        shopDomain: CONFIG.shopDomain,
+        country: _country,
+        device: _deviceType,
+        pageUrl: window.location.pathname,
+        occurredAt: new Date().toISOString(),
+      });
+      var pingSent = navigator.sendBeacon(CONFIG.pingUrl, pingPayload);
+      if (!pingSent) {
+        console.warn('[CheckoutMaxx] Session ping queued but not confirmed sent');
+      }
+    } catch (e) {
+      // Never let the ping crash the script
+    }
+  }
 
   function logEvent(event) {
     if (CONFIG.debug) {

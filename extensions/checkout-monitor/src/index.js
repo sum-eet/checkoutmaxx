@@ -58,6 +58,27 @@ register(({ analytics, browser, init }) => {
   analytics.subscribe("checkout_started", (event) => {
     currentSessionId = extractSessionId(event.data?.checkout);
     send("checkout_started", event.data);
+
+    // Session init ping — fires once on checkout_started
+    // Confirms: pixel loaded → sendBeacon working → ingest endpoint reachable → DB alive
+    try {
+      const pingPayload = JSON.stringify({
+        sessionId: currentSessionId,
+        source: 'checkout',
+        shopDomain,
+        country: event.data?.checkout?.shippingAddress?.countryCode ?? null,
+        device: getDeviceType(),
+        pageUrl: '/checkout',
+        occurredAt: new Date().toISOString(),
+      });
+      browser.sendBeacon(
+        'https://checkoutmaxx-rt55.vercel.app/api/session/ping',
+        pingPayload
+      );
+      console.log('[CheckoutMaxx] Checkout active — session:', currentSessionId);
+    } catch (e) {
+      // Never let the ping crash the pixel
+    }
   });
 
   analytics.subscribe("checkout_contact_info_submitted", (event) => {

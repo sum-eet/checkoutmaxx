@@ -177,6 +177,36 @@ response was sent, which is invalid on a consumed request stream.
 
 ---
 
+## 2026-03-14: Session init ping — SessionPing table + /api/session/ping
+
+**What changed:** Added guaranteed pipeline confirmation signal.
+`cart_session_started` fires from cart-monitor.js on every page load init.
+`checkout_session_started` fires from Web Pixel on checkout_started event.
+Both write to new SessionPing table (not CartEvent or CheckoutEvent).
+
+**Why:** No reliable way to confirm pipeline liveness without manually querying
+the DB. SessionPing gives a guaranteed first event per session. /api/health
+now uses SessionPing recency as primary liveness signal. IngestLog tracks
+success/failure of every ping write.
+
+**New endpoint:** /api/session/ping — receives both cart and checkout pings,
+writes to SessionPing, logs to IngestLog.
+
+**New table:** SessionPing — sessionId, source (cart|checkout), shopDomain,
+country, device, pageUrl, occurredAt. Run supabase/sessionping-table.sql
+in Supabase SQL editor before testing.
+
+**Files changed:**
+- supabase/sessionping-table.sql (NEW — run manually in Supabase SQL editor)
+- app/api/session/ping/route.ts (NEW)
+- extensions/cart-monitor/assets/cart-monitor.js (pingUrl in CONFIG + session ping)
+- extensions/cart-monitor/blocks/cart-monitor.liquid (data-ping-url attribute)
+- extensions/checkout-monitor/src/index.js (checkout session ping + console log)
+- app/api/health/route.ts (SessionPing checks, new status logic)
+- lib/ingest-log.ts (endpoint type widened to string)
+
+---
+
 ## 2026-03-14: Latency tracking — drawer events, ATC click, elapsed time in timeline
 
 **What changed:**

@@ -14,7 +14,7 @@ export async function GET() {
   const thirtyMinAgo = new Date(now.getTime() - 30 * 60 * 1000).toISOString();
   const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
 
-  const [supabaseCheck, lastCartEvent, lastCheckoutEvent, recentFailures] =
+  const [supabaseCheck, lastCartEvent, lastCheckoutEvent, recentFailures, lastCartPing, lastCheckoutPing] =
     await Promise.allSettled([
       supabase.from("Shop").select("id").limit(1),
       supabase
@@ -34,6 +34,20 @@ export async function GET() {
         .select("*", { count: "exact", head: true })
         .eq("success", false)
         .gte("occurredAt", oneHourAgo),
+      supabase
+        .from("SessionPing")
+        .select("occurredAt")
+        .eq("source", "cart")
+        .order("occurredAt", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("SessionPing")
+        .select("occurredAt")
+        .eq("source", "checkout")
+        .order("occurredAt", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
   // Check 1: Can we reach Supabase?
@@ -69,12 +83,30 @@ export async function GET() {
       ? (recentFailures.value.count ?? 0)
       : 0;
 
-  // Degraded conditions
-  const cartStale = lastCart ? lastCart < thirtyMinAgo : false;
+  // Check 5: Last session pings
+  const lastCartPingTime =
+    lastCartPing.status === "fulfilled"
+      ? (lastCartPing.value.data?.occurredAt ?? null)
+      : null;
+
+  const lastCheckoutPingTime =
+    lastCheckoutPing.status === "fulfilled"
+      ? (lastCheckoutPing.value.data?.occurredAt ?? null)
+      : null;
+
+  // Status logic based on session ping recency
+  const cartPingStale = !lastCartPingTime || lastCartPingTime < oneHourAgo;
+  const checkoutPingStale = !lastCheckoutPingTime || lastCheckoutPingTime < oneHourAgo;
   const tooManyFailures = failureCount > 5;
 
-  const isDegraded = cartStale || tooManyFailures;
-  const status = isDegraded ? "degraded" : "ok";
+  let status: "ok" | "degraded" | "down";
+  if (cartPingStale && checkoutPingStale) {
+    status = "down";
+  } else if (cartPingStale || checkoutPingStale || tooManyFailures) {
+    status = "degraded";
+  } else {
+    status = "ok";
+  }
 
   return NextResponse.json(
     {
@@ -84,6 +116,8 @@ export async function GET() {
         lastCartEvent: lastCart ? timeAgo(lastCart) : "no data",
         lastCheckoutEvent: lastCheckout ? timeAgo(lastCheckout) : "no data",
         recentFailures: failureCount,
+        lastCartSessionPing: lastCartPingTime ?? null,
+        lastCheckoutSessionPing: lastCheckoutPingTime ?? null,
       },
       timestamp: now.toISOString(),
     },

@@ -13,7 +13,7 @@ export function logIngest({
   errorCode,
   errorMessage,
 }: {
-  endpoint: "cart" | "pixel";
+  endpoint: string;
   shopDomain: string;
   eventType?: string | null;
   success: boolean;
