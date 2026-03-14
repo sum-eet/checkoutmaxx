@@ -110,15 +110,31 @@ function successRate(successes: number, attempts: number): string {
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
-function KPICard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function KPICard({
+  label, value, sub, onClick, active,
+}: {
+  label: string; value: string | number; sub?: string;
+  onClick?: () => void; active?: boolean;
+}) {
   return (
-    <Card>
-      <BlockStack gap="100">
-        <Text variant="bodySm" as="p" tone="subdued">{label}</Text>
-        <Text variant="headingLg" as="p">{String(value)}</Text>
-        {sub && <Text variant="bodySm" as="p" tone="subdued">{sub}</Text>}
-      </BlockStack>
-    </Card>
+    <div
+      onClick={onClick}
+      style={{
+        cursor: onClick ? 'pointer' : undefined,
+        outline: active ? '2px solid #2c6ecb' : undefined,
+        borderRadius: 8,
+        flex: 1,
+        minWidth: 140,
+      }}
+    >
+      <Card>
+        <BlockStack gap="100">
+          <Text variant="bodySm" as="p" tone="subdued">{label}</Text>
+          <Text variant="headingLg" as="p">{String(value)}</Text>
+          {sub && <Text variant="bodySm" as="p" tone={active ? undefined : 'subdued'}>{sub}</Text>}
+        </BlockStack>
+      </Card>
+    </div>
   );
 }
 
@@ -285,6 +301,12 @@ export default function CartActivityPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [range, setRange] = useState<DateRange>(getDefaultRange);
+  const [activeFilter, setActiveFilter] = useState<'withProducts' | 'withCoupon' | 'checkedOut' | null>(null);
+
+  function handleKpiClick(filter: 'withProducts' | 'withCoupon' | 'checkedOut') {
+    setActiveFilter((prev) => prev === filter ? null : filter);
+    setSelectedTab(0);
+  }
 
   const rangeQuery = `start=${range.start.toISOString()}&end=${range.end.toISOString()}`;
 
@@ -309,7 +331,14 @@ export default function CartActivityPage() {
     { id: 'coupons', content: 'Coupon Intelligence' },
   ];
 
-  const sessionRows = sessions.map((s) => [
+  const filteredSessions = sessions.filter((s) => {
+    if (activeFilter === 'withProducts') return s.lineItems.length > 0 || (s.cartItemCount != null && s.cartItemCount > 0) || (s.cartValue != null && s.cartValue > 0);
+    if (activeFilter === 'withCoupon') return s.couponsAttempted.length > 0;
+    if (activeFilter === 'checkedOut') return s.checkedOut || s.orderCompleted;
+    return true;
+  });
+
+  const sessionRows = filteredSessions.map((s) => [
     <BlockStack gap="0">
       <Text as="span" variant="bodySm">{formatTime(s.firstSeen)}</Text>
       <Text as="span" variant="bodySm" tone="subdued">
@@ -438,6 +467,8 @@ export default function CartActivityPage() {
                   ? `${Math.round((kpis.cartsWithProducts / kpis.cartsOpened) * 100)}% of sessions`
                   : undefined
               }
+              onClick={() => handleKpiClick('withProducts')}
+              active={activeFilter === 'withProducts'}
             />
             <KPICard
               label="Coupon attempted"
@@ -447,6 +478,8 @@ export default function CartActivityPage() {
                   ? `${Math.round((kpis.cartsWithCoupon / kpis.cartsWithProducts) * 100)}% of product carts`
                   : undefined
               }
+              onClick={() => handleKpiClick('withCoupon')}
+              active={activeFilter === 'withCoupon'}
             />
             <KPICard
               label="Reached checkout"
@@ -456,6 +489,8 @@ export default function CartActivityPage() {
                   ? `${((kpis.cartsCheckedOut / kpis.cartsWithProducts) * 100).toFixed(1)}% of product carts`
                   : undefined
               }
+              onClick={() => handleKpiClick('checkedOut')}
+              active={activeFilter === 'checkedOut'}
             />
           </InlineStack>
         </Layout.Section>
@@ -480,11 +515,12 @@ export default function CartActivityPage() {
               <Box padding="400">
 
                 {selectedTab === 0 && (
-                  sessions.length === 0 ? (
-                    <EmptyState heading="No cart sessions today yet" image="">
+                  filteredSessions.length === 0 ? (
+                    <EmptyState heading={activeFilter ? 'No sessions match this filter' : 'No cart sessions today yet'} image="">
                       <Text as="p">
-                        Sessions will appear here as customers interact with their carts.
+                        {activeFilter ? 'Try a different filter or a wider date range.' : 'Sessions will appear here as customers interact with their carts.'}
                       </Text>
+                      {activeFilter && <Button onClick={() => setActiveFilter(null)}>Clear filter</Button>}
                     </EmptyState>
                   ) : (
                     <DataTable
