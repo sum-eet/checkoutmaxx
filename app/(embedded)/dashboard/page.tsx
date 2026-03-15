@@ -1,12 +1,8 @@
-"use client";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { redirect } from 'next/navigation';
 
 export default function DashboardRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    router.replace(`/dashboard/converted?${params.toString()}`);
-  }, [router]);
-  return null;
+  const version = process.env.DASHBOARD_VERSION ?? 'v1';
+  if (version === 'v3') redirect('/dashboard/v3/overview');
+  if (version === 'v2') redirect('/dashboard/v2/overview');
+  redirect('/dashboard/cart');
 }
