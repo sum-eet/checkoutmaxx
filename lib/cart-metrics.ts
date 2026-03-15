@@ -157,12 +157,23 @@ export async function getCartKPIs(shopId: string, since?: Date): Promise<CartKPI
 export async function getCartSessions(shopId: string, since?: Date): Promise<CartSession[]> {
   const since_ = (since ?? startOfToday()).toISOString();
 
+  // Only fetch event types that contribute to session summaries.
+  // Noisy events (cart_drawer_opened, cart_page_hidden, cart_atc_clicked,
+  // cart_bulk_updated, cart_session_started) can be 30-50 per session and
+  // blow through row limits without adding to the summary.
+  const SUMMARY_EVENT_TYPES = [
+    'cart_item_added', 'cart_item_changed', 'cart_item_removed',
+    'cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered',
+    'cart_coupon_removed', 'cart_checkout_clicked',
+  ];
+
   const { data: events } = await supabase.from('CartEvent')
-    .select('*')
+    .select('sessionId, eventType, cartValue, cartItemCount, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, pageUrl, lineItems, cartToken, newQuantity')
     .eq('shopId', shopId)
     .gte('occurredAt', since_)
+    .in('eventType', SUMMARY_EVENT_TYPES)
     .order('occurredAt', { ascending: false })
-    .limit(10000);
+    .limit(50000);
 
   if (!events || events.length === 0) return [];
 
@@ -207,9 +218,11 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
     const hasCartValue = evs.some((e: any) => e.cartValue != null && e.cartValue > 0);
     if (!hasMeaningfulEvent && !hasCheckoutEvents && !hasCartValue) continue;
 
-    const lastWithValue = [...evs].reverse().find((e: any) => e.cartValue != null && e.cartValue > 0);
-    const firstWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0);
-    const lastWithItems = [...evs].reverse().find((e) => e.lineItems != null);
+    // evs is newest-first; reverse() gives oldest-first
+    const evsAsc = [...evs].reverse();
+    const lastWithValue = evs.find((e: any) => e.cartValue != null && e.cartValue > 0); // newest with value
+    const firstWithValue = evsAsc.find((e: any) => e.cartValue != null && e.cartValue > 0); // oldest with value
+    const lastWithItems = evs.find((e) => e.lineItems != null); // newest with lineItems
     const cartCountry = evs.find((e: any) => e.country != null)?.country ?? null;
     const device = evs.find((e: any) => e.device != null)?.device ?? null;
 
@@ -229,11 +242,15 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
     const checkedOut = evs.some((e: any) => e.eventType === 'cart_checkout_clicked') || checkoutSteps.length > 0;
     const orderCompleted = checkoutSteps.some((e) => e.eventType === 'checkout_completed');
 
+    // Events arrive newest-first (descending query order)
+    const firstSeen = new Date(evs[evs.length - 1].occurredAt);
+    const lastSeen = new Date(evs[0].occurredAt);
+
     sessions.push({
       sessionId,
-      cartToken: evs[0].cartToken,
-      firstSeen: new Date(evs[0].occurredAt),
-      lastSeen: new Date(evs[evs.length - 1].occurredAt),
+      cartToken: evs[evs.length - 1].cartToken,
+      firstSeen,
+      lastSeen,
       cartValue: lastWithValue?.cartValue ?? null,
       startingCartValue: firstWithValue?.cartValue ?? null,
       cartItemCount: lastWithValue?.cartItemCount ?? null,
