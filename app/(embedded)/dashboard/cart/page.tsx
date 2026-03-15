@@ -143,13 +143,13 @@ function KPICard({
 function CouponPills({ coupons }: { coupons: CouponAttempt[] }) {
   if (coupons.length === 0) return <Text as="span" tone="subdued">—</Text>;
   return (
-    <InlineStack gap="100" wrap>
+    <BlockStack gap="100">
       {coupons.map((c) => (
         <Badge key={c.code} tone={c.success ? 'success' : 'critical'}>
           {`${c.recovered ? '^ ' : ''}${c.code}${c.success && c.discountAmount ? ` -${formatCents(c.discountAmount)}` : ''}`}
         </Badge>
       ))}
-    </InlineStack>
+    </BlockStack>
   );
 }
 
@@ -354,13 +354,19 @@ export default function CartActivityPage() {
       {s.device ?? '—'}
     </Text>,
 
-    <Text as="span" variant="bodySm" tone={s.lineItems.length === 0 && !s.cartItemCount ? 'subdued' : undefined}>
-      {s.lineItems.length > 0
-        ? s.lineItems.map((i: any) => `${i.productTitle} ×${i.quantity}`).join(', ')
-        : s.cartItemCount != null && s.cartItemCount > 0
-        ? `${s.cartItemCount} item${s.cartItemCount !== 1 ? 's' : ''}`
-        : 'Empty cart'}
-    </Text>,
+    s.lineItems.length > 0 ? (
+      <BlockStack gap="050">
+        {s.lineItems.map((i: any, idx: number) => (
+          <Text key={idx} as="p" variant="bodySm">{i.productTitle} ×{i.quantity}</Text>
+        ))}
+      </BlockStack>
+    ) : (
+      <Text as="span" variant="bodySm" tone="subdued">
+        {s.cartItemCount != null && s.cartItemCount > 0
+          ? `${s.cartItemCount} item${s.cartItemCount !== 1 ? 's' : ''}`
+          : 'Empty cart'}
+      </Text>
+    ),
 
     <Text as="span" variant="bodySm">
       {s.cartValue != null && s.cartValue > 0
