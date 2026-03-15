@@ -19,6 +19,7 @@ import {
   EmptyState,
   Button,
   SkeletonBodyText,
+  TextField,
 } from '@shopify/polaris';
 import { RefreshIcon } from '@shopify/polaris-icons';
 import { useShop } from '@/hooks/useShop';
@@ -302,6 +303,7 @@ export default function CartActivityPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [range, setRange] = useState<DateRange>(getDefaultRange);
   const [activeFilter, setActiveFilter] = useState<'withProducts' | 'withCoupon' | 'checkedOut' | null>(null);
+  const [productSearch, setProductSearch] = useState('');
 
   function handleKpiClick(filter: 'withProducts' | 'withCoupon' | 'checkedOut') {
     setActiveFilter((prev) => prev === filter ? null : filter);
@@ -332,9 +334,23 @@ export default function CartActivityPage() {
   ];
 
   const filteredSessions = sessions.filter((s) => {
+    // Always hide truly empty sessions (no products, no item count, no cart value)
+    const hasContent = s.lineItems.length > 0
+      || (s.cartItemCount != null && s.cartItemCount > 0)
+      || (s.cartValue != null && s.cartValue > 0);
+    if (!hasContent) return false;
+
+    // KPI card filters
     if (activeFilter === 'withProducts') return s.lineItems.length > 0 || (s.cartItemCount != null && s.cartItemCount > 0) || (s.cartValue != null && s.cartValue > 0);
     if (activeFilter === 'withCoupon') return s.couponsAttempted.length > 0;
     if (activeFilter === 'checkedOut') return s.checkedOut || s.orderCompleted;
+
+    // Product search
+    if (productSearch.trim()) {
+      const term = productSearch.toLowerCase();
+      return s.lineItems.some((i: any) => (i.productTitle ?? '').toLowerCase().includes(term));
+    }
+
     return true;
   });
 
@@ -509,17 +525,33 @@ export default function CartActivityPage() {
         <Layout.Section>
           <Card padding="0">
             <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-              <Box padding="400">
+              <Box padding="400" overflowX="hidden">
+                {selectedTab === 0 && !loading && (
+                  <div style={{ marginBottom: 12, maxWidth: 280 }}>
+                    <TextField
+                      label=""
+                      labelHidden
+                      placeholder="Search by product name…"
+                      value={productSearch}
+                      onChange={(v) => setProductSearch(v)}
+                      autoComplete="off"
+                      clearButton
+                      onClearButtonClick={() => setProductSearch('')}
+                    />
+                  </div>
+                )}
 
                 {loading ? (
                   <SkeletonBodyText lines={6} />
                 ) : selectedTab === 0 ? (
                   filteredSessions.length === 0 ? (
-                    <EmptyState heading={activeFilter ? 'No sessions match this filter' : 'No cart sessions today yet'} image="">
+                    <EmptyState heading={activeFilter || productSearch ? 'No sessions match this filter' : 'No cart sessions today yet'} image="">
                       <Text as="p">
-                        {activeFilter ? 'Try a different filter or a wider date range.' : 'Sessions will appear here as customers interact with their carts.'}
+                        {activeFilter || productSearch ? 'Try a different filter or a wider date range.' : 'Sessions will appear here as customers interact with their carts.'}
                       </Text>
-                      {activeFilter && <Button onClick={() => setActiveFilter(null)}>Clear filter</Button>}
+                      {(activeFilter || productSearch) && (
+                        <Button onClick={() => { setActiveFilter(null); setProductSearch(''); }}>Clear filter</Button>
+                      )}
                     </EmptyState>
                   ) : (
                     <DataTable

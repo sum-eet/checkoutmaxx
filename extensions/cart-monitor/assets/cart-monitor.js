@@ -117,6 +117,9 @@
         country: _country,
         device: _deviceType,
         pageUrl: window.location.pathname,
+        utmSource: _utm.source,
+        utmMedium: _utm.medium,
+        utmCampaign: _utm.campaign,
         occurredAt: new Date().toISOString(),
       });
       var pingSent = navigator.sendBeacon(CONFIG.pingUrl, pingPayload);

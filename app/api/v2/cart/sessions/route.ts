@@ -211,6 +211,13 @@ export async function GET(req: NextRequest) {
 
   // Apply filters
   let filtered = sessions.filter((s) => {
+    // Always hide sessions with no products, no item count, and no cart value
+    const hasContent = s.products.length > 0
+      || (s.cartItemCount != null && s.cartItemCount > 0)
+      || (s.cartValueEnd != null && s.cartValueEnd > 0)
+      || (s.cartValueStart != null && s.cartValueStart > 0);
+    if (!hasContent) return false;
+
     // Outcome filter
     if (outcome !== 'all' && s.outcome !== outcome) return false;
 

@@ -17,7 +17,7 @@ export function getCachedDashboard(key: string): CartDashboardData | null {
 }
 
 export function setCachedDashboard(key: string, data: CartDashboardData): void {
-  dashboardCache.set(key, { data, expiresAt: Date.now() + 60_000 });
+  dashboardCache.set(key, { data, expiresAt: Date.now() + 15_000 });
 }
 
 export function invalidateDashboardCache(key: string): void {
@@ -229,9 +229,10 @@ export async function getCartSessions(shopId: string, since?: Date): Promise<Car
     const couponMap = new Map<string, CouponAttempt>();
     for (const ev of evs) {
       if (!ev.couponCode) continue;
-      const existing = couponMap.get(ev.couponCode);
-      couponMap.set(ev.couponCode, {
-        code: ev.couponCode,
+      const key = ev.couponCode.toUpperCase();
+      const existing = couponMap.get(key);
+      couponMap.set(key, {
+        code: ev.couponCode.toUpperCase(),
         success: ev.couponSuccess ?? existing?.success ?? false,
         recovered: ev.couponRecovered ?? existing?.recovered ?? false,
         discountAmount: ev.discountAmount ?? existing?.discountAmount ?? null,
