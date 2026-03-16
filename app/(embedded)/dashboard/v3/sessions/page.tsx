@@ -265,48 +265,63 @@ export default function CartSessionsPage() {
                 {hasFilters && <Button onClick={clearFilters}>Clear filters</Button>}
               </EmptyState>
             ) : (
-              <div style={{ overflowX: 'hidden' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '30%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '5%' }} />
+                  </colgroup>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #e1e3e5' }}>
-                      {['Time', 'Country / Device', 'Source', 'Products', 'Cart Value', 'Coupons', 'Outcome', ''].map((h) => (
-                        <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: '#6d7175', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Time', 'Location', 'Source', 'Products', 'Value', 'Coupons', 'Outcome', ''].map((h) => (
+                        <th key={h} style={{ padding: '8px 8px', textAlign: 'left', color: '#6d7175', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {sessions.map((s) => {
                       const cartDisplay = s.cartValueStart != null && s.cartValueEnd != null && Math.abs(s.cartValueEnd - s.cartValueStart) > 0.01
-                        ? `$${s.cartValueStart.toFixed(2)} → $${s.cartValueEnd.toFixed(2)}`
+                        ? `$${s.cartValueStart.toFixed(2)}→$${s.cartValueEnd.toFixed(2)}`
                         : s.cartValueEnd != null ? `$${s.cartValueEnd.toFixed(2)}` : '—';
                       const src = deriveSourceV3(s.utmSource, s.utmMedium);
                       return (
                         <tr key={s.sessionId} style={{ borderBottom: '1px solid #f4f6f8' }}>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top', minWidth: 100 }}>
-                            <div style={{ fontWeight: 500 }}>{formatRelativeTime(s.startTime)}</div>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}>
+                            <div style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{formatRelativeTime(s.startTime)}</div>
                             <div style={{ color: '#6d7175', fontSize: 11 }}>{formatAbsTime(s.startTime)}</div>
                             <div style={{ color: '#6d7175', fontSize: 11 }}>{formatDuration(s.duration)}</div>
                           </td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}>
-                            <div>{s.country ?? '—'}</div>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}>
+                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.country ?? '—'}</div>
                             <div style={{ color: '#6d7175', fontSize: 11 }}>{s.device ?? '—'}</div>
                           </td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}>
-                            <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: src !== 'Direct' ? '#e8f0fe' : '#f4f6f8', color: src !== 'Direct' ? '#1a73e8' : '#6d7175' }}>{src}</span>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}>
+                            <span style={{ display: 'inline-block', padding: '2px 5px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: src !== 'Direct' ? '#e8f0fe' : '#f4f6f8', color: src !== 'Direct' ? '#1a73e8' : '#6d7175', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{src}</span>
+                            {s.utmCampaign && (
+                              <div style={{ fontSize: 11, color: '#6d7175', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.utmCampaign}>{s.utmCampaign}</div>
+                            )}
                           </td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}>
                             {s.products.length > 0
-                              ? s.products.map((p, i) => <div key={i} style={{ whiteSpace: 'nowrap' }}>{p.productTitle ?? 'item'} ×{p.quantity}</div>)
-                              : <span style={{ color: '#6d7175' }}>{s.cartItemCount != null && s.cartItemCount > 0 ? `${s.cartItemCount} items` : 'Empty cart'}</span>
+                              ? s.products.map((p, i) => (
+                                <div key={i} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.productTitle ?? 'item'} ×{p.quantity}</div>
+                              ))
+                              : <span style={{ color: '#6d7175' }}>{s.cartItemCount != null && s.cartItemCount > 0 ? `${s.cartItemCount} item${s.cartItemCount !== 1 ? 's' : ''}` : 'Empty cart'}</span>
                             }
                           </td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top', whiteSpace: 'nowrap' }}>{cartDisplay}</td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}><CouponDisplay coupons={s.coupons} /></td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top', whiteSpace: 'nowrap' }}>{cartDisplay}</td>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}><CouponDisplay coupons={s.coupons} /></td>
+                          <td style={{ padding: '8px 8px', verticalAlign: 'top' }}>
                             <div title="This reflects activity within this session only."><OutcomeBadge outcome={s.outcome} /></div>
                           </td>
-                          <td style={{ padding: '10px 10px', verticalAlign: 'top' }}>
-                            <button onClick={() => setSelectedSession(s.sessionId)} style={{ background: 'none', border: 'none', color: '#2c6ecb', cursor: 'pointer', fontSize: 13, padding: 0 }}>View →</button>
+                          <td style={{ padding: '8px 4px', verticalAlign: 'top' }}>
+                            <button onClick={() => setSelectedSession(s.sessionId)} style={{ background: 'none', border: 'none', color: '#2c6ecb', cursor: 'pointer', fontSize: 13, padding: 0, whiteSpace: 'nowrap' }}>View →</button>
                           </td>
                         </tr>
                       );
