@@ -24,16 +24,13 @@ function subDays(d: Date, n: number) {
   return new Date(d.getTime() - n * 86400000);
 }
 
+// Use UTC boundaries so "Last 7 days" sends exact UTC day range regardless of browser timezone.
 function startOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(0, 0, 0, 0);
-  return r;
+  return new Date(d.toISOString().slice(0, 10) + 'T00:00:00.000Z');
 }
 
 function endOfDay(d: Date): Date {
-  const r = new Date(d);
-  r.setHours(23, 59, 59, 999);
-  return r;
+  return new Date(d.toISOString().slice(0, 10) + 'T23:59:59.999Z');
 }
 
 const PRESETS = [
@@ -118,13 +115,14 @@ export function DateRangePicker({ value, onChange }: Props) {
       preferredAlignment="right"
       sectioned={false}
     >
-      <div style={{ display: 'flex', minWidth: 680 }}>
+      <div style={{ display: 'flex', width: 680, height: 460, overflow: 'hidden' }}>
         {/* Left: preset list */}
         <div style={{
           width: 200,
           borderRight: '1px solid #E5E7EB',
           padding: '8px 0',
           flexShrink: 0,
+          overflowY: 'auto',
         }}>
           {PRESETS.map((p) => {
             const previewRange = getPresetRange(p.days);
@@ -164,30 +162,32 @@ export function DateRangePicker({ value, onChange }: Props) {
           })}
         </div>
 
-        {/* Right: calendar + buttons */}
-        <div style={{ flex: 1, padding: '16px', minWidth: 0 }}>
-          {/* Range header */}
-          <div style={{ fontSize: 13, color: '#374151', marginBottom: 12, fontWeight: 500 }}>
-            {fmtLong(pending.start)} → {fmtLong(pending.end)}
+        {/* Right: header + buttons (fixed) + calendar (scrollable) */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Range header + action buttons — always visible */}
+          <div style={{ padding: '14px 16px 10px', flexShrink: 0, borderBottom: '1px solid #F3F4F6' }}>
+            <div style={{ fontSize: 13, color: '#374151', fontWeight: 500, marginBottom: 10 }}>
+              {fmtLong(pending.start)} → {fmtLong(pending.end)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button onClick={closePopover}>Cancel</Button>
+              <Button variant="primary" onClick={handleApply}>Apply</Button>
+            </div>
           </div>
 
-          {/* Two-month DatePicker */}
-          <DatePicker
-            month={month}
-            year={year}
-            onChange={({ start, end }) => {
-              setPending({ start: startOfDay(start), end: endOfDay(end) });
-            }}
-            onMonthChange={(m, y) => setDate({ month: m, year: y })}
-            selected={{ start: pending.start, end: pending.end }}
-            allowRange
-            multiMonth
-          />
-
-          {/* Cancel / Apply */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-            <Button onClick={closePopover}>Cancel</Button>
-            <Button variant="primary" onClick={handleApply}>Apply</Button>
+          {/* Calendar — scrollable */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 16px' }}>
+            <DatePicker
+              month={month}
+              year={year}
+              onChange={({ start, end }) => {
+                setPending({ start: startOfDay(start), end: endOfDay(end) });
+              }}
+              onMonthChange={(m, y) => setDate({ month: m, year: y })}
+              selected={{ start: pending.start, end: pending.end }}
+              allowRange
+              multiMonth
+            />
           </div>
         </div>
       </div>
