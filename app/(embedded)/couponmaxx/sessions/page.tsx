@@ -709,6 +709,7 @@ export default function SessionsPage() {
   const [maxCart, setMaxCart] = useState('');
   const [coupon, setCoupon] = useState('');
   const [outcome, setOutcome] = useState('');
+  const [utmSource, setUtmSource] = useState('');
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -720,7 +721,7 @@ export default function SessionsPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Reset page when filters change
-  useEffect(() => { setPage(1); }, [dateRange, boxFilter, country, device, product, minCart, maxCart, coupon, outcome]);
+  useEffect(() => { setPage(1); }, [dateRange, boxFilter, country, device, product, minCart, maxCart, coupon, outcome, utmSource]);
 
   // ---------------------------------------------------------------------------
   // SWR key
@@ -740,6 +741,7 @@ export default function SessionsPage() {
         if (maxCart) p.set('maxCart', maxCart);
         if (coupon) p.set('coupon', coupon);
         if (outcome) p.set('outcome', outcome);
+        if (utmSource) p.set('source', utmSource);
         if (boxFilter) p.set('boxFilter', boxFilter);
         return `/api/couponmaxx/sessions?${p.toString()}`;
       })()
@@ -773,7 +775,7 @@ export default function SessionsPage() {
   const totalPages = Math.max(1, Math.ceil(total / (data?.perPage ?? 25)));
   const scopedCounts = data?.scopedCounts;
 
-  const anyFilterActive = !!(country || device || product || minCart || maxCart || coupon || outcome);
+  const anyFilterActive = !!(country || device || product || minCart || maxCart || coupon || outcome || utmSource);
 
   // ---------------------------------------------------------------------------
   // Filter options
@@ -848,6 +850,18 @@ export default function SessionsPage() {
   // Product options — static placeholder; future: derive from data
   const productOptions = [
     { label: 'All products', value: '' },
+  ];
+
+  const sourceOptions = [
+    { label: 'All sources', value: '' },
+    { label: 'Direct', value: 'Direct' },
+    { label: 'Organic', value: 'Organic' },
+    { label: 'Email', value: 'Email' },
+    { label: 'Paid Search', value: 'Paid Search' },
+    { label: 'Paid Social', value: 'Paid Social' },
+    { label: 'Social', value: 'Social' },
+    { label: 'Affiliate', value: 'Affiliate' },
+    { label: 'Referral', value: 'Referral' },
   ];
 
   // ---------------------------------------------------------------------------
@@ -1008,11 +1022,17 @@ export default function SessionsPage() {
               options={outcomeOptions}
               onChange={setOutcome}
             />
+            <FilterPill
+              label="Source"
+              value={utmSource}
+              options={sourceOptions}
+              onChange={setUtmSource}
+            />
             {anyFilterActive && (
               <button
                 onClick={() => {
                   setCountry(''); setDevice(''); setProduct('');
-                  setMinCart(''); setMaxCart(''); setCoupon(''); setOutcome('');
+                  setMinCart(''); setMaxCart(''); setCoupon(''); setOutcome(''); setUtmSource('');
                 }}
                 style={{
                   marginLeft: 'auto', background: 'none', border: 'none',

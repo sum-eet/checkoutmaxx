@@ -44,14 +44,19 @@ export async function GET(req: NextRequest) {
     .select('sessionId, eventType, totalPrice, occurredAt').eq('shopId', shopId)
     .in('sessionId', sessionIds.slice(0, 500)).limit(5000);
 
+  // True unique session count from raw events (includes empty-cart visitors)
+  const allUniqueSessionIds = new Set(cartEvents.map((e) => e.sessionId));
+  const trueTotal = allUniqueSessionIds.size;
+
   let sessions = buildSessionsFromEvents(
     cartEvents as Parameters<typeof buildSessionsFromEvents>[0],
     checkoutEvs ?? [],
   );
 
   // KPI box counts (before filters)
-  const all = sessions.length;
-  const withProducts = sessions.filter((s) => s.products.length > 0 || (s.cartValueEnd ?? 0) > 0 || (s.cartItemCount ?? 0) > 0).length;
+  // cartsOpened = all unique sessions including empty-cart visitors
+  // withProducts = sessions that had actual products (from buildSessionsFromEvents output)
+  const withProducts = sessions.filter((s) => (s.cartItemCount ?? 0) > 0 || s.products.length > 0).length;
   const withCoupon = sessions.filter((s) => s.coupons.length > 0).length;
   const reachedCheckout = sessions.filter((s) => s.outcome !== 'abandoned').length;
   const checkoutWithCoupon = sessions.filter((s) => s.outcome !== 'abandoned' && s.coupons.length > 0).length;
@@ -70,7 +75,7 @@ export async function GET(req: NextRequest) {
   if (outcome === 'ordered') sessions = sessions.filter((s) => s.outcome === 'ordered');
   if (outcome === 'checkout') sessions = sessions.filter((s) => s.outcome === 'checkout');
   if (outcome === 'abandoned') sessions = sessions.filter((s) => s.outcome === 'abandoned');
-  if (boxFilter === 'products') sessions = sessions.filter((s) => s.products.length > 0 || (s.cartValueEnd ?? 0) > 0);
+  if (boxFilter === 'products') sessions = sessions.filter((s) => (s.cartItemCount ?? 0) > 0 || s.products.length > 0);
   if (boxFilter === 'coupon') sessions = sessions.filter((s) => s.coupons.length > 0);
   if (boxFilter === 'checkout') sessions = sessions.filter((s) => s.outcome !== 'abandoned');
   if (search) {
@@ -90,10 +95,10 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     boxes: {
-      cartsOpened: all,
-      emptyCount: all - withProducts,
+      cartsOpened: trueTotal,
+      emptyCount: trueTotal - withProducts,
       withProducts,
-      withProductsPct: all > 0 ? Math.round((withProducts / all) * 1000) / 10 : 0,
+      withProductsPct: trueTotal > 0 ? Math.round((withProducts / trueTotal) * 1000) / 10 : 0,
       couponAttempted: withCoupon,
       couponAttemptedPct: withProducts > 0 ? Math.round((withCoupon / withProducts) * 1000) / 10 : 0,
       reachedCheckout,
