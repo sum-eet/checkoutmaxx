@@ -118,7 +118,10 @@ function subDays(d: Date, n: number) {
   return new Date(d.getTime() - n * 86400000);
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = (url: string) => fetch(url).then((r) => {
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  return r.json();
+});
 
 const LINE_COLORS = ['#0EA5E9', '#8B5CF6', '#F59E0B', '#10B981', '#EF4444'];
 

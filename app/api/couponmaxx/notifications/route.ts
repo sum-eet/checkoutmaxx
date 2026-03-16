@@ -19,8 +19,18 @@ export async function GET(req: NextRequest) {
 
   if (severity) query = query.eq('severity', severity);
 
-  const { data: alerts, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 503 });
+  // eslint-disable-next-line prefer-const
+  let { data: alerts, error } = await query as { data: Record<string, unknown>[] | null; error: { message: string } | null };
+  if (error) {
+    // isRead/isDismissed columns may not exist yet — fall back to base columns
+    const fallback = await supabase.from('AlertLog')
+      .select('id, title, body, severity, firedAt')
+      .eq('shopId', shop.id)
+      .order('firedAt', { ascending: false })
+      .limit(100);
+    if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 503 });
+    alerts = fallback.data;
+  }
 
   const rows = (alerts ?? []).map((a) => ({
     id: a.id,

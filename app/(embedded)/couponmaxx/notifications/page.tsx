@@ -65,7 +65,10 @@ type FilterType = 'All' | 'Critical' | 'Warnings' | 'Info' | 'Dismissed';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = (url: string) => fetch(url).then((r) => {
+  if (!r.ok) throw new Error(`API error ${r.status}`);
+  return r.json();
+});
 
 function timeAgo(isoString: string): string {
   const now = Date.now();
