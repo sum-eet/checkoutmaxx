@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, Spinner, Select, InlineStack } from '@shopify/polaris';
+import { Banner, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -264,34 +264,9 @@ function SourceChip({ utmSource, utmMedium, utmCampaign }: { utmSource: string |
 // ---------------------------------------------------------------------------
 
 function OutcomeBadge({ outcome }: { outcome: 'ordered' | 'checkout' | 'abandoned' }) {
-  const config: Record<string, { bg: string; text: string; border: string; label: string }> = {
-    ordered:   { bg: '#F0FDF4', text: '#15803D', border: '#BBF7D0', label: 'Ordered' },
-    checkout:  { bg: '#FFFBEB', text: '#B45309', border: '#FDE68A', label: 'Checkout' },
-    abandoned: { bg: '#F9FAFB', text: '#6B7280', border: '#E5E7EB', label: 'Abandoned' },
-  };
-  const c = config[outcome] ?? config.abandoned;
-  const tooltip = outcome === 'abandoned'
-    ? 'Based on this session only. Customer may have returned later.'
-    : undefined;
-
-  return (
-    <span
-      title={tooltip}
-      style={{
-        display: 'inline-block',
-        background: c.bg,
-        color: c.text,
-        border: `1px solid ${c.border}`,
-        borderRadius: 20,
-        padding: '3px 10px',
-        fontSize: 11,
-        fontWeight: 500,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {c.label}
-    </span>
-  );
+  if (outcome === 'ordered') return <Badge tone="success">Ordered</Badge>;
+  if (outcome === 'checkout') return <Badge tone="info">Checkout</Badge>;
+  return <Badge tone="attention">Abandoned</Badge>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1153,16 +1128,12 @@ export default function SessionsPage() {
 
                     {/* View */}
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <button
+                      <PolarisButton
+                        variant="plain"
                         onClick={() => setPanelSession(s)}
-                        style={{
-                          background: 'none', border: 'none', padding: 0,
-                          fontSize: 12, color: '#0EA5E9', cursor: 'pointer',
-                          fontWeight: 500, whiteSpace: 'nowrap',
-                        }}
                       >
                         View →
-                      </button>
+                      </PolarisButton>
                     </td>
                   </tr>
                 ))}

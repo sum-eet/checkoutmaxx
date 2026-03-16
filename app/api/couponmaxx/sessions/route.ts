@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   let cartQ = supabase.from('CartEvent')
     .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, utmSource, utmMedium, utmCampaign')
-    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(20000);
+    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(100000).order('occurredAt', { ascending: false });
   if (device) cartQ = cartQ.eq('device', device);
   if (country) cartQ = cartQ.ilike('country', country);
 

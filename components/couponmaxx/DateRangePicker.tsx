@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Popover, DatePicker, Button } from '@shopify/polaris';
+import { Popover, DatePicker, Button, InlineStack } from '@shopify/polaris';
 import { CalendarIcon } from '@shopify/polaris-icons';
 
 export type DateRange = { start: Date; end: Date };
@@ -12,8 +12,22 @@ type Props = {
   defaultDays?: number;
 };
 
-function fmt(d: Date) {
+function fmtShort(d: Date) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function fmtLong(d: Date) {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function subDays(d: Date, n: number) {
+  return new Date(d.getTime() - n * 86400000);
+}
+
+function startOfDay(d: Date): Date {
+  const r = new Date(d);
+  r.setHours(0, 0, 0, 0);
+  return r;
 }
 
 function endOfDay(d: Date): Date {
@@ -22,57 +36,77 @@ function endOfDay(d: Date): Date {
   return r;
 }
 
-function subDays(d: Date, n: number) {
-  return new Date(d.getTime() - n * 86400000);
-}
-
 const PRESETS = [
+  { label: 'Today', days: 0 },
+  { label: 'Yesterday', days: 1 },
   { label: 'Last 7 days', days: 7 },
+  { label: 'Last 14 days', days: 14 },
   { label: 'Last 30 days', days: 30 },
   { label: 'Last 90 days', days: 90 },
-  { label: 'Last 12 months', days: 365 },
 ];
+
+function getPresetRange(days: number): DateRange {
+  const now = new Date();
+  if (days === 0) return { start: startOfDay(now), end: endOfDay(now) };
+  if (days === 1) {
+    const yesterday = subDays(now, 1);
+    return { start: startOfDay(yesterday), end: endOfDay(yesterday) };
+  }
+  return { start: startOfDay(subDays(now, days)), end: endOfDay(now) };
+}
+
+function getActivePresetDays(range: DateRange): number | null {
+  for (const p of PRESETS) {
+    const r = getPresetRange(p.days);
+    if (Math.abs(r.start.getTime() - range.start.getTime()) < 60000 &&
+        Math.abs(r.end.getTime() - range.end.getTime()) < 60000) {
+      return p.days;
+    }
+  }
+  return null;
+}
 
 export function DateRangePicker({ value, onChange }: Props) {
   const [popoverActive, setPopoverActive] = useState(false);
+  const [pending, setPending] = useState<DateRange>({ start: value.start, end: value.end });
   const [{ month, year }, setDate] = useState({
     month: value.start.getMonth(),
     year: value.start.getFullYear(),
   });
-  const [selectedDates, setSelectedDates] = useState({
-    start: value.start,
-    end: value.end,
-  });
 
-  const togglePopover = useCallback(() => setPopoverActive((a) => !a), []);
+  const openPopover = useCallback(() => {
+    setPending({ start: value.start, end: value.end });
+    setDate({ month: value.start.getMonth(), year: value.start.getFullYear() });
+    setPopoverActive(true);
+  }, [value]);
+
   const closePopover = useCallback(() => setPopoverActive(false), []);
 
-  const rangeMs = value.end.getTime() - value.start.getTime();
-  const rangeDays = Math.round(rangeMs / 86400000);
-  const preset = PRESETS.find((p) => p.days === rangeDays);
-  const label = preset
-    ? `${preset.label}  ${fmt(value.start)} – ${fmt(value.end)}`
-    : `Custom  ${fmt(value.start)} – ${fmt(value.end)}`;
-
-  const handlePreset = (days: number) => {
-    const end = new Date();
-    const start = subDays(end, days);
-    onChange({ start, end });
+  const handleApply = useCallback(() => {
+    onChange(pending);
     closePopover();
-  };
+  }, [onChange, pending, closePopover]);
 
-  const handleDatePickerChange = useCallback(({ start, end }: { start: Date; end: Date }) => {
-    setSelectedDates({ start, end });
-    onChange({ start, end: endOfDay(end) });
-  }, [onChange]);
+  const handlePreset = useCallback((days: number) => {
+    const range = getPresetRange(days);
+    onChange(range);
+    closePopover();
+  }, [onChange, closePopover]);
+
+  // Build button label
+  const activeDays = getActivePresetDays(value);
+  const preset = PRESETS.find((p) => p.days === activeDays);
+  const presetLabel = preset ? preset.label : 'Custom';
+  const dateLabel = `${fmtShort(value.start)} – ${fmtShort(value.end)}`;
+  const buttonLabel = `${presetLabel}  ${dateLabel}`;
 
   const activator = (
     <Button
-      onClick={togglePopover}
-      disclosure={popoverActive ? 'up' : 'down'}
       icon={CalendarIcon}
+      onClick={openPopover}
+      disclosure={popoverActive ? 'up' : 'down'}
     >
-      {label}
+      {buttonLabel}
     </Button>
   );
 
@@ -82,11 +116,19 @@ export function DateRangePicker({ value, onChange }: Props) {
       activator={activator}
       onClose={closePopover}
       preferredAlignment="right"
+      sectioned={false}
     >
-      <Popover.Section>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 160 }}>
+      <div style={{ display: 'flex', minWidth: 680 }}>
+        {/* Left: preset list */}
+        <div style={{
+          width: 200,
+          borderRight: '1px solid #E5E7EB',
+          padding: '8px 0',
+          flexShrink: 0,
+        }}>
           {PRESETS.map((p) => {
-            const isActive = rangeDays === p.days;
+            const previewRange = getPresetRange(p.days);
+            const isActive = activeDays === p.days;
             return (
               <div
                 key={p.label}
@@ -95,36 +137,60 @@ export function DateRangePicker({ value, onChange }: Props) {
                 onClick={() => handlePreset(p.days)}
                 onKeyDown={(e) => e.key === 'Enter' && handlePreset(p.days)}
                 style={{
-                  padding: '7px 10px',
+                  padding: '10px 16px',
                   cursor: 'pointer',
-                  borderRadius: 4,
-                  fontSize: 13,
-                  color: isActive ? '#1D4ED8' : '#374151',
-                  background: isActive ? '#EFF6FF' : 'transparent',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  background: isActive ? '#F4F4F4' : 'transparent',
+                  borderLeft: isActive ? '3px solid #202223' : '3px solid transparent',
                 }}
                 onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = '#F9FAFB'; }}
                 onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                {p.label}
-                {isActive && <span style={{ fontSize: 11 }}>✓</span>}
+                <div style={{
+                  fontSize: 14,
+                  fontWeight: isActive ? 600 : 400,
+                  color: '#202223',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}>
+                  {p.label}
+                  {isActive && <span style={{ fontSize: 12 }}>✓</span>}
+                </div>
+                <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
+                  {fmtShort(previewRange.start)} – {fmtShort(previewRange.end)}
+                </div>
               </div>
             );
           })}
         </div>
-      </Popover.Section>
-      <Popover.Section>
-        <DatePicker
-          month={month}
-          year={year}
-          onChange={handleDatePickerChange}
-          onMonthChange={(m, y) => setDate({ month: m, year: y })}
-          selected={selectedDates}
-          allowRange
-        />
-      </Popover.Section>
+
+        {/* Right: calendar + buttons */}
+        <div style={{ flex: 1, padding: '16px', minWidth: 0 }}>
+          {/* Range header */}
+          <div style={{ fontSize: 13, color: '#374151', marginBottom: 12, fontWeight: 500 }}>
+            {fmtLong(pending.start)} → {fmtLong(pending.end)}
+          </div>
+
+          {/* Two-month DatePicker */}
+          <DatePicker
+            month={month}
+            year={year}
+            onChange={({ start, end }) => {
+              setPending({ start: startOfDay(start), end: endOfDay(end) });
+            }}
+            onMonthChange={(m, y) => setDate({ month: m, year: y })}
+            selected={{ start: pending.start, end: pending.end }}
+            allowRange
+            multiMonth
+          />
+
+          {/* Cancel / Apply */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <Button onClick={closePopover}>Cancel</Button>
+            <Button variant="primary" onClick={handleApply}>Apply</Button>
+          </div>
+        </div>
+      </div>
     </Popover>
   );
 }

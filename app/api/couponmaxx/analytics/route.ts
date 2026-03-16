@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   // Fetch all cart events in range
   let cartQ = supabase.from('CartEvent')
     .select('sessionId, eventType, cartValue, cartItemCount, couponCode, couponSuccess, couponRecovered, lineItems, occurredAt, device')
-    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(100000);
+    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(100000).order('occurredAt', { ascending: false });
   if (device) cartQ = cartQ.eq('device', device);
 
   const { data: cartEvs } = await cartQ;
