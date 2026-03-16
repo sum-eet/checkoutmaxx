@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 import { buildSessionsFromEvents, deriveSourceV3 } from '@/lib/v3/session-builder';
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const shopDomain = p.get('shop');
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
-  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const shop = await prisma.shop.findFirst({ where: { shopDomain, isActive: true }, select: { id: true } });
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 
@@ -35,32 +35,42 @@ export async function GET(req: NextRequest) {
   const minCart = parseFloat(p.get('minCart') ?? '0') || 0;
   const maxCart = parseFloat(p.get('maxCart') ?? '0') || 0;
 
-  let cartQ = supabase.from('CartEvent')
-    .select('sessionId, eventType, cartValue, cartItemCount, lineItems, couponCode, couponSuccess, couponRecovered, discountAmount, device, country, occurredAt, utmSource, utmMedium, utmCampaign')
-    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(100000).order('occurredAt', { ascending: false });
-  if (device) cartQ = cartQ.eq('device', device);
-  if (country) cartQ = cartQ.ilike('country', country);
+  // Fetch all cart events via Prisma — no PostgREST 1000-row cap
+  const rawCartEvs = await prisma.cartEvent.findMany({
+    select: {
+      sessionId: true, eventType: true, cartValue: true, cartItemCount: true,
+      lineItems: true, couponCode: true, couponSuccess: true, couponRecovered: true,
+      discountAmount: true, device: true, country: true,
+      occurredAt: true, utmSource: true, utmMedium: true, utmCampaign: true,
+    },
+    where: {
+      shopId,
+      occurredAt: { gte: start, lte: end },
+      ...(device ? { device } : {}),
+      ...(country ? { country: { contains: country, mode: 'insensitive' as const } } : {}),
+    },
+    orderBy: { occurredAt: 'asc' },
+  });
 
-  const { data: cartEvs } = await cartQ;
-  const cartEvents = cartEvs ?? [];
+  // buildSessionsFromEvents expects occurredAt as ISO string
+  const cartEvents = rawCartEvs.map((e) => ({ ...e, occurredAt: e.occurredAt.toISOString() }));
+
   const sessionIds = Array.from(new Set(cartEvents.map((e) => e.sessionId)));
 
-  const { data: checkoutEvs } = await supabase.from('CheckoutEvent')
-    .select('sessionId, eventType, totalPrice, occurredAt').eq('shopId', shopId)
-    .in('sessionId', sessionIds.slice(0, 500)).limit(5000);
+  // Checkout events — no session slice cap
+  const rawCheckoutEvs = await prisma.checkoutEvent.findMany({
+    select: { sessionId: true, eventType: true, totalPrice: true, occurredAt: true },
+    where: { shopId, sessionId: { in: sessionIds } },
+  });
+  const checkoutEvs = rawCheckoutEvs.map((e) => ({ ...e, occurredAt: e.occurredAt.toISOString() }));
 
   // True unique session count from raw events (includes empty-cart visitors)
   const allUniqueSessionIds = new Set(cartEvents.map((e) => e.sessionId));
   const trueTotal = allUniqueSessionIds.size;
 
-  let sessions = buildSessionsFromEvents(
-    cartEvents as Parameters<typeof buildSessionsFromEvents>[0],
-    checkoutEvs ?? [],
-  );
+  let sessions = buildSessionsFromEvents(cartEvents, checkoutEvs);
 
   // KPI box counts (before filters)
-  // cartsOpened = all unique sessions including empty-cart visitors
-  // withProducts = sessions that had actual products (from buildSessionsFromEvents output)
   const withProducts = sessions.filter((s) => (s.cartItemCount ?? 0) > 0 || s.products.length > 0).length;
   const withCoupon = sessions.filter((s) => s.coupons.length > 0).length;
   const reachedCheckout = sessions.filter((s) => s.outcome !== 'abandoned').length;

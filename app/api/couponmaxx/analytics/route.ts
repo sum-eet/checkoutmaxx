@@ -1,17 +1,16 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { prisma } from '@/lib/prisma';
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
 // Always iterate over full UTC calendar days, regardless of time-of-day in start/end.
-// This prevents timezone-offset drift from skipping or doubling days.
 function buildDailyMap(start: Date, end: Date): Map<string, { applied: number; attempted: number; sessions: Set<string>; couponSessions: Set<string>; checkoutSessions: Set<string>; totalSessions: Set<string> }> {
   const map = new Map();
-  const startDay = dateStr(start); // UTC date string e.g. "2026-03-10"
+  const startDay = dateStr(start);
   const endDay   = dateStr(end);
-  let cur = new Date(startDay + 'T00:00:00.000Z'); // UTC midnight of first day
+  let cur = new Date(startDay + 'T00:00:00.000Z');
   const endCur = new Date(endDay + 'T00:00:00.000Z');
   while (cur <= endCur) {
     map.set(dateStr(cur), { applied: 0, attempted: 0, sessions: new Set(), couponSessions: new Set(), checkoutSessions: new Set(), totalSessions: new Set() });
@@ -25,7 +24,7 @@ export async function GET(req: NextRequest) {
   const shopDomain = p.get('shop');
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
-  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const shop = await prisma.shop.findFirst({ where: { shopDomain, isActive: true }, select: { id: true } });
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 
@@ -33,11 +32,10 @@ export async function GET(req: NextRequest) {
   const rawStart = new Date(p.get('start') ?? subDays(rawEnd, 7).toISOString());
 
   // Normalise to full UTC calendar days so no events are lost due to timezone offset.
-  // e.g. "Mar 11 IST midnight" → UTC "Mar 10 18:30" → keep full UTC days Mar 10–Mar 16.
-  const startDayStr = rawStart.toISOString().slice(0, 10); // "2026-03-10"
-  const endDayStr   = rawEnd.toISOString().slice(0, 10);   // "2026-03-16"
-  const start = new Date(startDayStr + 'T00:00:00.000Z');  // UTC midnight
-  const end   = new Date(endDayStr   + 'T23:59:59.999Z');  // UTC end-of-day
+  const startDayStr = rawStart.toISOString().slice(0, 10);
+  const endDayStr   = rawEnd.toISOString().slice(0, 10);
+  const start = new Date(startDayStr + 'T00:00:00.000Z');
+  const end   = new Date(endDayStr   + 'T23:59:59.999Z');
 
   const rangeMs = end.getTime() - start.getTime();
   const prevEnd = start;
@@ -51,38 +49,57 @@ export async function GET(req: NextRequest) {
   const attrWindow = parseInt(p.get('attrWindow') ?? '14');
   const priceType = p.get('priceType') ?? 'pre'; // pre | post
 
-  // Fetch all cart events in range (ASC so older dates come first; limit 150k safety net)
-  let cartQ = supabase.from('CartEvent')
-    .select('sessionId, eventType, cartValue, cartItemCount, couponCode, couponSuccess, couponRecovered, lineItems, occurredAt, device')
-    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(150000).order('occurredAt', { ascending: true });
-  if (device) cartQ = cartQ.eq('device', device);
+  // Fetch all cart events via Prisma — no PostgREST 1000-row cap
+  const evs = await prisma.cartEvent.findMany({
+    select: {
+      sessionId: true, eventType: true, cartValue: true, cartItemCount: true,
+      couponCode: true, couponSuccess: true, couponRecovered: true,
+      lineItems: true, occurredAt: true, device: true,
+    },
+    where: {
+      shopId,
+      occurredAt: { gte: start, lte: end },
+      ...(device ? { device } : {}),
+    },
+    orderBy: { occurredAt: 'asc' },
+  });
 
-  const { data: cartEvs } = await cartQ;
-  const evs = cartEvs ?? [];
-
-  // UTM filter: get sessions matching utmSource via SessionPing
+  // UTM filter via SessionPing — raw query (SessionPing not in Prisma schema; uses shopDomain not shopId)
   let allowedSessions: Set<string> | null = null;
   if (utmSource) {
-    const pingQ = supabase.from('SessionPing').select('sessionId').eq('shopId', shopId)
-      .gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString());
-    let filteredPings;
+    let pingRows: { sessionId: string }[] = [];
     if (utmSource === 'Direct') {
-      const { data } = await pingQ.or('utmSource.is.null,utmSource.eq.');
-      filteredPings = data;
+      pingRows = await prisma.$queryRaw`
+        SELECT DISTINCT "sessionId" FROM "SessionPing"
+        WHERE "shopDomain" = ${shopDomain}
+          AND "occurredAt" >= ${start} AND "occurredAt" <= ${end}
+          AND ("utmSource" IS NULL OR "utmSource" = '')`;
     } else if (utmSource === 'Paid search') {
-      const { data } = await pingQ.in('utmSource', ['google', 'bing']);
-      filteredPings = data;
+      pingRows = await prisma.$queryRaw`
+        SELECT DISTINCT "sessionId" FROM "SessionPing"
+        WHERE "shopDomain" = ${shopDomain}
+          AND "occurredAt" >= ${start} AND "occurredAt" <= ${end}
+          AND "utmSource" IN ('google', 'bing')`;
     } else if (utmSource === 'Social') {
-      const { data } = await pingQ.in('utmSource', ['instagram', 'facebook', 'fb', 'tiktok']);
-      filteredPings = data;
+      pingRows = await prisma.$queryRaw`
+        SELECT DISTINCT "sessionId" FROM "SessionPing"
+        WHERE "shopDomain" = ${shopDomain}
+          AND "occurredAt" >= ${start} AND "occurredAt" <= ${end}
+          AND "utmSource" IN ('instagram', 'facebook', 'fb', 'tiktok')`;
     } else if (utmSource === 'Email') {
-      const { data } = await pingQ.in('utmSource', ['klaviyo', 'mailchimp', 'email']);
-      filteredPings = data;
+      pingRows = await prisma.$queryRaw`
+        SELECT DISTINCT "sessionId" FROM "SessionPing"
+        WHERE "shopDomain" = ${shopDomain}
+          AND "occurredAt" >= ${start} AND "occurredAt" <= ${end}
+          AND "utmSource" IN ('klaviyo', 'mailchimp', 'email')`;
     } else {
-      const { data } = await pingQ.eq('utmSource', utmSource);
-      filteredPings = data;
+      pingRows = await prisma.$queryRaw`
+        SELECT DISTINCT "sessionId" FROM "SessionPing"
+        WHERE "shopDomain" = ${shopDomain}
+          AND "occurredAt" >= ${start} AND "occurredAt" <= ${end}
+          AND "utmSource" = ${utmSource}`;
     }
-    allowedSessions = new Set((filteredPings ?? []).map((r: { sessionId: string }) => r.sessionId));
+    allowedSessions = new Set(pingRows.map((r) => r.sessionId));
   }
 
   // Product filter: sessions containing product in lineItems
@@ -107,7 +124,7 @@ export async function GET(req: NextRequest) {
 
   for (const e of evs) {
     if (!isAllowed(e.sessionId)) continue;
-    const day = dateStr(new Date(e.occurredAt));
+    const day = dateStr(e.occurredAt);
     const bucket = daily.get(day);
     if (!bucket) continue;
 
@@ -119,19 +136,20 @@ export async function GET(req: NextRequest) {
       bucket.attempted++;
     }
     if (e.eventType === 'cart_coupon_applied' || e.couponRecovered) bucket.applied++;
-    if (['cart_checkout_clicked'].includes(e.eventType)) bucket.checkoutSessions.add(e.sessionId);
+    if (e.eventType === 'cart_checkout_clicked') bucket.checkoutSessions.add(e.sessionId);
   }
 
-  // Also count checkout events
+  // Checkout events — no session slice cap
   const allSessionIds = Array.from(new Set(evs.filter((e) => isAllowed(e.sessionId)).map((e) => e.sessionId)));
-  const { data: checkoutEvs } = await supabase.from('CheckoutEvent')
-    .select('sessionId, eventType, totalPrice, occurredAt').eq('shopId', shopId)
-    .in('sessionId', allSessionIds.slice(0, 500)).limit(5000);
+  const checkoutEvs = await prisma.checkoutEvent.findMany({
+    select: { sessionId: true, eventType: true, totalPrice: true, occurredAt: true },
+    where: { shopId, sessionId: { in: allSessionIds } },
+  });
 
-  for (const ce of checkoutEvs ?? []) {
+  for (const ce of checkoutEvs) {
     if (!isAllowed(ce.sessionId)) continue;
     if (ce.eventType === 'checkout_started' || ce.eventType === 'checkout_completed') {
-      const day = dateStr(new Date(ce.occurredAt));
+      const day = dateStr(ce.occurredAt);
       daily.get(day)?.checkoutSessions.add(ce.sessionId);
     }
   }
@@ -175,17 +193,17 @@ export async function GET(req: NextRequest) {
   const totalWithCoupon = new Set(evs.filter((e) => isAllowed(e.sessionId) && ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'].includes(e.eventType)).map((e) => e.sessionId)).size;
   const totalCheckouts = new Set([
     ...evs.filter((e) => isAllowed(e.sessionId) && e.eventType === 'cart_checkout_clicked').map((e) => e.sessionId),
-    ...(checkoutEvs ?? []).filter((e) => isAllowed(e.sessionId)).map((e) => e.sessionId),
+    ...checkoutEvs.filter((e) => isAllowed(e.sessionId)).map((e) => e.sessionId),
   ]).size;
 
   const avgCartsWithCoupon = totalWithProducts > 0 ? Math.round((totalWithCoupon / totalWithProducts) * 1000) / 10 : 0;
 
   // Attributed sales: sessions with coupon + checkout_completed within window
   const couponSessionIds = new Set(evs.filter((e) => isAllowed(e.sessionId) && ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered'].includes(e.eventType)).map((e) => e.sessionId));
-  const completedEvs = (checkoutEvs ?? []).filter((e) => e.eventType === 'checkout_completed');
+  const completedEvs = checkoutEvs.filter((e) => e.eventType === 'checkout_completed');
   const firstCartTime = new Map<string, number>();
   for (const e of evs) {
-    if (!firstCartTime.has(e.sessionId)) firstCartTime.set(e.sessionId, new Date(e.occurredAt).getTime());
+    if (!firstCartTime.has(e.sessionId)) firstCartTime.set(e.sessionId, e.occurredAt.getTime());
   }
   const lastCartValue = new Map<string, number>();
   for (const e of evs) {
@@ -198,11 +216,11 @@ export async function GET(req: NextRequest) {
     if (!couponSessionIds.has(ce.sessionId)) continue;
     const first = firstCartTime.get(ce.sessionId);
     if (!first) continue;
-    const diff = (new Date(ce.occurredAt).getTime() - first) / 86400000;
+    const diff = (ce.occurredAt.getTime() - first) / 86400000;
     if (diff > attrWindow) continue;
     const val = priceType === 'post' ? (ce.totalPrice ?? 0) : (lastCartValue.get(ce.sessionId) ?? 0) / 100;
     attrTotal += val;
-    const day = dateStr(new Date(ce.occurredAt));
+    const day = dateStr(ce.occurredAt);
     attrByDay.set(day, (attrByDay.get(day) ?? 0) + val);
   }
 
@@ -215,12 +233,12 @@ export async function GET(req: NextRequest) {
   // Previous period for compare
   const prevData: Record<string, { applied: number; attempted: number; couponPct: number; cartViews: number }> = {};
   if (p.get('compareTo')) {
-    const { data: prevEvs } = await supabase.from('CartEvent')
-      .select('sessionId, eventType, cartValue, cartItemCount, occurredAt')
-      .eq('shopId', shopId).gte('occurredAt', prevStart.toISOString()).lte('occurredAt', prevEnd.toISOString()).limit(20000);
-    // Simplified — just return daily arrays shifted to current dates
-    (prevEvs ?? []).forEach((e) => {
-      const offset = new Date(e.occurredAt).getTime() - prevStart.getTime();
+    const prevEvs = await prisma.cartEvent.findMany({
+      select: { sessionId: true, eventType: true, cartValue: true, cartItemCount: true, occurredAt: true },
+      where: { shopId, occurredAt: { gte: prevStart, lte: prevEnd } },
+    });
+    prevEvs.forEach((e) => {
+      const offset = e.occurredAt.getTime() - prevStart.getTime();
       const mappedDate = dateStr(new Date(start.getTime() + offset));
       if (!prevData[mappedDate]) prevData[mappedDate] = { applied: 0, attempted: 0, couponPct: 0, cartViews: 0 };
       prevData[mappedDate].cartViews++;

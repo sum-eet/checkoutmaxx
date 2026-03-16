@@ -137,6 +137,10 @@ model CartEvent {
   pageUrl          String?
   device           String?  // mobile | desktop
   country          String?  // from window.Shopify.country on storefront
+  utmSource        String?
+  utmMedium        String?
+  utmCampaign      String?
+  utmReferrer      String?
   occurredAt       DateTime
   createdAt        DateTime @default(now())
 
