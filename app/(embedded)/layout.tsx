@@ -5,6 +5,7 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import en from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { useShop } from "@/hooks/useShop";
+import { usePathname } from "next/navigation";
 
 
 function LiveBanner() {
@@ -46,16 +47,23 @@ function LiveBanner() {
 }
 
 export default function EmbeddedLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isCouponMaxx = pathname?.startsWith('/couponmaxx') ?? false;
+
   return (
     <PolarisProvider i18n={en}>
-      <NavMenu>
-        <a href="/dashboard/converted" rel="home">Converted Carts</a>
-        <a href="/dashboard/abandoned">Abandoned Carts</a>
-        <a href="/dashboard/cart">Cart Activity</a>
-        <a href="/alerts">Notifications</a>
-        <a href="/settings">Settings</a>
-      </NavMenu>
-      <LiveBanner />
+      {/* CouponMaxx has its own NavMenu in couponmaxx/layout.tsx — skip the old one */}
+      {!isCouponMaxx && (
+        <NavMenu>
+          <a href="/dashboard/converted" rel="home">Converted Carts</a>
+          <a href="/dashboard/abandoned">Abandoned Carts</a>
+          <a href="/dashboard/cart">Cart Activity</a>
+          <a href="/alerts">Notifications</a>
+          <a href="/settings">Settings</a>
+        </NavMenu>
+      )}
+      {/* CouponMaxx has its own Header — skip the live banner there */}
+      {!isCouponMaxx && <LiveBanner />}
       {children}
     </PolarisProvider>
   );
