@@ -995,3 +995,54 @@ Old /dashboard/* routes completely untouched.
 - app/api/v2/notifications/[id]/read/route.ts
 - lib/v2/session-summary.ts
 - supabase/alertlog-isread.sql
+
+---
+
+## 2026-03-16: CouponMaxx analytics — fixed PostgREST 1000-row cap + date picker Apply button
+
+**What broke:** CouponMaxx analytics showed zero data for Mar 14–16 despite 980+ sessions in DB on Mar 15.
+Date picker Apply button was unclickable when the user scrolled to the bottom of the popover.
+
+**Root cause (analytics):** Supabase JS client uses PostgREST which has a default `max_rows=1000` cap
+that silently truncates ALL queries regardless of any `.limit()` calls. With 11,954 CartEvents across
+Mar 9–16, PostgREST returned only the first 1000 rows (408 sessions, all from Mar 12–13).
+Mar 14–16 had zero rows returned, so the API reported zero for those days.
+
+Verified by running: `SELECT COUNT(DISTINCT sessionId) FROM (SELECT ... LIMIT 1000)` = 408 —
+exactly matching the API's session count.
+
+**Wrong fix attempted first:** Switched analytics + sessions routes from Supabase JS to Prisma
+(commit f93b6b3). This bypassed the 1000-row cap but reintroduced direct TCP Postgres connections —
+the exact cause of the 19-hour outage on 2026-03-13 (see entry above). Reverted.
+
+**Correct fix:** Aggregate in Postgres, return tiny result sets via `supabase.rpc()`.
+PostgREST's row cap is irrelevant when an RPC returns 8 aggregate rows instead of 11,954 event rows.
+
+**What was changed:**
+
+1. `supabase/analytics-functions.sql` — NEW — 7 SQL aggregate functions deployed to Supabase:
+   - `couponmaxx_daily_cart_metrics` → one row per UTC day with session/coupon/checkout counts
+   - `couponmaxx_daily_checkout_sessions` → one row per day from CheckoutEvent
+   - `couponmaxx_attributed_sales_daily` → daily attributed sales via CTE join
+   - `couponmaxx_funnel_totals` → single aggregate row for all 6 funnel stages
+   - `couponmaxx_utm_sessions` → distinct sessionIds matching a UTM source (uses shopDomain, not shopId — previous query was silently returning nothing)
+   - `couponmaxx_session_kpis` → single aggregate row for KPI boxes
+   - `couponmaxx_session_summaries` → one row per session (pre-aggregated) with all display/filter fields
+
+2. `app/api/couponmaxx/analytics/route.ts` — REWRITTEN — all reads now via `supabase.rpc()`;
+   `buildDailyMap()` zero-fills every UTC calendar day so response always has a complete daily array;
+   previous period comparison uses same RPC pattern.
+
+3. `app/api/couponmaxx/sessions/route.ts` — REWRITTEN — replaced `buildSessionsFromEvents`
+   (which fetched all raw event rows) with `sessionFromSummary` (builds from pre-aggregated session rows);
+   KPI boxes via `couponmaxx_session_kpis` RPC; sessions via `couponmaxx_session_summaries` RPC.
+
+4. `components/couponmaxx/DateRangePicker.tsx` — two fixes:
+   - `startOfDay`/`endOfDay` were using `setHours(0,0,0,0)` (local timezone). IST users were sending
+     `2026-03-08T18:30:00Z` as "start of Mar 9 UTC". Fixed to `d.toISOString().slice(0,10) + 'T00:00:00.000Z'`.
+   - Cancel/Apply buttons moved from BELOW the calendar to a fixed header ABOVE the scrollable calendar.
+     In Shopify's embedded iframe, the Polaris Popover was clipped — Apply was below the visible fold.
+
+**Rule going forward:** Never use `supabase.from(table).select(...)` for analytics queries.
+Always aggregate in Postgres and call via `supabase.rpc()`. The PostgREST row cap will silently
+truncate any table with >1000 rows and the API will return wrong data with no error.
