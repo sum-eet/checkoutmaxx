@@ -14,8 +14,13 @@ export async function GET(req: NextRequest) {
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 
-  const end = new Date(p.get('end') ?? new Date().toISOString());
-  const start = new Date(p.get('start') ?? subDays(end, 7).toISOString());
+  const rawEnd = new Date(p.get('end') ?? new Date().toISOString());
+  const rawStart = new Date(p.get('start') ?? subDays(rawEnd, 7).toISOString());
+  // Normalise to full UTC calendar days so no events are lost due to timezone offset.
+  const startDayStr = rawStart.toISOString().slice(0, 10);
+  const endDayStr   = rawEnd.toISOString().slice(0, 10);
+  const start = new Date(startDayStr + 'T00:00:00.000Z');
+  const end   = new Date(endDayStr   + 'T23:59:59.999Z');
   const page = Math.max(1, parseInt(p.get('page') ?? '1'));
   const perPage = 25;
 

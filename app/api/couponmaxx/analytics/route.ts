@@ -5,12 +5,17 @@ import { supabase } from '@/lib/supabase';
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
+// Always iterate over full UTC calendar days, regardless of time-of-day in start/end.
+// This prevents timezone-offset drift from skipping or doubling days.
 function buildDailyMap(start: Date, end: Date): Map<string, { applied: number; attempted: number; sessions: Set<string>; couponSessions: Set<string>; checkoutSessions: Set<string>; totalSessions: Set<string> }> {
   const map = new Map();
-  let cur = new Date(start);
-  while (cur <= end) {
+  const startDay = dateStr(start); // UTC date string e.g. "2026-03-10"
+  const endDay   = dateStr(end);
+  let cur = new Date(startDay + 'T00:00:00.000Z'); // UTC midnight of first day
+  const endCur = new Date(endDay + 'T00:00:00.000Z');
+  while (cur <= endCur) {
     map.set(dateStr(cur), { applied: 0, attempted: 0, sessions: new Set(), couponSessions: new Set(), checkoutSessions: new Set(), totalSessions: new Set() });
-    cur = subDays(cur, -1);
+    cur = new Date(cur.getTime() + 86400000);
   }
   return map;
 }
@@ -24,8 +29,16 @@ export async function GET(req: NextRequest) {
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 
-  const end = new Date(p.get('end') ?? new Date().toISOString());
-  const start = new Date(p.get('start') ?? subDays(end, 30).toISOString());
+  const rawEnd = new Date(p.get('end') ?? new Date().toISOString());
+  const rawStart = new Date(p.get('start') ?? subDays(rawEnd, 7).toISOString());
+
+  // Normalise to full UTC calendar days so no events are lost due to timezone offset.
+  // e.g. "Mar 11 IST midnight" → UTC "Mar 10 18:30" → keep full UTC days Mar 10–Mar 16.
+  const startDayStr = rawStart.toISOString().slice(0, 10); // "2026-03-10"
+  const endDayStr   = rawEnd.toISOString().slice(0, 10);   // "2026-03-16"
+  const start = new Date(startDayStr + 'T00:00:00.000Z');  // UTC midnight
+  const end   = new Date(endDayStr   + 'T23:59:59.999Z');  // UTC end-of-day
+
   const rangeMs = end.getTime() - start.getTime();
   const prevEnd = start;
   const prevStart = subDays(start, Math.round(rangeMs / 86400000));
@@ -38,10 +51,10 @@ export async function GET(req: NextRequest) {
   const attrWindow = parseInt(p.get('attrWindow') ?? '14');
   const priceType = p.get('priceType') ?? 'pre'; // pre | post
 
-  // Fetch all cart events in range
+  // Fetch all cart events in range (ASC so older dates come first; limit 150k safety net)
   let cartQ = supabase.from('CartEvent')
     .select('sessionId, eventType, cartValue, cartItemCount, couponCode, couponSuccess, couponRecovered, lineItems, occurredAt, device')
-    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(100000).order('occurredAt', { ascending: false });
+    .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(150000).order('occurredAt', { ascending: true });
   if (device) cartQ = cartQ.eq('device', device);
 
   const { data: cartEvs } = await cartQ;
