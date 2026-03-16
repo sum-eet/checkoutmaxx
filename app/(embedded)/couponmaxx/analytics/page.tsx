@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
-import { Banner } from '@shopify/polaris';
+import { Banner, Select, InlineStack } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
-import { FilterPill } from '@/components/couponmaxx/FilterPill';
 import { MetricCard } from '@/components/couponmaxx/MetricCard';
 import { FunnelChart } from '@/components/couponmaxx/FunnelChart';
 
@@ -90,86 +89,6 @@ function fmtInt(v: number) {
 
 type CompareOption = '' | 'previous_period' | 'previous_year';
 
-function CompareToDropdown({
-  value,
-  onChange,
-}: {
-  value: CompareOption;
-  onChange: (v: CompareOption) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const options: { label: string; value: CompareOption }[] = [
-    { label: 'No comparison', value: '' },
-    { label: 'Previous period', value: 'previous_period' },
-    { label: 'Previous year', value: 'previous_year' },
-  ];
-
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? 'Compare to';
-  const active = value !== '';
-
-  return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '6px 12px',
-          border: active ? '1px solid #BFDBFE' : '1px solid #D1D5DB',
-          borderRadius: 6,
-          background: active ? '#EFF6FF' : '#FFFFFF',
-          color: active ? '#1D4ED8' : '#374151',
-          fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
-        }}
-      >
-        {active ? selectedLabel : 'Compare to'}
-        {active && (
-          <span
-            onClick={(e) => { e.stopPropagation(); onChange(''); }}
-            style={{ marginLeft: 2, fontSize: 14, lineHeight: 1, color: '#1D4ED8', fontWeight: 700 }}
-          >×</span>
-        )}
-        {!active && <span style={{ fontSize: 10, marginLeft: 2 }}>▾</span>}
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100,
-          background: '#fff', border: '1px solid #E3E3E3', borderRadius: 8,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 180, padding: '4px 0',
-        }}>
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                width: '100%', padding: '8px 14px', background: 'none', border: 'none',
-                cursor: 'pointer', fontSize: 13,
-                color: opt.value === value ? '#1D4ED8' : '#374151', textAlign: 'left', gap: 8,
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F9FAFB'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
-            >
-              <span>{opt.label}</span>
-              {opt.value === value && <span style={{ color: '#1D4ED8', fontSize: 13 }}>✓</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Fetcher
 // ---------------------------------------------------------------------------
@@ -187,10 +106,10 @@ async function fetcher(url: string) {
 export default function AnalyticsPage() {
   const shop = useShop();
 
-  // Date range — default last 30 days
+  // Date range — default last 7 days
   const [dateRange, setDateRange] = useState<DateRange>(() => {
     const end = new Date();
-    return { start: subDays(end, 30), end };
+    return { start: subDays(end, 7), end };
   });
 
   // Compare to
@@ -389,41 +308,41 @@ export default function AnalyticsPage() {
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: '#111827' }}>
           Analytics
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <DateRangePicker value={dateRange} onChange={setDateRange} defaultDays={30} />
-          <CompareToDropdown value={compareTo} onChange={setCompareTo} />
-          {compareActive && (
-            <span style={{ fontSize: 12, color: '#9CA3AF' }}>
-              vs. {compareTo === 'previous_period' ? 'previous period' : 'previous year'}
-            </span>
-          )}
-        </div>
+        <InlineStack gap="200" blockAlign="center">
+          <DateRangePicker value={dateRange} onChange={setDateRange} defaultDays={7} />
+          <Select
+            label="Compare to"
+            labelInline
+            options={[
+              { label: 'No comparison', value: '' },
+              { label: 'Previous period', value: 'previous_period' },
+              { label: 'Previous year', value: 'previous_year' },
+            ]}
+            value={compareTo}
+            onChange={(v) => setCompareTo(v as CompareOption)}
+          />
+        </InlineStack>
       </div>
 
       {/* ------------------------------------------------------------------ */}
       {/* Row 1 — Filter pills                                                */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>Add filters</span>
-        <FilterPill
-          label="Product"
-          value={product}
-          options={productOptions}
-          onChange={setProduct}
-        />
-        <FilterPill
-          label="Device type"
-          value={device}
+      <InlineStack gap="300" blockAlign="center">
+        <Select
+          label="Device"
+          labelInline
           options={deviceOptions}
+          value={device}
           onChange={setDevice}
         />
-        <FilterPill
+        <Select
           label="UTM source"
-          value={utmSource}
+          labelInline
           options={utmSourceOptions}
+          value={utmSource}
           onChange={setUtmSource}
         />
-      </div>
+      </InlineStack>
 
       {/* ------------------------------------------------------------------ */}
       {/* Row 2 — Metric cards: Coupon success rate + Carts with coupon      */}

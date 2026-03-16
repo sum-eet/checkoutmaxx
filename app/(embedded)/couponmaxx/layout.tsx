@@ -27,7 +27,7 @@ export default function CouponMaxxLayout({ children }: { children: React.ReactNo
       }}>
         <Header />
         <div style={{ flex: 1, padding: '20px 24px' }}>
-          <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
             {children}
           </div>
         </div>

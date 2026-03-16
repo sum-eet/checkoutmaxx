@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, Spinner } from '@shopify/polaris';
+import { Banner, Spinner, Select, InlineStack } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
-import { FilterPill } from '@/components/couponmaxx/FilterPill';
 import { KpiBox } from '@/components/couponmaxx/KpiBox';
 import { deriveSourceV3 } from '@/lib/v3/session-builder';
 import type { CartSessionV3, CouponV3, LineItemV3 } from '@/lib/v3/session-builder';
@@ -836,15 +835,15 @@ export default function SessionsPage() {
   // Country options — static common set; future: derive from data
   const countryOptions = [
     { label: 'All countries', value: '' },
-    { label: '🇺🇸 US', value: 'US' },
-    { label: '🇬🇧 GB', value: 'GB' },
-    { label: '🇨🇦 CA', value: 'CA' },
-    { label: '🇦🇺 AU', value: 'AU' },
-    { label: '🇮🇳 IN', value: 'IN' },
-    { label: '🇩🇪 DE', value: 'DE' },
-    { label: '🇫🇷 FR', value: 'FR' },
-    { label: '🇧🇷 BR', value: 'BR' },
-    { label: '🇲🇽 MX', value: 'MX' },
+    { label: 'US', value: 'US' },
+    { label: 'GB', value: 'GB' },
+    { label: 'CA', value: 'CA' },
+    { label: 'AU', value: 'AU' },
+    { label: 'IN', value: 'IN' },
+    { label: 'DE', value: 'DE' },
+    { label: 'FR', value: 'FR' },
+    { label: 'BR', value: 'BR' },
+    { label: 'MX', value: 'MX' },
   ];
 
   // Product options — static placeholder; future: derive from data
@@ -985,64 +984,50 @@ export default function SessionsPage() {
             background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: '12px 16px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <FilterPill
+          <InlineStack gap="300" wrap>
+            <Select
               label="Country"
-              value={country}
+              labelInline
               options={countryOptions}
+              value={country}
               onChange={setCountry}
             />
-            <FilterPill
+            <Select
               label="Device"
-              value={device}
+              labelInline
               options={deviceOptions}
+              value={device}
               onChange={setDevice}
             />
-            <FilterPill
-              label="Product"
-              value={product}
-              options={productOptions}
-              onChange={setProduct}
-            />
-            <FilterPill
+            <Select
               label="Cart value"
-              value={cartValueDisplay}
+              labelInline
               options={cartValueOptions}
+              value={cartValueDisplay}
               onChange={handleCartValueChange}
             />
-            <FilterPill
+            <Select
               label="Coupon"
-              value={coupon}
+              labelInline
               options={couponOptions}
+              value={coupon}
               onChange={setCoupon}
             />
-            <FilterPill
+            <Select
               label="Outcome"
-              value={outcome}
+              labelInline
               options={outcomeOptions}
+              value={outcome}
               onChange={setOutcome}
             />
-            <FilterPill
+            <Select
               label="Source"
-              value={utmSource}
+              labelInline
               options={sourceOptions}
+              value={utmSource}
               onChange={setUtmSource}
             />
-            {anyFilterActive && (
-              <button
-                onClick={() => {
-                  setCountry(''); setDevice(''); setProduct('');
-                  setMinCart(''); setMaxCart(''); setCoupon(''); setOutcome(''); setUtmSource('');
-                }}
-                style={{
-                  marginLeft: 'auto', background: 'none', border: 'none',
-                  fontSize: 12, color: '#6B7280', cursor: 'pointer', textDecoration: 'underline',
-                }}
-              >
-                Clear all
-              </button>
-            )}
-          </div>
+          </InlineStack>
         </div>
 
         {/* ---------------------------------------------------------------- */}
@@ -1061,7 +1046,7 @@ export default function SessionsPage() {
         {/* ---------------------------------------------------------------- */}
         {/* Section 5 — Session table                                        */}
         {/* ---------------------------------------------------------------- */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, overflowX: 'auto' }}>
           {isLoading && sessions.length === 0 ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 48 }}>
               <Spinner size="small" />
@@ -1077,15 +1062,15 @@ export default function SessionsPage() {
               }}
             >
               <colgroup>
-                <col style={{ width: 110 }} />
-                <col style={{ width: 50 }} />
-                <col style={{ width: 50 }} />
-                <col style={{ width: 80 }} />
-                <col /> {/* flex */}
-                <col style={{ width: 110 }} />
-                <col style={{ width: 130 }} />
                 <col style={{ width: 90 }} />
-                <col style={{ width: 48 }} />
+                <col style={{ width: 42 }} />
+                <col style={{ width: 38 }} />
+                <col style={{ width: 70 }} />
+                <col /> {/* flex */}
+                <col style={{ width: 90 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 52 }} />
               </colgroup>
               <thead>
                 <tr style={{ background: '#FAFAFA' }}>
@@ -1125,7 +1110,7 @@ export default function SessionsPage() {
                     <td style={{ ...tdStyle, textAlign: 'center' }}>
                       {s.country ? (
                         <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>
-                          {countryFlag(s.country)} {s.country}
+                          {s.country}
                         </span>
                       ) : (
                         <span style={{ color: '#9CA3AF' }}>—</span>
