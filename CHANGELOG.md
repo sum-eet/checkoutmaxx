@@ -9,6 +9,75 @@
 
 ---
 
+## 2026-03-16: CouponMaxx V4 — Shopify App Store submission build
+
+**What changed:** Complete CouponMaxx app at `/couponmaxx/*`.
+This is the version being submitted to Shopify App Store.
+
+**Critical nav fix:** V3 nav was rendered inside the app frame.
+V4 uses `NavMenu` from `@shopify/app-bridge-react` — nav is in Shopify's
+native left sidebar.
+
+**Pages built:**
+- `/couponmaxx/analytics` — Header, date range, 3 filters, 4 metric cards
+  (coupon success rate, carts with coupon, attributed sales with dropdowns,
+  cart views with switcher), coupon funnel with bar/line toggle + column selector
+- `/couponmaxx/sessions` — 4 KPI boxes (clickable filters), filter bar,
+  session table (time/country/device/source/products/cart value/coupons/outcome),
+  timeline right-side panel
+- `/couponmaxx/coupons` — 4 KPI boxes, code velocity multi-line chart,
+  success rate horizontal bar chart, code table with colour left borders,
+  zombie codes collapsible section, code detail right-side panel with
+  cannibalization analysis, product breakdown, recovery detail, recent sessions
+- `/couponmaxx/notifications` — Alert feed with severity colours + dismiss,
+  Settings tab with trigger thresholds + Slack OAuth + email + weekly digest
+
+**DB changes (run in Supabase SQL editor):**
+- `supabase/shop-slack.sql` — adds `slackWebhookUrl`, `slackChannelName`,
+  `notificationSettings` (jsonb), `notificationEmail` to `"Shop"` table
+- `supabase/sessionping-utm.sql` — adds UTM columns to `"SessionPing"` table
+
+**New env vars needed in Vercel:**
+- `SLACK_CLIENT_ID` (from api.slack.com/apps)
+- `SLACK_CLIENT_SECRET` (same Slack app)
+- `DASHBOARD_VERSION=v4` (switches app to CouponMaxx)
+
+**Files created:**
+- `app/(embedded)/couponmaxx/layout.tsx`
+- `app/(embedded)/couponmaxx/analytics/page.tsx`
+- `app/(embedded)/couponmaxx/sessions/page.tsx`
+- `app/(embedded)/couponmaxx/coupons/page.tsx`
+- `app/(embedded)/couponmaxx/notifications/page.tsx`
+- `components/couponmaxx/Header.tsx`
+- `components/couponmaxx/DateRangePicker.tsx`
+- `components/couponmaxx/FilterPill.tsx`
+- `components/couponmaxx/KpiBox.tsx`
+- `components/couponmaxx/MetricCard.tsx`
+- `components/couponmaxx/LineChartInCard.tsx`
+- `components/couponmaxx/FunnelChart.tsx`
+- `components/couponmaxx/Toggle.tsx`
+- `app/api/couponmaxx/analytics/route.ts`
+- `app/api/couponmaxx/sessions/route.ts`
+- `app/api/couponmaxx/session/route.ts`
+- `app/api/couponmaxx/coupons/route.ts`
+- `app/api/couponmaxx/coupons/[code]/route.ts`
+- `app/api/couponmaxx/notifications/route.ts`
+- `app/api/couponmaxx/notifications/[id]/read/route.ts`
+- `app/api/couponmaxx/settings/route.ts`
+- `app/api/couponmaxx/slack/callback/route.ts`
+- `supabase/shop-slack.sql`
+
+**Version routing:** `middleware.ts` and `dashboard/page.tsx` updated —
+`DASHBOARD_VERSION=v4` routes to `/couponmaxx/analytics`.
+
+**TypeScript fixes applied:**
+- Recharts `Tooltip` formatter type: removed explicit `(v: number)` annotations
+- Map/Set iteration: wrapped all `.values()` and spread with `Array.from()`
+- `BarLabel` SVG props: explicit numeric coercion instead of spread
+- Notifications page: wrapped in `Suspense` boundary for `useSearchParams()`
+
+---
+
 ## 2026-03-13: DB Connection Crisis — Migrated ingest to Supabase JS
 
 **What broke:** After a Vercel redeploy, both ingest endpoints stopped writing
