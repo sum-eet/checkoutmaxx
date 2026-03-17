@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { ButtonGroup, Button as PolarisButton, Card, IndexTable, Modal, Page, Spinner, Tabs, Text, Banner } from '@shopify/polaris';
+import { BlockStack, ButtonGroup, Button as PolarisButton, Card, IndexTable, Modal, Page, Spinner, Tabs, Text, Banner } from '@shopify/polaris';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Cell, Legend,
@@ -511,7 +511,7 @@ export default function CouponsPage() {
 
   return (
     <Page title="Coupons" subtitle="Track every code, find what's failing, understand what's driving revenue.">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <BlockStack gap="400">
 
       {/* Date range picker */}
       <div style={{ marginBottom: 20 }}>
@@ -532,7 +532,7 @@ export default function CouponsPage() {
       {data && (
         <>
           {/* KPI Boxes */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, alignItems: 'stretch' }}>
             {/* Box 1 — Codes Tracked */}
             <KpiBox
               label="Codes Tracked"
@@ -572,24 +572,37 @@ export default function CouponsPage() {
             {/* Box 3 — Checkout AOV */}
             <KpiBox
               label="Checkout AOV"
-              value={`$${Math.round(data.boxes.aovWithCoupon)} with coupon`}
-              sub2={(() => {
-                const diff = data.boxes.aovWithCoupon - data.boxes.aovWithoutCoupon;
-                const sign = diff >= 0 ? '+' : '-';
-                const color = diff >= 0 ? '#15803D' : '#B91C1C';
-                return (
-                  <span>
-                    ${Math.round(data.boxes.aovWithoutCoupon)} without
-                    {' · '}
-                    <span style={{ color }}>{sign}${Math.round(Math.abs(diff))} difference</span>
-                  </span>
-                );
-              })()}
+              value={
+                data.boxes.aovWithCoupon > 0
+                  ? `$${Math.round(data.boxes.aovWithCoupon)}`
+                  : '—'
+              }
+              sub1={
+                data.boxes.aovWithCoupon > 0
+                  ? 'with coupon applied'
+                  : 'No coupon orders in this period'
+              }
+              sub2={
+                data.boxes.aovWithCoupon > 0 && data.boxes.aovWithoutCoupon > 0
+                  ? (() => {
+                      const diff = data.boxes.aovWithCoupon - data.boxes.aovWithoutCoupon;
+                      const sign = diff >= 0 ? '+' : '-';
+                      const color = diff >= 0 ? '#15803D' : '#B91C1C';
+                      return (
+                        <span>
+                          ${Math.round(data.boxes.aovWithoutCoupon)} without
+                          {' · '}
+                          <span style={{ color }}>{sign}${Math.round(Math.abs(diff))}</span>
+                        </span>
+                      );
+                    })()
+                  : undefined
+              }
             />
 
             {/* Box 4 — Abandoned After Coupon Failure */}
             <KpiBox
-              label="Abandoned After Coupon Failure"
+              label="Abandoned After Failure"
               value={data.boxes.abandonedAfterFail}
               sub1={`${data.boxes.abandonedAfterFailPct}% of failed coupon sessions abandoned immediately`}
               sub2={`$${Math.round(data.boxes.abandonedCartValue).toLocaleString()} in cart value left behind`}
@@ -604,54 +617,64 @@ export default function CouponsPage() {
               <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Daily attempt volume by code</div>
               {data.velocityChart.daily.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9CA3AF', paddingTop: 60, textAlign: 'center' }}>No data</div>
-              ) : (
-                <>
+              ) : (() => {
+                const useStackedBar = data.velocityChart.codes.length > 3;
+                const fmtDate = (v: unknown) => new Date(String(v)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                return (
                   <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={data.velocityChart.daily} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 10 }}
-                        tickFormatter={(v) => {
-                          const d = new Date(v);
-                          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        }}
-                      />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip
-                        labelFormatter={(label) => {
-                          const d = new Date(label);
-                          return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                        }}
-                      />
-                      <Legend
-                        onClick={(e) => {
-                          const key = e.dataKey as string;
-                          setHiddenLines((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(key)) next.delete(key);
-                            else next.add(key);
-                            return next;
-                          });
-                        }}
-                        formatter={(value) => (
-                          <span style={{ fontSize: 11, color: '#374151', cursor: 'pointer' }}>{value}</span>
-                        )}
-                      />
-                      {data.velocityChart.codes.map((code, i) => (
-                        <Line
-                          key={code}
-                          type="monotone"
-                          dataKey={code}
-                          stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                          dot={false}
-                          strokeWidth={1.5}
-                          hide={hiddenLines.has(code)}
+                    {useStackedBar ? (
+                      <BarChart data={data.velocityChart.daily} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={fmtDate} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip labelFormatter={fmtDate} />
+                        <Legend formatter={(value) => (
+                          <span style={{ fontSize: 11, color: '#374151' }}>{value}</span>
+                        )} />
+                        {data.velocityChart.codes.map((code, i) => (
+                          <Bar
+                            key={code}
+                            dataKey={code}
+                            stackId="a"
+                            fill={LINE_COLORS[i % LINE_COLORS.length]}
+                            hide={hiddenLines.has(code)}
+                          />
+                        ))}
+                      </BarChart>
+                    ) : (
+                      <LineChart data={data.velocityChart.daily} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                        <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={fmtDate} />
+                        <YAxis tick={{ fontSize: 10 }} />
+                        <Tooltip labelFormatter={fmtDate} />
+                        <Legend
+                          onClick={(e) => {
+                            const key = e.dataKey as string;
+                            setHiddenLines((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(key)) next.delete(key);
+                              else next.add(key);
+                              return next;
+                            });
+                          }}
+                          formatter={(value) => (
+                            <span style={{ fontSize: 11, color: '#374151', cursor: 'pointer' }}>{value}</span>
+                          )}
                         />
-                      ))}
-                    </LineChart>
+                        {data.velocityChart.codes.map((code, i) => (
+                          <Line
+                            key={code}
+                            type="monotone"
+                            dataKey={code}
+                            stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                            dot={false}
+                            strokeWidth={1.5}
+                            hide={hiddenLines.has(code)}
+                          />
+                        ))}
+                      </LineChart>
+                    )}
                   </ResponsiveContainer>
-                </>
-              )}
+                );
+              })()}
             </Card>
 
             {/* Right — Success Rate by Code */}
@@ -672,7 +695,7 @@ export default function CouponsPage() {
                       type="category"
                       dataKey="code"
                       tick={{ fontSize: 10, fontFamily: 'monospace' }}
-                      width={80}
+                      width={120}
                       tickFormatter={(v) => v}
                     />
                     <Tooltip
@@ -875,7 +898,7 @@ export default function CouponsPage() {
           onClose={() => setSelectedCode(null)}
         />
       )}
-      </div>
+      </BlockStack>
     </Page>
   );
 }

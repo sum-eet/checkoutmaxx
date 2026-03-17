@@ -1231,3 +1231,38 @@ Completed the remaining tasks from POLARIS-MIGRATION-ATOMIC.md.
 ```
 
 **All 15 tasks from POLARIS-MIGRATION-ATOMIC.md complete.**
+
+---
+
+## 2026-03-17: Visual & UX Fixes (VISUAL-UX-FIXES.md)
+
+9 code fixes from visual/UX review. Fix 10 (Partner Dashboard app name) is manual.
+
+### Fix 1 — DateRangePicker: single button + OptionList
+Replaced two-control mess (Select "Presets" + calendar Button) with one `<Button icon={CalendarIcon}>` activator opening a `<Popover>`. Presets rendered as `<OptionList>` — clicking a preset closes the popover immediately. "Custom range..." option reveals a `<DatePicker>` with Back/Apply buttons. No more dropdown-overlapping-content problem.
+
+### Fix 2 — KpiBox equal height grid
+KpiBox wrapper: removed `flex: 1, minWidth: 130`, added `height: '100%'`. Used Polaris CSS tokens for borderRadius/outline. KPI grid in sessions: `repeat(3, 1fr)` with `alignItems: stretch`. KPI grid in coupons: `repeat(4, 1fr)` with `alignItems: stretch`.
+
+### Fix 3 — Sessions default filter: "With Products"
+Changed `useState('')` to `useState('products')` for `boxFilter`. Page loads showing only sessions with products in cart — eliminates noise from empty cart drawer opens.
+
+### Fix 4 — $0 AOV display fix
+`aovWithCoupon === 0` now shows `value="—"` and `sub1="No coupon orders in this period"` instead of `"$0 with coupon"`. Comparison delta only shown when both values are > 0.
+
+### Fix 5 — Polaris layout components
+Analytics page: replaced two `gridTemplateColumns: '1fr 1fr'` wrappers with `<InlineGrid columns={2} gap="400">`. Sessions/coupons outer wrapper: replaced `display: flex, flexDirection: column` with `<BlockStack gap="400">`.
+
+### Fix 6 — Chart improvements
+Velocity chart: auto-switches to stacked `<BarChart>` when `codes.length > 3`, stays `<LineChart>` for ≤3 codes. Stacked bars show volume-per-code-per-day more clearly than overlapping lines. Success rate `<YAxis>` widened from `width={80}` to `width={120}` — code names no longer truncate.
+
+### Fix 7 — Polaris refresh button
+Replaced custom 32×32 circular button + `@keyframes spin` with `<Button icon={RefreshIcon} loading={refreshing} variant="tertiary">`. Polaris `loading` prop handles spinner automatically.
+
+### Fix 8 — Remove "Carts Opened" KPI box from Sessions
+Removed the "Carts Opened" box (noisy, includes empty carts). Sessions KPI row is now 3 boxes: With Products / Coupon Attempted / Reached Checkout. Grid changed to `repeat(3, 1fr)`.
+
+### Fix 9 — Shorten "Abandoned After Coupon Failure" label
+Changed to "Abandoned After Failure". Context (coupons page) makes it obvious. Prevents label wrapping that made this box taller than others.
+
+**Build: zero errors.**

@@ -16,12 +16,11 @@ export function KpiBox({ label, value, sub1, sub2, active, onClick }: KpiBoxProp
     <div
       onClick={onClick}
       style={{
-        flex: 1,
-        minWidth: 130,
         cursor: onClick ? 'pointer' : undefined,
-        outline: active ? '1.5px solid #0EA5E9' : undefined,
-        borderRadius: 8,
-        background: active ? '#F0F9FF' : undefined,
+        borderRadius: 'var(--p-border-radius-300)',
+        outline: active ? '2px solid var(--p-color-border-interactive)' : undefined,
+        outlineOffset: -1,
+        height: '100%',
       }}
     >
       <Card>

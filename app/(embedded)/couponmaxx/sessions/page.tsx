@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, Card, Icon, IndexTable, Modal, Page, Pagination, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
+import { Banner, BlockStack, Card, Icon, IndexTable, Modal, Page, Pagination, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
 import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon, XSmallIcon } from '@shopify/polaris-icons';
 
 import { useShop } from '@/hooks/useShop';
@@ -586,7 +586,7 @@ export default function SessionsPage() {
   });
 
   // Box filter
-  const [boxFilter, setBoxFilter] = useState('');
+  const [boxFilter, setBoxFilter] = useState('products');
 
   // Filters
   const [country, setCountry] = useState('');
@@ -782,10 +782,8 @@ export default function SessionsPage() {
   return (
     <>
       {/* Keyframe injection for spinner animation */}
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-
       <Page title="Cart Sessions">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <BlockStack gap="400">
 
         {/* Error banner */}
         {error && (
@@ -800,34 +798,19 @@ export default function SessionsPage() {
         {/* ---------------------------------------------------------------- */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <DateRangePicker value={dateRange} onChange={setDateRange} defaultDays={1} />
-          <button
+          <PolarisButton
+            icon={RefreshIcon}
             onClick={handleRefresh}
-            disabled={refreshing}
-            title="Refresh"
-            style={{
-              width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: '#FFFFFF', border: '1px solid #D1D5DB', borderRadius: '50%',
-              cursor: 'pointer', padding: 0, flexShrink: 0,
-            }}
-          >
-            <div style={{ animation: refreshing ? 'spin 0.8s linear infinite' : undefined, display: 'flex' }}>
-              <Icon source={RefreshIcon} tone="subdued" />
-            </div>
-          </button>
+            loading={refreshing}
+            accessibilityLabel="Refresh"
+            variant="tertiary"
+          />
         </div>
 
         {/* ---------------------------------------------------------------- */}
         {/* Section 2 — Four KPI boxes                                       */}
         {/* ---------------------------------------------------------------- */}
-        <div style={{ display: 'flex', gap: 12 }}>
-          <KpiBox
-            label="Carts Opened"
-            value={boxes?.cartsOpened ?? (isLoading ? '…' : '—')}
-            sub1={boxes ? `${boxes.withProducts} with products` : undefined}
-            sub2={boxes ? `${boxes.emptyCount} empty` : undefined}
-            active={boxFilter === ''}
-            onClick={() => handleBoxClick('')}
-          />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, alignItems: 'stretch' }}>
           <KpiBox
             label="With Products"
             value={boxes?.withProducts ?? (isLoading ? '…' : '—')}
@@ -1014,7 +997,7 @@ export default function SessionsPage() {
           </div>
         )}
 
-      </div>
+      </BlockStack>
       </Page>
 
       {/* ------------------------------------------------------------------ */}

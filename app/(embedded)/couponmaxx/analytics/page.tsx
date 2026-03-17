@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Banner, Card, Page, BlockStack, Select, InlineStack } from '@shopify/polaris';
+import { Banner, Card, InlineGrid, Page, BlockStack, Select, InlineStack } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -351,7 +351,7 @@ export default function AnalyticsPage() {
       {/* ------------------------------------------------------------------ */}
       {/* Row 1 — Metric cards: Coupon success rate + Carts with coupon      */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <InlineGrid columns={2} gap="400">
         <MetricCard
           title="Coupon success rate"
           definition="Percent of coupon applications that were successfully applied"
@@ -377,12 +377,12 @@ export default function AnalyticsPage() {
           loading={isLoading}
           error={!!error}
         />
-      </div>
+      </InlineGrid>
 
       {/* ------------------------------------------------------------------ */}
       {/* Row 2 — Attributed sales + Cart views                              */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <InlineGrid columns={2} gap="400">
         <MetricCard
           title="Attributed sales"
           titleDropdowns={[
@@ -427,7 +427,7 @@ export default function AnalyticsPage() {
           loading={isLoading}
           error={!!error}
         />
-      </div>
+      </InlineGrid>
 
       {/* ------------------------------------------------------------------ */}
       {/* Row 3 — Coupon funnel (full width card)                            */}
