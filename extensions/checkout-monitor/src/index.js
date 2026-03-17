@@ -8,7 +8,7 @@
 import { register } from "@shopify/web-pixels-extension";
 
 register(({ analytics, browser, init }) => {
-  const INGEST_URL = "https://checkoutmaxx-rt55.vercel.app/api/pixel/ingest";
+  const INGEST_URL = "https://couponmaxx.vercel.app/api/pixel/ingest";
 
   const shopDomain =
     init.data?.shop?.myshopifyDomain ||
@@ -72,7 +72,7 @@ register(({ analytics, browser, init }) => {
         occurredAt: new Date().toISOString(),
       });
       browser.sendBeacon(
-        'https://checkoutmaxx-rt55.vercel.app/api/session/ping',
+        'https://couponmaxx.vercel.app/api/session/ping',
         pingPayload
       );
       console.log('[CheckoutMaxx] Checkout active — session:', currentSessionId);
