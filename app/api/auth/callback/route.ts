@@ -13,6 +13,7 @@ import { registerWebhooks } from "@/lib/shopify";
  * stores session and upserts shop row.
  */
 export async function GET(req: NextRequest) {
+  console.log("!!!!!!! AUTH CALLBACK HIT !!!!!!!", new Date().toISOString(), req.url);
   console.log("[auth/callback] incoming:", req.url);
 
   const params = req.nextUrl.searchParams;
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
     return new Response("Invalid HMAC", { status: 403 });
   }
 
+  console.log("!!!! STEP 1 HMAC OK:", shop);
   console.log("[auth/callback] HMAC valid for shop:", shop);
 
   // 2. Exchange code for access token
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
     }
     accessToken = body.access_token;
     scope = body.scope ?? "";
+    console.log("!!!! STEP 2 TOKEN OK:", shop);
     console.log("[auth/callback] token received for:", shop);
   } catch (err: any) {
     console.error("[auth/callback] token exchange error:", err.message);
@@ -85,12 +88,14 @@ export async function GET(req: NextRequest) {
   session.accessToken = accessToken;
   session.scope = scope;
   await sessionStorage.storeSession(session);
+  console.log("!!!! STEP 3 SESSION STORED:", shop);
   console.log("[auth/callback] session stored for:", shop);
 
   // 4. Register webhooks (fire and forget)
   registerWebhooks(session).catch(console.error);
 
   // 5. Register pixel (deregister old one first if exists)
+  console.log("!!!! STEP 4 PIXEL START:", shop);
   const existingShop = await prisma.shop.findUnique({ where: { shopDomain: shop } });
   if (existingShop?.pixelId) {
     deregisterAppPixel(shop, accessToken, existingShop.pixelId).catch(console.error);
@@ -99,18 +104,21 @@ export async function GET(req: NextRequest) {
   let pixelId: string | undefined;
   try {
     pixelId = await registerAppPixel(shop, accessToken);
+    console.log("!!!! STEP 4 PIXEL DONE:", shop, "pixelId:", pixelId);
     console.log("[auth/callback] pixel registered:", pixelId);
   } catch (err) {
     console.error("[auth/callback] pixel registration failed:", err);
   }
 
   // 6. Upsert shop row
+  console.log("!!!! STEP 5 UPSERT START:", shop);
   try {
     await prisma.shop.upsert({
       where: { shopDomain: shop },
       update: { accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
       create: { shopDomain: shop, accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
     });
+    console.log("!!!! STEP 5 UPSERT DONE:", shop);
     console.log("[auth/callback] shop upserted:", shop);
   } catch (err: any) {
     console.error("[auth/callback] DB upsert failed:", err.message);
@@ -118,6 +126,7 @@ export async function GET(req: NextRequest) {
   }
 
   // 7. Redirect into the embedded app
+  console.log("!!!! STEP 6 REDIRECTING:", shop);
   const appUrl = process.env.SHOPIFY_APP_URL || `https://${req.nextUrl.host}`;
   return NextResponse.redirect(`${appUrl}/welcome?shop=${shop}&host=${host}`);
 }
