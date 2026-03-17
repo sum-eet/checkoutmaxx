@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const end = new Date(p.get('end') ?? new Date().toISOString());
   const start = new Date(p.get('start') ?? subDays(end, 30).toISOString());
   const rangeMs = end.getTime() - start.getTime();
-  const prevEnd = start;
+  const prevEnd = new Date(start.getTime() - 1); // DA-9: no overlap with current period
   const prevStart = subDays(start, Math.round(rangeMs / 86400000));
 
   const [{ data: couponEvs }, { data: allCartEvs }] = await Promise.all([
@@ -33,13 +33,21 @@ export async function GET(req: NextRequest) {
 
   const cartEvents = allCartEvs ?? [];
   const sessionIds = Array.from(new Set(cartEvents.map((e) => e.sessionId)));
-  const { data: checkoutEvs } = await supabase.from('CheckoutEvent')
-    .select('sessionId, eventType, totalPrice, occurredAt').eq('shopId', shopId)
-    .in('sessionId', sessionIds.slice(0, 500)).limit(5000);
+
+  // DA-6: batch in groups of 500 — PostgREST .in() cap
+  type CheckoutRow = { sessionId: string; eventType: string; totalPrice: number | null; occurredAt: string };
+  const checkoutEvs: CheckoutRow[] = [];
+  for (let i = 0; i < sessionIds.length; i += 500) {
+    const batch = sessionIds.slice(i, i + 500);
+    const { data } = await supabase.from('CheckoutEvent')
+      .select('sessionId, eventType, totalPrice, occurredAt')
+      .eq('shopId', shopId).in('sessionId', batch).limit(5000);
+    checkoutEvs.push(...(data ?? []));
+  }
 
   const sessions = buildSessionsFromEvents(
     cartEvents as Parameters<typeof buildSessionsFromEvents>[0],
-    checkoutEvs ?? [],
+    checkoutEvs,
   );
 
   // Per-code stats
@@ -85,7 +93,7 @@ export async function GET(req: NextRequest) {
 
   // Handoff: failed sessions that converted anyway
   const completedSessionIds = new Set(
-    (checkoutEvs ?? []).filter((e) => e.eventType === 'checkout_completed').map((e) => e.sessionId)
+    (checkoutEvs).filter((e) => e.eventType === 'checkout_completed').map((e) => e.sessionId)
   );
   for (const [, s] of Array.from(codeMap)) {
     for (const sid of Array.from(s.failedSessions)) {
@@ -128,7 +136,7 @@ export async function GET(req: NextRequest) {
   // KPI: AOV with / without coupon
   const withCouponOrders = sessions.filter((s) => s.coupons.length > 0 && s.outcome === 'ordered');
   const withoutCouponOrders = sessions.filter((s) => s.coupons.length === 0 && s.outcome === 'ordered');
-  const checkoutCompletedEvs = (checkoutEvs ?? []).filter((e) => e.eventType === 'checkout_completed');
+  const checkoutCompletedEvs = (checkoutEvs).filter((e) => e.eventType === 'checkout_completed');
   const ccMap = new Map(checkoutCompletedEvs.map((e) => [e.sessionId, e.totalPrice as number ?? 0]));
   const aovWithCoupon = withCouponOrders.length > 0
     ? withCouponOrders.reduce((sum, s) => sum + (ccMap.get(s.sessionId) ?? 0), 0) / withCouponOrders.length : 0;
@@ -144,9 +152,9 @@ export async function GET(req: NextRequest) {
 
   // Build code table rows
   function getStatus(successRate: number, attempts: number): 'healthy' | 'degraded' | 'broken' | 'low_data' {
-    if (attempts < 5) return 'low_data';
-    if (successRate >= 50) return 'healthy';
-    if (successRate >= 20) return 'degraded';
+    if (attempts < 15) return 'low_data';
+    if (successRate >= 80) return 'healthy';
+    if (successRate >= 50) return 'degraded';
     return 'broken';
   }
 
@@ -200,15 +208,8 @@ export async function GET(req: NextRequest) {
     status: r.status,
   }));
 
-  // Zombie codes: 0% all-time success, >=3 attempts
-  const allTimeAttempts = new Map<string, { attempts: number; firstSeen: string; lastSeen: string }>();
-  for (const s of Array.from(codeMap.values())) {
-    for (const code of Array.from(s.attempts)) {
-      void code; // sessionId placeholder — unused
-    }
-  }
-  // Simpler: zombie = code with 0 successes and >=3 attempts in this period
-  const zombieCodes = codeRows.filter((r) => !r.lowData && r.successRate === 0).map((r) => ({
+  // Zombie codes: 0% success and not low_data (>=15 attempts)
+  const zombieCodes = codeRows.filter((r) => r.status !== 'low_data' && r.successRate === 0).map((r) => ({
     code: r.code,
     attempts: r.attempts,
     firstSeen: codeMap.get(r.code)!.firstSeen,

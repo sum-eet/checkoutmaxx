@@ -20,8 +20,9 @@ RETURNS TABLE (
   total_sessions            bigint,
   sessions_with_products    bigint,
   sessions_with_coupon      bigint,
-  coupon_applied            bigint,
-  coupon_attempted          bigint,
+  sessions_coupon_applied   bigint,
+  sessions_coupon_attempted bigint,
+  sessions_coupon_failed    bigint,
   checkout_clicked_sessions bigint
 )
 LANGUAGE sql STABLE AS $$
@@ -33,11 +34,15 @@ LANGUAGE sql STABLE AS $$
     COUNT(DISTINCT CASE WHEN "eventType" IN (
                           'cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered')
                         THEN "sessionId" END)                                      AS sessions_with_coupon,
-    COUNT(*) FILTER (WHERE "eventType" = 'cart_coupon_applied'
-                       OR "couponRecovered" = true)                                AS coupon_applied,
-    COUNT(*) FILTER (WHERE "eventType" IN (
-                       'cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered'))
-                                                                                   AS coupon_attempted,
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_coupon_applied'
+                          OR "couponRecovered" = true
+                        THEN "sessionId" END)                                      AS sessions_coupon_applied,
+    COUNT(DISTINCT CASE WHEN "eventType" IN (
+                          'cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered')
+                        THEN "sessionId" END)                                      AS sessions_coupon_attempted,
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_coupon_failed'
+                          AND NOT COALESCE("couponRecovered", false)
+                        THEN "sessionId" END)                                      AS sessions_coupon_failed,
     COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked'
                         THEN "sessionId" END)                                      AS checkout_clicked_sessions
   FROM "CartEvent"
@@ -100,7 +105,7 @@ LANGUAGE sql STABLE AS $$
     WHERE "shopId"     = p_shop_id
       AND "occurredAt" >= p_start
       AND "occurredAt" <= p_end
-      AND "eventType" IN ('cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered')
+      AND ("eventType" = 'cart_coupon_applied' OR "couponRecovered" = true)
       AND (p_session_ids IS NULL OR "sessionId" = ANY(p_session_ids))
   ),
   first_cart AS (
@@ -178,10 +183,12 @@ LANGUAGE sql STABLE AS $$
       COUNT(DISTINCT CASE WHEN "eventType" IN (
                             'cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered')
                           THEN "sessionId" END)                                 AS sessions_with_coupon,
-      COUNT(*) FILTER (WHERE "eventType" = 'cart_coupon_applied'
-                         OR "couponRecovered" = true)                           AS coupon_applied,
-      COUNT(*) FILTER (WHERE "eventType" = 'cart_coupon_failed'
-                         AND NOT COALESCE("couponRecovered", false))            AS coupon_failed,
+      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_coupon_applied'
+                            OR "couponRecovered" = true
+                          THEN "sessionId" END)                                 AS coupon_applied,
+      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_coupon_failed'
+                            AND NOT COALESCE("couponRecovered", false)
+                          THEN "sessionId" END)                                 AS coupon_failed,
       COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked'
                           THEN "sessionId" END)                                 AS cart_clicked
     FROM "CartEvent"
@@ -334,15 +341,15 @@ LANGUAGE sql STABLE AS $$
       "sessionId",
       MIN("occurredAt")                                                          AS first_event,
       EXTRACT(EPOCH FROM (MAX("occurredAt") - MIN("occurredAt"))) * 1000        AS duration_ms,
-      (ARRAY_AGG("country"     ORDER BY "occurredAt" DESC)
+      (ARRAY_AGG("country"     ORDER BY "occurredAt" ASC)
          FILTER (WHERE "country"     IS NOT NULL))[1]                           AS country,
-      (ARRAY_AGG("device"      ORDER BY "occurredAt" DESC)
+      (ARRAY_AGG("device"      ORDER BY "occurredAt" ASC)
          FILTER (WHERE "device"      IS NOT NULL))[1]                           AS device,
-      (ARRAY_AGG("utmSource"   ORDER BY "occurredAt" DESC)
+      (ARRAY_AGG("utmSource"   ORDER BY "occurredAt" ASC)
          FILTER (WHERE "utmSource"   IS NOT NULL))[1]                           AS utm_source,
-      (ARRAY_AGG("utmMedium"   ORDER BY "occurredAt" DESC)
+      (ARRAY_AGG("utmMedium"   ORDER BY "occurredAt" ASC)
          FILTER (WHERE "utmMedium"   IS NOT NULL))[1]                           AS utm_medium,
-      (ARRAY_AGG("utmCampaign" ORDER BY "occurredAt" DESC)
+      (ARRAY_AGG("utmCampaign" ORDER BY "occurredAt" ASC)
          FILTER (WHERE "utmCampaign" IS NOT NULL))[1]                           AS utm_campaign,
       (ARRAY_AGG("cartValue" ORDER BY "occurredAt" ASC)
          FILTER (WHERE "cartValue" > 0))[1]                                     AS cart_value_start,

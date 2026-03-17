@@ -362,8 +362,8 @@ export default function AnalyticsPage() {
         />
 
         <MetricCard
-          title="Carts with coupon applied"
-          definition="Percent of product carts where a coupon code was attempted"
+          title="Coupon usage rate"
+          definition="Percent of product carts where a customer entered a coupon code"
           bigNumber={cartsWithCouponBigNum}
           data={cartsWithCouponData}
           compareData={cartsWithCouponCompare}

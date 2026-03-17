@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
   const end = new Date(p.get('end') ?? new Date().toISOString());
   const start = new Date(p.get('start') ?? subDays(end, 30).toISOString());
   const rangeMs = end.getTime() - start.getTime();
-  const prevEnd = start;
+  const prevEnd = new Date(start.getTime() - 1); // DA-9: no overlap
   const prevStart = subDays(start, Math.round(rangeMs / 86400000));
 
   const [{ data: codeEvs }, { data: allCartEvs }, { data: prevEvs }] = await Promise.all([
@@ -38,13 +38,21 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
 
   const cartEvents = allCartEvs ?? [];
   const sessionIds = Array.from(new Set(cartEvents.map((e) => e.sessionId)));
-  const { data: checkoutEvs } = await supabase.from('CheckoutEvent')
-    .select('sessionId, eventType, totalPrice, occurredAt').eq('shopId', shopId)
-    .in('sessionId', sessionIds.slice(0, 500)).limit(5000);
+
+  // DA-6: batch in groups of 500
+  type CheckoutRow = { sessionId: string; eventType: string; totalPrice: number | null; occurredAt: string };
+  const checkoutEvs: CheckoutRow[] = [];
+  for (let i = 0; i < sessionIds.length; i += 500) {
+    const batch = sessionIds.slice(i, i + 500);
+    const { data } = await supabase.from('CheckoutEvent')
+      .select('sessionId, eventType, totalPrice, occurredAt')
+      .eq('shopId', shopId).in('sessionId', batch).limit(5000);
+    checkoutEvs.push(...(data ?? []));
+  }
 
   const sessions = buildSessionsFromEvents(
     cartEvents as Parameters<typeof buildSessionsFromEvents>[0],
-    checkoutEvs ?? [],
+    checkoutEvs,
   );
 
   const attempts = new Set((codeEvs ?? []).map((e) => e.sessionId));
@@ -64,7 +72,7 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
 
   // Handoff rate
   const failedSessions = new Set((codeEvs ?? []).filter((e) => !e.couponSuccess && !e.couponRecovered).map((e) => e.sessionId));
-  const completedSessIds = new Set((checkoutEvs ?? []).filter((e) => e.eventType === 'checkout_completed').map((e) => e.sessionId));
+  const completedSessIds = new Set(checkoutEvs.filter((e) => e.eventType === 'checkout_completed').map((e) => e.sessionId));
   const handoffSessions = Array.from(failedSessions).filter((id) => completedSessIds.has(id));
   const handoffRate = failedSessions.size > 0 ? Math.round((handoffSessions.length / failedSessions.size) * 1000) / 10 : 0;
 
@@ -87,7 +95,7 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
   }));
 
   // Status
-  const status = attempts.size < 5 ? 'low_data' : successRate >= 50 ? 'healthy' : successRate >= 20 ? 'degraded' : 'broken';
+  const status = attempts.size < 15 ? 'low_data' : successRate >= 80 ? 'healthy' : successRate >= 50 ? 'degraded' : 'broken';
 
   // Product breakdown
   const productMap = new Map<string, { attempts: number; successes: number }>();

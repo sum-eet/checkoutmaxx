@@ -7,11 +7,11 @@ function dateStr(d: Date | string) { return new Date(d).toISOString().slice(0, 1
 
 // Build a zero-filled daily map covering every UTC calendar day start→end.
 function buildDailyMap(start: Date, end: Date) {
-  const map = new Map<string, { applied: number; attempted: number; totalSessions: number; sessionsWithProducts: number; sessionsWithCoupon: number; checkoutClicked: number; checkoutSessions: number }>();
+  const map = new Map<string, { applied: number; attempted: number; failedSessions: number; totalSessions: number; sessionsWithProducts: number; sessionsWithCoupon: number; checkoutClicked: number; checkoutSessions: number }>();
   let cur = new Date(dateStr(start) + 'T00:00:00.000Z');
   const endCur = new Date(dateStr(end) + 'T00:00:00.000Z');
   while (cur <= endCur) {
-    map.set(dateStr(cur), { applied: 0, attempted: 0, totalSessions: 0, sessionsWithProducts: 0, sessionsWithCoupon: 0, checkoutClicked: 0, checkoutSessions: 0 });
+    map.set(dateStr(cur), { applied: 0, attempted: 0, failedSessions: 0, totalSessions: 0, sessionsWithProducts: 0, sessionsWithCoupon: 0, checkoutClicked: 0, checkoutSessions: 0 });
     cur = new Date(cur.getTime() + 86400000);
   }
   return map;
@@ -34,7 +34,6 @@ export async function GET(req: NextRequest) {
   const end   = new Date(dateStr(rawEnd)   + 'T23:59:59.999Z');
 
   const rangeMs  = end.getTime() - start.getTime();
-  const prevEnd   = start;
   const prevStart = subDays(start, Math.round(rangeMs / 86400000));
 
   const device    = p.get('device')    ?? '';
@@ -75,7 +74,7 @@ export async function GET(req: NextRequest) {
     supabase.rpc('couponmaxx_funnel_totals',           rpcArgs),
   ]);
 
-  type DailyCartRow = { day: string; total_sessions: number; sessions_with_products: number; sessions_with_coupon: number; coupon_applied: number; coupon_attempted: number; checkout_clicked_sessions: number };
+  type DailyCartRow = { day: string; total_sessions: number; sessions_with_products: number; sessions_with_coupon: number; sessions_coupon_applied: number; sessions_coupon_attempted: number; sessions_coupon_failed: number; checkout_clicked_sessions: number };
   type CheckoutRow  = { day: string; checkout_sessions: number };
   type AttrRow      = { day: string; attributed_value: number; attributed_total: number };
   type FunnelRow    = { total_sessions: number; sessions_with_products: number; sessions_with_coupon: number; coupon_applied: number; coupon_failed: number; reached_checkout: number };
@@ -91,6 +90,7 @@ export async function GET(req: NextRequest) {
   const attrTotal = attrRows.reduce((s, r) => s + (r.attributed_value ?? 0), 0);
 
   // Build zero-filled daily map — fills gaps for days with no events
+  const prevEnd   = new Date(start.getTime() - 1);  // DA-9: 1ms before current start, no overlap
   const daily = buildDailyMap(start, end);
   for (const r of cartRows) {
     const key = dateStr(r.day);
@@ -99,8 +99,9 @@ export async function GET(req: NextRequest) {
     b.totalSessions       = r.total_sessions;
     b.sessionsWithProducts = r.sessions_with_products;
     b.sessionsWithCoupon  = r.sessions_with_coupon;
-    b.applied             = r.coupon_applied;
-    b.attempted           = r.coupon_attempted;
+    b.applied             = r.sessions_coupon_applied;
+    b.attempted           = r.sessions_coupon_attempted;
+    b.failedSessions      = r.sessions_coupon_failed;
     b.checkoutClicked     = r.checkout_clicked_sessions;
   }
   for (const [key, b] of Array.from(daily)) {
@@ -136,7 +137,7 @@ export async function GET(req: NextRequest) {
       cartsWithProducts: b.sessionsWithProducts,
       couponsAttempted: b.sessionsWithCoupon,
       couponsApplied:   b.applied,
-      couponsFailed:    b.attempted - b.applied,
+      couponsFailed:    b.failedSessions,
       reachedCheckout:  b.checkoutSessions,
     });
   }
@@ -162,7 +163,7 @@ export async function GET(req: NextRequest) {
     const prevByOffset = new Map<number, { applied: number; attempted: number }>();
     for (const r of (prevRows as DailyCartRow[] ?? [])) {
       const offset = Math.round((new Date(r.day).getTime() - prevStart.getTime()) / 86400000);
-      prevByOffset.set(offset, { applied: r.coupon_applied, attempted: r.coupon_attempted });
+      prevByOffset.set(offset, { applied: r.sessions_coupon_applied, attempted: r.sessions_coupon_attempted });
     }
     successRateComparison = Array.from(daily.keys()).sort().map((date, i) => {
       const prev = prevByOffset.get(i);

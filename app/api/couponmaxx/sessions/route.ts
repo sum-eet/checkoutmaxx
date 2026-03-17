@@ -14,12 +14,15 @@ function sessionFromSummary(row: SessionSummaryRow) {
   if (row.has_ordered)          outcome = 'ordered';
   else if (row.has_checkout_started || row.has_checkout_clicked) outcome = 'checkout';
 
-  // Build products from product_titles (or from line_items if available)
-  const products = (row.product_titles ?? []).map((t: string) => ({
-    productTitle: t,
-    price: null,
-    quantity: 1,
-  }));
+  // Build products from line_items (real qty/price) with fallback to product_titles
+  const rawLineItems = row.line_items as Array<{ productTitle?: string; price?: number; quantity?: number }> | null;
+  const products = rawLineItems && rawLineItems.length > 0
+    ? rawLineItems.map((item) => ({
+        productTitle: item.productTitle ?? null,
+        price: item.price ?? null,  // already in cents from CartEvent
+        quantity: item.quantity ?? 1,
+      }))
+    : (row.product_titles ?? []).map((t: string) => ({ productTitle: t, price: null, quantity: 1 }));
 
   // Build coupons from coupon_events JSON
   // Each event: {code, eventType, recovered, discountAmount}
