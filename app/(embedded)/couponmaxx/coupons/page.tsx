@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Modal, Spinner, Text, Banner } from '@shopify/polaris';
+import { ButtonGroup, Button as PolarisButton, Card, IndexTable, Modal, Page, Spinner, Tabs, Text, Banner } from '@shopify/polaris';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Cell, Legend,
@@ -510,14 +510,8 @@ export default function CouponsPage() {
   });
 
   return (
-    <div style={{ background: '#F1F1F1', minHeight: '100vh', padding: 24 }}>
-      {/* Page header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: 0 }}>Coupons</h1>
-        <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0' }}>
-          Track every code, find what's failing, understand what's driving revenue.
-        </p>
-      </div>
+    <Page title="Coupons" subtitle="Track every code, find what's failing, understand what's driving revenue.">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Date range picker */}
       <div style={{ marginBottom: 20 }}>
@@ -603,9 +597,9 @@ export default function CouponsPage() {
           </div>
 
           {/* Charts row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {/* Left — Code Velocity */}
-            <div style={card}>
+            <Card>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>Code velocity</div>
               <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Daily attempt volume by code</div>
               {data.velocityChart.daily.length === 0 ? (
@@ -658,10 +652,10 @@ export default function CouponsPage() {
                   </ResponsiveContainer>
                 </>
               )}
-            </div>
+            </Card>
 
             {/* Right — Success Rate by Code */}
-            <div style={card}>
+            <Card>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 2 }}>Success rate by code</div>
               <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Sorted by attempt volume</div>
               {data.successRateChart.length === 0 ? (
@@ -706,7 +700,7 @@ export default function CouponsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               )}
-            </div>
+            </Card>
           </div>
 
           {/* Zombie codes — conditional, collapsible */}
@@ -777,51 +771,39 @@ export default function CouponsPage() {
           )}
 
           {/* Code table */}
-          <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-            {/* Table header */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E3E3E3' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Card padding="0">
+          <div style={{ overflow: 'hidden' }}>
+            {/* Table header — status tabs + sort */}
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid #E3E3E3' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>All codes</div>
                   <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 2 }}>
                     {data.codes.length} code{data.codes.length !== 1 ? 's' : ''} tracked in this period
                   </div>
                 </div>
-                {/* Sort */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>Sort:</span>
+                <ButtonGroup variant="segmented">
                   {(['attempts', 'successRate', 'avgCart', 'lastSeen'] as const).map((s) => {
-                    const labels: Record<string, string> = {
-                      attempts: 'Attempts',
-                      successRate: 'Success rate',
-                      avgCart: 'Avg cart',
-                      lastSeen: 'Last seen',
-                    };
+                    const labels: Record<string, string> = { attempts: 'Attempts', successRate: 'Success rate', avgCart: 'Avg cart', lastSeen: 'Last seen' };
                     return (
-                      <button key={s} onClick={() => setSortBy(s)} style={pillBtn(sortBy === s)}>
+                      <PolarisButton key={s} pressed={sortBy === s} onClick={() => setSortBy(s)}>
                         {labels[s]}
-                      </button>
+                      </PolarisButton>
                     );
                   })}
-                </div>
+                </ButtonGroup>
               </div>
-              {/* Status filter */}
-              <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
-                {(['all', 'healthy', 'degraded', 'broken', 'low_data'] as const).map((s) => {
-                  const labels: Record<string, string> = {
-                    all: 'All',
-                    healthy: 'Healthy',
-                    degraded: 'Degraded',
-                    broken: 'Broken',
-                    low_data: 'Low data',
-                  };
-                  return (
-                    <button key={s} onClick={() => setStatusFilter(s)} style={pillBtn(statusFilter === s)}>
-                      {labels[s]}
-                    </button>
-                  );
-                })}
-              </div>
+              <Tabs
+                tabs={[
+                  { id: 'all', content: 'All' },
+                  { id: 'healthy', content: 'Healthy' },
+                  { id: 'degraded', content: 'Degraded' },
+                  { id: 'broken', content: 'Broken' },
+                  { id: 'low_data', content: 'Low data' },
+                ]}
+                selected={['all', 'healthy', 'degraded', 'broken', 'low_data'].indexOf(statusFilter)}
+                onSelect={(i) => setStatusFilter((['all', 'healthy', 'degraded', 'broken', 'low_data'] as const)[i])}
+              />
             </div>
 
             {/* Table */}
@@ -830,101 +812,56 @@ export default function CouponsPage() {
                 No codes match the current filter.
               </div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col style={{ width: 5 }} />
-                    <col style={{ width: 160 }} />
-                    <col style={{ width: 80 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 120 }} />
-                    <col style={{ width: 120 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 100 }} />
-                    <col style={{ width: 90 }} />
-                  </colgroup>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #E3E3E3' }}>
-                      <th style={{ padding: 0 }} />
-                      {['Code', 'Attempts', 'Success rate', 'Avg cart (Success)', 'Avg cart (Failed)', 'Recoveries', 'Handoff rate', 'Last seen'].map((h) => (
-                        <th key={h} style={{
-                          textAlign: 'left', padding: '10px 12px',
-                          fontSize: 11, fontWeight: 500, color: '#9CA3AF',
-                        }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCodes.map((row) => (
-                      <tr
-                        key={row.code}
-                        onClick={() => setSelectedCode(row.code)}
-                        style={{
-                          borderBottom: '1px solid #F3F4F6',
-                          cursor: 'pointer',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#F9FAFB'; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}
-                      >
-                        {/* Status indicator */}
-                        <td style={{
-                          padding: 0,
-                          width: 5,
-                          background: STATUS_BORDER[row.status],
-                        }} />
-                        {/* Code */}
-                        <td style={{
-                          padding: '10px 12px',
-                          fontFamily: 'monospace',
-                          fontSize: 13,
-                          fontWeight: row.status === 'broken' || row.status === 'degraded' ? 700 : 400,
-                          color: '#111827',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {row.code}
-                        </td>
-                        {/* Attempts */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: '#374151' }}>
-                          {row.attempts}
-                        </td>
-                        {/* Success rate */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: STATUS_COLOR[row.status], fontWeight: 600 }}>
-                          {row.successRate.toFixed(1)}%
-                        </td>
-                        {/* Avg cart success */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: '#374151' }}>
-                          ${Math.round(row.avgCart)}
-                        </td>
-                        {/* Avg cart fail */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: '#374151' }}>
-                          ${Math.round(row.avgCartFail)}
-                        </td>
-                        {/* Recoveries */}
-                        <td style={{ padding: '10px 12px', fontSize: 13 }}>
-                          {row.recoveries > 0 ? (
-                            <span style={{ color: '#1D4ED8' }}>{row.recoveries} unlocked</span>
-                          ) : '—'}
-                        </td>
-                        {/* Handoff rate */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: '#374151' }}>
-                          {row.handoffRate.toFixed(1)}%
-                        </td>
-                        {/* Last seen */}
-                        <td style={{ padding: '10px 12px', fontSize: 13, color: '#374151' }}>
-                          {fmtDate(row.lastSeen)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <IndexTable
+                resourceName={{ singular: 'code', plural: 'codes' }}
+                itemCount={filteredCodes.length}
+                headings={[
+                  { title: 'Code' },
+                  { title: 'Attempts' },
+                  { title: 'Success rate' },
+                  { title: 'Avg cart (Success)' },
+                  { title: 'Avg cart (Failed)' },
+                  { title: 'Recoveries' },
+                  { title: 'Handoff rate' },
+                  { title: 'Last seen' },
+                ]}
+                selectable={false}
+              >
+                {filteredCodes.map((row, i) => (
+                  <IndexTable.Row
+                    key={row.code}
+                    id={row.code}
+                    position={i}
+                    onClick={() => setSelectedCode(row.code)}
+                  >
+                    <IndexTable.Cell>
+                      <span style={{
+                        fontFamily: 'monospace', fontSize: 13,
+                        fontWeight: row.status === 'broken' || row.status === 'degraded' ? 700 : 400,
+                        color: '#111827',
+                        display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_BORDER[row.status], flexShrink: 0, display: 'inline-block' }} />
+                        {row.code}
+                      </span>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>{row.attempts}</IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <span style={{ color: STATUS_COLOR[row.status], fontWeight: 600 }}>{row.successRate.toFixed(1)}%</span>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>${Math.round(row.avgCart)}</IndexTable.Cell>
+                    <IndexTable.Cell>${Math.round(row.avgCartFail)}</IndexTable.Cell>
+                    <IndexTable.Cell>
+                      {row.recoveries > 0 ? <span style={{ color: '#1D4ED8' }}>{row.recoveries} unlocked</span> : '—'}
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>{row.handoffRate.toFixed(1)}%</IndexTable.Cell>
+                    <IndexTable.Cell>{fmtDate(row.lastSeen)}</IndexTable.Cell>
+                  </IndexTable.Row>
+                ))}
+              </IndexTable>
             )}
           </div>
+          </Card>
         </>
       )}
 
@@ -938,6 +875,7 @@ export default function CouponsPage() {
           onClose={() => setSelectedCode(null)}
         />
       )}
-    </div>
+      </div>
+    </Page>
   );
 }

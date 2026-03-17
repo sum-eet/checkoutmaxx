@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Banner, Select, InlineStack } from '@shopify/polaris';
+import { Banner, Card, Page, BlockStack, Select, InlineStack } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -296,7 +296,8 @@ export default function AnalyticsPage() {
   ));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <Page title="Analytics">
+      <BlockStack gap="400">
 
       {/* Onboarding banner (dismissible setup guide) */}
       <OnboardingBanner />
@@ -316,35 +317,21 @@ export default function AnalyticsPage() {
       )}
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 0 — Page title + date controls                                  */}
+      {/* Row 0 — Date controls + filters                                     */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexWrap: 'wrap', gap: 12,
-      }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: '#111827' }}>
-          Analytics
-        </h1>
-        <InlineStack gap="200" blockAlign="center">
-          <DateRangePicker value={dateRange} onChange={setDateRange} defaultDays={7} />
-          <Select
-            label="Compare to"
-            labelInline
-            options={[
-              { label: 'No comparison', value: '' },
-              { label: 'Previous period', value: 'previous_period' },
-              { label: 'Previous year', value: 'previous_year' },
-            ]}
-            value={compareTo}
-            onChange={(v) => setCompareTo(v as CompareOption)}
-          />
-        </InlineStack>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Row 1 — Filter pills                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <InlineStack gap="300" blockAlign="center">
+      <InlineStack gap="300" blockAlign="center" wrap>
+        <DateRangePicker value={dateRange} onChange={setDateRange} defaultDays={7} />
+        <Select
+          label="Compare to"
+          labelInline
+          options={[
+            { label: 'No comparison', value: '' },
+            { label: 'Previous period', value: 'previous_period' },
+            { label: 'Previous year', value: 'previous_year' },
+          ]}
+          value={compareTo}
+          onChange={(v) => setCompareTo(v as CompareOption)}
+        />
         <Select
           label="Device"
           labelInline
@@ -362,7 +349,7 @@ export default function AnalyticsPage() {
       </InlineStack>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 2 — Metric cards: Coupon success rate + Carts with coupon      */}
+      {/* Row 1 — Metric cards: Coupon success rate + Carts with coupon      */}
       {/* ------------------------------------------------------------------ */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <MetricCard
@@ -393,7 +380,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 3 — Attributed sales + Cart views                              */}
+      {/* Row 2 — Attributed sales + Cart views                              */}
       {/* ------------------------------------------------------------------ */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <MetricCard
@@ -443,14 +430,13 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 4 — Coupon funnel (full width card)                            */}
+      {/* Row 3 — Coupon funnel (full width card)                            */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{
-        background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: 20,
-      }}>
+      <Card>
         <FunnelChart columns={funnelColumns} loading={isLoading} />
-      </div>
+      </Card>
 
-    </div>
+      </BlockStack>
+    </Page>
   );
 }

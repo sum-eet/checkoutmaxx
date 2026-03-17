@@ -183,7 +183,7 @@ export async function GET(req: NextRequest) {
       revPerSession: Math.round(revPerSession * 100) / 100,
       vsBaseline: Math.round(vsBaseline * 100) / 100,
       lastSeen: s.lastSeen,
-      lowData: s.attempts.size < 5,
+      lowData: s.attempts.size < 15,
     };
   });
 

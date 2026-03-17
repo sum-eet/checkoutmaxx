@@ -6,7 +6,6 @@
 // Parent layout skips its own NavMenu + LiveBanner on /couponmaxx/* routes
 
 import { NavMenu } from '@shopify/app-bridge-react';
-import { Header } from '@/components/couponmaxx/Header';
 
 export default function CouponMaxxLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -22,11 +21,8 @@ export default function CouponMaxxLayout({ children }: { children: React.ReactNo
         minHeight: '100vh',
         background: '#F1F1F1',
         fontFamily: 'system-ui, -apple-system, sans-serif',
-        display: 'flex',
-        flexDirection: 'column',
       }}>
-        <Header />
-        <div style={{ flex: 1, padding: '20px 24px' }}>
+        <div style={{ padding: '20px 24px' }}>
           <div style={{ maxWidth: 1000, margin: '0 auto' }}>
             {children}
           </div>

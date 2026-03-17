@@ -1184,5 +1184,50 @@ so it was dropped and recreated. All 7 functions redeployed via psql to Supabase
 - DA-8: AOV units verification (totalPrice dollars vs cents)
 - DA-12: UTM source bucketing inconsistency across SQL/JS/frontend
 - DA-15: Settings API reads columns that may not exist in DB
-- Phase 3: All Polaris UI compliance fixes (UI-1 through UI-16)
 - Phase 4: Compare mode, welcome page, filter options, redirects
+
+---
+
+## 2026-03-17: Polaris Migration — Final Verification (Tasks 12–15)
+
+Completed the remaining tasks from POLARIS-MIGRATION-ATOMIC.md.
+
+### Task 12 — Notifications page Polaris wrap
+- Added `Page, Card, BlockStack, Tabs, Text` imports from `@shopify/polaris`
+- Replaced outer wrapper div + `<h1>` with `<Page title="Notifications">`
+- Replaced custom tab buttons (`tabStyle` function) with Polaris `<Tabs>`
+- Replaced 5 custom card divs (alert list, alert triggers, Slack, Email, weekly digest) with `<Card>`
+- Replaced `<div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>` in SettingsTab with `<BlockStack gap="400">`
+- Alert row and severity toggle rows kept as inline-styled divs (appropriate for dense list UI)
+
+### Task 13 — OnboardingBanner Polaris rewrite
+- Full rewrite of `components/couponmaxx/OnboardingBanner.tsx`
+- Replaced outer custom div with `<Card>` + `<BlockStack gap="300">`
+- Header row: `<InlineStack align="space-between">` with `<Text variant="headingSm">` + `<Button variant="plain">Dismiss</Button>`
+- Step grid: `<InlineGrid columns={3} gap="300">` with `<Card>` per step
+- Step content: `<BlockStack gap="100">` with `<Text>` variants
+- Number badge kept as inline span (no Polaris Badge equivalent for colored circles)
+
+### Task 14 — Toggle.tsx → Polaris Checkbox
+- Replaced custom toggle (sliding circle animation, `@keyframes cmTogglePulse`) with Polaris `<Checkbox>`
+- Added optional `label` prop; `labelHidden={!label}` when no label passed
+- All 9+ existing callsites in notifications page work without change (label is optional)
+
+### Task 15 — Final verification suite
+
+```
+=== FINAL VERIFICATION ===
+1. Custom card divs:       0  (Expected: 0) ✓
+2. Raw tables in sessions: 0  (Expected: 0) ✓
+3. Raw tables in coupons:  3  (Expected: <= 3, only inside Modal) ✓
+4. Custom h1:              0  (Expected: 0) ✓
+5. Header.tsx: No such file or directory ✓
+6. FilterPill.tsx: No such file or directory ✓
+7. IndexTable: sessions + coupons ✓
+8. Page component: all 4 pages (analytics, coupons, sessions, notifications) ✓
+9. lowData: s.attempts.size < 15 ✓
+10. Build: next build — zero errors, all routes compiled ✓
+=== END ===
+```
+
+**All 15 tasks from POLARIS-MIGRATION-ATOMIC.md complete.**

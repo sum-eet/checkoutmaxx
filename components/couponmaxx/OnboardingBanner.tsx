@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { BlockStack, Button, Card, InlineGrid, InlineStack, Text } from '@shopify/polaris';
 
 const STORAGE_KEY = 'cm_onboarding_dismissed';
 
@@ -54,65 +55,43 @@ export function OnboardingBanner() {
   if (dismissed === null || dismissed) return null;
 
   return (
-    <div style={{
-      background: '#EFF6FF',
-      border: '1px solid #BFDBFE',
-      borderRadius: 8,
-      padding: '16px 20px',
-      position: 'relative',
-    }}>
-      {/* Dismiss button */}
-      <button
-        onClick={handleDismiss}
-        aria-label="Dismiss setup guide"
-        style={{
-          position: 'absolute', top: 12, right: 12,
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#6B7280', fontSize: 16, lineHeight: 1, padding: 4,
-        }}
-      >
-        ×
-      </button>
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text variant="headingSm" fontWeight="semibold" as="h2">
+            Get started with CouponMaxx
+          </Text>
+          <Button variant="plain" onClick={handleDismiss}>Dismiss</Button>
+        </InlineStack>
 
-      <div style={{ fontSize: 13, fontWeight: 600, color: '#1D4ED8', marginBottom: 12 }}>
-        Get started with CouponMaxx
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        {STEPS.map((step, i) => (
-          <div key={i} style={{
-            background: '#FFFFFF',
-            border: '1px solid #BFDBFE',
-            borderRadius: 6,
-            padding: '12px 14px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{
-                width: 20, height: 20, borderRadius: '50%',
-                background: '#1D4ED8', color: '#FFFFFF',
-                fontSize: 11, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                {i + 1}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{step.title}</span>
-            </div>
-            <p style={{ fontSize: 12, color: '#6B7280', margin: '0 0 8px', lineHeight: 1.5 }}>
-              {step.description}
-            </p>
-            <a
-              href={step.href}
-              style={{
-                fontSize: 12, color: '#1D4ED8', fontWeight: 500,
-                textDecoration: 'none',
-              }}
-            >
-              {step.cta} →
-            </a>
-          </div>
-        ))}
-      </div>
-    </div>
+        <InlineGrid columns={3} gap="300">
+          {STEPS.map((step, i) => (
+            <Card key={i}>
+              <BlockStack gap="100">
+                <InlineStack gap="200" blockAlign="center">
+                  <span style={{
+                    width: 20, height: 20, borderRadius: '50%',
+                    background: '#1D4ED8', color: '#FFFFFF',
+                    fontSize: 11, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {i + 1}
+                  </span>
+                  <Text variant="bodyMd" fontWeight="semibold" as="span">{step.title}</Text>
+                </InlineStack>
+                <Text variant="bodySm" tone="subdued" as="p">{step.description}</Text>
+                <a
+                  href={step.href}
+                  style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 500, textDecoration: 'none' }}
+                >
+                  {step.cta} →
+                </a>
+              </BlockStack>
+            </Card>
+          ))}
+        </InlineGrid>
+      </BlockStack>
+    </Card>
   );
 }

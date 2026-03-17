@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, Modal, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
+import { Banner, Card, Icon, IndexTable, Modal, Page, Pagination, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
+import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon, XSmallIcon } from '@shopify/polaris-icons';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -149,58 +150,6 @@ function deriveSourceLabel(utmSource: string | null, utmMedium: string | null): 
 // SVG Icons
 // ---------------------------------------------------------------------------
 
-function DesktopIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="14" rx="2" />
-      <path d="M8 21h8M12 17v4" />
-    </svg>
-  );
-}
-
-function MobileIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="5" y="2" width="14" height="20" rx="2" />
-      <path d="M12 18h.01" />
-    </svg>
-  );
-}
-
-function TabletIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="2" width="16" height="20" rx="2" />
-      <path d="M12 18h.01" />
-    </svg>
-  );
-}
-
-function RefreshIcon({ spinning }: { spinning: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="#6B7280"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ animation: spinning ? 'spin 0.8s linear infinite' : undefined }}
-    >
-      <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round">
-      <path d="M18 6L6 18M6 6l12 12" />
-    </svg>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // DeviceCell
@@ -209,16 +158,11 @@ function CloseIcon() {
 function DeviceCell({ device }: { device: string | null }) {
   if (!device) return <span style={{ color: '#9CA3AF' }}>—</span>;
   const lower = device.toLowerCase();
-  let icon: React.ReactNode = <span style={{ color: '#9CA3AF' }}>—</span>;
-  let label = device;
-
-  if (lower === 'desktop') { icon = <DesktopIcon />; label = 'Desktop'; }
-  else if (lower === 'mobile') { icon = <MobileIcon />; label = 'Mobile'; }
-  else if (lower === 'tablet') { icon = <TabletIcon />; label = 'Tablet'; }
-
+  const source = lower === 'desktop' ? DesktopIcon : lower === 'mobile' ? MobileIcon : lower === 'tablet' ? TabletIcon : null;
+  if (!source) return <span style={{ fontSize: 12, color: '#6B7280' }}>{device}</span>;
   return (
-    <div title={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {icon}
+    <div title={device} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Icon source={source} tone="subdued" />
     </div>
   );
 }
@@ -840,6 +784,7 @@ export default function SessionsPage() {
       {/* Keyframe injection for spinner animation */}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
+      <Page title="Cart Sessions">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Error banner */}
@@ -849,17 +794,6 @@ export default function SessionsPage() {
           </Banner>
         )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Page title + purpose line                                         */}
-        {/* ---------------------------------------------------------------- */}
-        <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: '#111827' }}>
-            Cart Sessions
-          </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6B7280' }}>
-            Click a card to filter the table. Click View on any row to see the full journey.
-          </p>
-        </div>
 
         {/* ---------------------------------------------------------------- */}
         {/* Section 1 — Date range pill + Refresh                            */}
@@ -876,7 +810,9 @@ export default function SessionsPage() {
               cursor: 'pointer', padding: 0, flexShrink: 0,
             }}
           >
-            <RefreshIcon spinning={refreshing} />
+            <div style={{ animation: refreshing ? 'spin 0.8s linear infinite' : undefined, display: 'flex' }}>
+              <Icon source={RefreshIcon} tone="subdued" />
+            </div>
           </button>
         </div>
 
@@ -923,11 +859,7 @@ export default function SessionsPage() {
         {/* ---------------------------------------------------------------- */}
         {/* Section 3 — Filter bar                                           */}
         {/* ---------------------------------------------------------------- */}
-        <div
-          style={{
-            background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: '12px 16px',
-          }}
-        >
+        <Card>
           <InlineStack gap="300" wrap>
             <Select
               label="Country"
@@ -972,7 +904,7 @@ export default function SessionsPage() {
               onChange={setUtmSource}
             />
           </InlineStack>
-        </div>
+        </Card>
 
         {/* ---------------------------------------------------------------- */}
         {/* Section 4 — Scoped counts                                        */}
@@ -990,7 +922,8 @@ export default function SessionsPage() {
         {/* ---------------------------------------------------------------- */}
         {/* Section 5 — Session table                                        */}
         {/* ---------------------------------------------------------------- */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, overflowX: 'auto' }}>
+        <Card padding="0">
+        <div style={{ overflowX: 'auto' }}>
           {isLoading && sessions.length === 0 ? (
             <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 48 }}>
               <Spinner size="small" />
@@ -1000,116 +933,69 @@ export default function SessionsPage() {
               No sessions found for the selected filters.
             </div>
           ) : (
-            <table
-              style={{
-                tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse',
-              }}
+            <IndexTable
+              resourceName={{ singular: 'session', plural: 'sessions' }}
+              itemCount={sessions.length}
+              headings={[
+                { title: 'Time' },
+                { title: 'Country' },
+                { title: 'Device' },
+                { title: 'Source' },
+                { title: 'Products' },
+                { title: 'Cart value' },
+                { title: 'Coupons' },
+                { title: 'Outcome' },
+                { title: '' },
+              ]}
+              selectable={false}
             >
-              <colgroup>
-                <col style={{ width: 90 }} />
-                <col style={{ width: 42 }} />
-                <col style={{ width: 38 }} />
-                <col style={{ width: 70 }} />
-                <col /> {/* flex */}
-                <col style={{ width: 90 }} />
-                <col style={{ width: 110 }} />
-                <col style={{ width: 80 }} />
-                <col style={{ width: 52 }} />
-              </colgroup>
-              <thead>
-                <tr style={{ background: '#FAFAFA' }}>
-                  <th style={thStyle}>Time</th>
-                  <th style={{ ...thStyle, textAlign: 'center' }}>Country</th>
-                  <th style={{ ...thStyle, textAlign: 'center' }}>Device</th>
-                  <th style={thStyle}>Source</th>
-                  <th style={thStyle}>Products</th>
-                  <th style={thStyle}>Cart value</th>
-                  <th style={thStyle}>Coupons</th>
-                  <th style={thStyle}>Outcome</th>
-                  <th style={{ ...thStyle, textAlign: 'center' }}>View</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((s) => (
-                  <tr
-                    key={s.sessionId}
-                    style={{ transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#FAFAFA'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = ''; }}
-                  >
-                    {/* Time */}
-                    <td style={tdStyle}>
-                      <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', lineHeight: 1.3 }}>
-                        {fmtRelativeTime(s.startTime)}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>
-                        {fmtAbsoluteTime(s.startTime)}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>
-                        {fmtDuration(s.duration)}
-                      </div>
-                    </td>
-
-                    {/* Country */}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      {s.country ? (
-                        <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>
-                          {s.country}
-                        </span>
-                      ) : (
-                        <span style={{ color: '#9CA3AF' }}>—</span>
-                      )}
-                    </td>
-
-                    {/* Device */}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <DeviceCell device={s.device} />
-                    </td>
-
-                    {/* Source */}
-                    <td style={tdStyle}>
-                      <SourceChip
-                        utmSource={s.utmSource}
-                        utmMedium={s.utmMedium}
-                        utmCampaign={s.utmCampaign}
-                      />
-                    </td>
-
-                    {/* Products */}
-                    <td style={tdStyle}>
-                      <ProductsCell products={s.products} />
-                    </td>
-
-                    {/* Cart value */}
-                    <td style={tdStyle}>
-                      <CartValueCell session={s} />
-                    </td>
-
-                    {/* Coupons */}
-                    <td style={tdStyle}>
-                      <CouponsCell coupons={s.coupons} />
-                    </td>
-
-                    {/* Outcome */}
-                    <td style={tdStyle}>
-                      <OutcomeBadge outcome={s.outcome} />
-                    </td>
-
-                    {/* View */}
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      <PolarisButton
-                        variant="plain"
-                        onClick={() => setPanelSession(s)}
-                      >
-                        View →
-                      </PolarisButton>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              {sessions.map((s, i) => (
+                <IndexTable.Row key={s.sessionId} id={s.sessionId} position={i}>
+                  <IndexTable.Cell>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', lineHeight: 1.3 }}>
+                      {fmtRelativeTime(s.startTime)}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>
+                      {fmtAbsoluteTime(s.startTime)}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 1 }}>
+                      {fmtDuration(s.duration)}
+                    </div>
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    {s.country ? (
+                      <span style={{ fontSize: 12, color: '#374151', whiteSpace: 'nowrap' }}>{s.country}</span>
+                    ) : (
+                      <span style={{ color: '#9CA3AF' }}>—</span>
+                    )}
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <DeviceCell device={s.device} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <SourceChip utmSource={s.utmSource} utmMedium={s.utmMedium} utmCampaign={s.utmCampaign} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <ProductsCell products={s.products} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <CartValueCell session={s} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <CouponsCell coupons={s.coupons} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <OutcomeBadge outcome={s.outcome} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <PolarisButton variant="plain" onClick={() => setPanelSession(s)}>View →</PolarisButton>
+                  </IndexTable.Cell>
+                </IndexTable.Row>
+              ))}
+            </IndexTable>
           )}
         </div>
+        </Card>
 
         {/* ---------------------------------------------------------------- */}
         {/* Pagination                                                        */}
@@ -1119,34 +1005,17 @@ export default function SessionsPage() {
             <span style={{ fontSize: 13, color: '#6B7280' }}>
               Page {page} of {totalPages} · {total} total sessions
             </span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                style={{
-                  padding: '6px 14px', background: '#FFFFFF', border: '1px solid #D1D5DB',
-                  borderRadius: 6, fontSize: 13, color: page <= 1 ? '#9CA3AF' : '#374151',
-                  cursor: page <= 1 ? 'default' : 'pointer',
-                }}
-              >
-                ← Prev
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                style={{
-                  padding: '6px 14px', background: '#FFFFFF', border: '1px solid #D1D5DB',
-                  borderRadius: 6, fontSize: 13, color: page >= totalPages ? '#9CA3AF' : '#374151',
-                  cursor: page >= totalPages ? 'default' : 'pointer',
-                }}
-              >
-                Next →
-              </button>
-            </div>
+            <Pagination
+              hasPrevious={page > 1}
+              hasNext={page < totalPages}
+              onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            />
           </div>
         )}
 
       </div>
+      </Page>
 
       {/* ------------------------------------------------------------------ */}
       {/* Timeline panel (portal-style, rendered outside main flow)          */}

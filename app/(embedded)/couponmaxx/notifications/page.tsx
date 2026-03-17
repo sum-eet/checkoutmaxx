@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
-import { Banner, Spinner } from '@shopify/polaris';
+import { Banner, BlockStack, Card, Page, Spinner, Tabs, Text } from '@shopify/polaris';
 import { SaveBar } from '@shopify/app-bridge-react';
 import { useShop } from '@/hooks/useShop';
 import { Toggle } from '@/components/couponmaxx/Toggle';
@@ -328,35 +328,34 @@ function AlertsTab({ shopDomain }: { shopDomain: string }) {
       </div>
 
       {/* Alert list */}
-      <div style={{
-        background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8,
-        overflow: 'hidden',
-      }}>
-        {filteredAlerts.length === 0 ? (
-          <div style={{
-            padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 13,
-          }}>
+      <Card padding="0">
+        <div style={{ overflow: 'hidden', borderRadius: 8 }}>
+          {filteredAlerts.length === 0 ? (
             <div style={{
-              width: 40, height: 40, borderRadius: '50%', background: '#F3F4F6',
-              margin: '0 auto 12px', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: 18,
+              padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 13,
             }}>
-              🔔
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', background: '#F3F4F6',
+                margin: '0 auto 12px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', fontSize: 18,
+              }}>
+                🔔
+              </div>
+              Alerts fire automatically when anomalies are detected.
             </div>
-            Alerts fire automatically when anomalies are detected.
-          </div>
-        ) : (
-          filteredAlerts.map((alert) => (
-            <AlertRow
-              key={alert.id}
-              alert={alert}
-              dismissed={dismissed.has(alert.id)}
-              onRead={handleRead}
-              onDismiss={handleDismiss}
-            />
-          ))
-        )}
-      </div>
+          ) : (
+            filteredAlerts.map((alert) => (
+              <AlertRow
+                key={alert.id}
+                alert={alert}
+                dismissed={dismissed.has(alert.id)}
+                onRead={handleRead}
+                onDismiss={handleDismiss}
+              />
+            ))
+          )}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -525,17 +524,13 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <BlockStack gap="400">
 
       {/* ---- Sub-section 1: Alert triggers ---- */}
-      <div style={{
-        background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: 20,
-      }}>
+      <Card>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Alert triggers</div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-            Choose which events send a notification
-          </div>
+          <Text variant="headingSm" as="h2">Alert triggers</Text>
+          <Text variant="bodySm" tone="subdued" as="p">Choose which events send a notification</Text>
         </div>
 
         {triggerRows.map((row) => {
@@ -614,16 +609,15 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
           );
         })}
 
-      </div>
+      </Card>
 
       {/* ---- Sub-section 2: Notification channels ---- */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 
         {/* Slack card */}
-        <div style={{
-          background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: 20,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>Slack</div>
+        <Card>
+          <Text variant="headingSm" as="h2">Slack</Text>
+          <div style={{ marginTop: 12 }}>
 
           {slackConnected ? (
             <div style={{ marginBottom: 16 }}>
@@ -681,12 +675,12 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
             ))}
           </div>
         </div>
+        </Card>
 
         {/* Email card */}
-        <div style={{
-          background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: 20,
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 12 }}>Email</div>
+        <Card>
+          <Text variant="headingSm" as="h2">Email</Text>
+          <div style={{ marginTop: 12 }}>
 
           <div style={{ marginBottom: 16 }}>
             {editingEmail ? (
@@ -743,19 +737,16 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
             ))}
           </div>
         </div>
+        </Card>
       </div>
 
 
       {/* ---- Sub-section 3: Weekly digest ---- */}
-      <div style={{
-        background: '#FFFFFF', border: '1px solid #E3E3E3', borderRadius: 8, padding: 20,
-      }}>
+      <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Weekly digest</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>
-              A summary email sent every Monday morning
-            </div>
+            <Text variant="headingSm" as="h2">Weekly digest</Text>
+            <Text variant="bodySm" tone="subdued" as="p">A summary email sent every Monday morning</Text>
           </div>
           <Toggle
             checked={settings.digest.enabled}
@@ -798,7 +789,7 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
           </div>
         )}
 
-      </div>
+      </Card>
 
       {/* App Bridge Contextual Save Bar */}
       <SaveBar id={CSB_ID} open={isDirty}>
@@ -806,7 +797,7 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
         <button onClick={discardAll} />
       </SaveBar>
 
-    </div>
+    </BlockStack>
   );
 }
 
@@ -827,70 +818,40 @@ function NotificationsPageInner() {
     else if (error === 'slack_oauth_failed') setSlackBanner('error');
   }, [searchParams]);
 
-  const tabStyle = (tab: 'alerts' | 'settings'): React.CSSProperties => ({
-    fontSize: 14,
-    fontWeight: activeTab === tab ? 500 : 400,
-    color: activeTab === tab ? '#111827' : '#6B7280',
-    borderBottom: activeTab === tab ? '2px solid #0EA5E9' : '2px solid transparent',
-    background: 'none',
-    border: 'none',
-    borderBottomStyle: 'solid',
-    borderBottomWidth: 2,
-    borderBottomColor: activeTab === tab ? '#0EA5E9' : 'transparent',
-    cursor: 'pointer',
-    padding: '10px 4px',
-    marginRight: 20,
-  });
+  const tabIndex = activeTab === 'alerts' ? 0 : 1;
+  const tabList = [
+    { id: 'alerts', content: 'Alerts' },
+    { id: 'settings', content: 'Settings' },
+  ];
 
   return (
-    <div style={{ background: '#F1F1F1', minHeight: '100vh', padding: 24 }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
-
-        {/* Page header */}
-        <div style={{ marginBottom: 20 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: '#111827', margin: 0, marginBottom: 4 }}>
-            Notifications
-          </h1>
-          <p style={{ fontSize: 13, color: '#6B7280', margin: 0 }}>
-            Alerts when something needs your attention. Configure triggers and channels in Settings.
-          </p>
-        </div>
+    <Page title="Notifications">
+      <BlockStack gap="400">
 
         {/* Slack OAuth banners */}
         {slackBanner === 'connected' && (
-          <div style={{ marginBottom: 16 }}>
-            <Banner
-              tone="success"
-              onDismiss={() => setSlackBanner(null)}
-            >
-              Slack connected successfully.
-            </Banner>
-          </div>
+          <Banner
+            tone="success"
+            onDismiss={() => setSlackBanner(null)}
+          >
+            Slack connected successfully.
+          </Banner>
         )}
         {slackBanner === 'error' && (
-          <div style={{ marginBottom: 16 }}>
-            <Banner
-              tone="critical"
-              onDismiss={() => setSlackBanner(null)}
-            >
-              Slack connection failed. Please try again.
-            </Banner>
-          </div>
+          <Banner
+            tone="critical"
+            onDismiss={() => setSlackBanner(null)}
+          >
+            Slack connection failed. Please try again.
+          </Banner>
         )}
 
         {/* Tab bar */}
-        <div style={{
-          borderBottom: '1px solid #E3E3E3',
-          marginBottom: 20,
-          display: 'flex',
-        }}>
-          <button style={tabStyle('alerts')} onClick={() => setActiveTab('alerts')}>
-            Alerts
-          </button>
-          <button style={tabStyle('settings')} onClick={() => setActiveTab('settings')}>
-            Settings
-          </button>
-        </div>
+        <Tabs
+          tabs={tabList}
+          selected={tabIndex}
+          onSelect={(i) => setActiveTab(i === 0 ? 'alerts' : 'settings')}
+        />
 
         {/* Tab content */}
         {activeTab === 'alerts' ? (
@@ -898,8 +859,9 @@ function NotificationsPageInner() {
         ) : (
           <SettingsTab shopDomain={shopDomain} />
         )}
-      </div>
-    </div>
+
+      </BlockStack>
+    </Page>
   );
 }
 
