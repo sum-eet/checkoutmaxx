@@ -195,8 +195,15 @@ export default function AnalyticsPage() {
       })()
     : null;
 
+  // Debug log — remove once data pipeline is confirmed working
+  useEffect(() => {
+    console.log('[analytics] shop=', shop || '(empty)', 'swrKey=', swrKey || '(null - no fetch)');
+  }, [shop, swrKey]);
+
   const { data, isLoading, error } = useSWR<AnalyticsData>(swrKey, fetcher, {
     keepPreviousData: true,
+    onSuccess: (d) => console.log('[analytics] API OK — cartViews.total=', d?.cartViews?.total?.total, 'funnel.cartViews=', d?.funnel?.cartViews),
+    onError:   (e) => console.error('[analytics] API error:', e?.message),
   });
 
   // ---------------------------------------------------------------------------

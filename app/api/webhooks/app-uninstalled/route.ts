@@ -33,6 +33,24 @@ export async function POST(req: NextRequest) {
   const shopRecord = await prisma.shop.findUnique({ where: { shopDomain: shop } });
 
   if (shopRecord) {
+    // Guard against the race condition where:
+    //   1. merchant uninstalls → Shopify queues this webhook (delayed delivery)
+    //   2. merchant immediately reinstalls → auth callback sets isActive=true, updatedAt=now
+    //   3. this old webhook finally arrives → would wrongly set isActive=false
+    //
+    // X-Shopify-Triggered-At tells us when the uninstall actually happened.
+    // If the shop's updatedAt is AFTER the webhook trigger time, a reinstall
+    // has already happened — do not mark inactive.
+    const triggeredAtHeader = (req as NextRequest).headers.get("x-shopify-triggered-at");
+    if (triggeredAtHeader) {
+      const triggeredAt = new Date(triggeredAtHeader).getTime();
+      const shopUpdatedAt = new Date(shopRecord.updatedAt).getTime();
+      if (shopUpdatedAt > triggeredAt) {
+        console.log(`[app-uninstalled] Skipping stale webhook for ${shop} — shop reinstalled at ${shopRecord.updatedAt}, webhook triggered at ${triggeredAtHeader}`);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     if (shopRecord.pixelId && shopRecord.accessToken) {
       try {
         await deregisterAppPixel(shop, shopRecord.accessToken, shopRecord.pixelId);
@@ -46,6 +64,7 @@ export async function POST(req: NextRequest) {
       where: { id: shopRecord.id },
       data: { isActive: false, pixelId: null },
     });
+    console.log(`[app-uninstalled] Marked inactive: ${shop}`);
   }
 
   return NextResponse.json({ ok: true });

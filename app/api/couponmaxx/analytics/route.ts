@@ -20,9 +20,11 @@ function buildDailyMap(start: Date, end: Date) {
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const shopDomain = p.get('shop');
+  console.log('[analytics] GET shop=%s start=%s end=%s', shopDomain, p.get('start'), p.get('end'));
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
-  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const { data: shop, error: shopErr } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  console.log('[analytics] shop lookup:', JSON.stringify(shop), 'err:', shopErr?.message);
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 
@@ -82,6 +84,8 @@ export async function GET(req: NextRequest) {
   const ckRows:   CheckoutRow[]   = checkoutRes.data      ?? [];
   const attrRows: AttrRow[]       = attrSalesRes.data     ?? [];
   const funnel:   FunnelRow       = (funnelRes.data?.[0]) ?? { total_sessions: 0, sessions_with_products: 0, sessions_with_coupon: 0, coupon_applied: 0, coupon_failed: 0, reached_checkout: 0 };
+  console.log('[analytics] shopId=%s cartRows=%d ckRows=%d attrRows=%d funnelTotal=%d', shopId, cartRows.length, ckRows.length, attrRows.length, funnel.total_sessions);
+  console.log('[analytics] RPC errors: cartMetrics=%s checkout=%s attrSales=%s funnel=%s', cartMetricsRes.error?.message, checkoutRes.error?.message, attrSalesRes.error?.message, funnelRes.error?.message);
 
   // Index checkout + attributed sales by day for O(1) lookup
   const ckByDay   = new Map(ckRows.map((r) => [r.day, r.checkout_sessions]));
