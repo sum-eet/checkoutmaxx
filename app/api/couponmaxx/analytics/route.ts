@@ -34,7 +34,6 @@ export async function GET(req: NextRequest) {
   const end   = new Date(dateStr(rawEnd)   + 'T23:59:59.999Z');
 
   const rangeMs  = end.getTime() - start.getTime();
-  const prevStart = subDays(start, Math.round(rangeMs / 86400000));
 
   const device    = p.get('device')    ?? '';
   const utmSource = p.get('utmSource') ?? '';
@@ -90,7 +89,6 @@ export async function GET(req: NextRequest) {
   const attrTotal = attrRows.reduce((s, r) => s + (r.attributed_value ?? 0), 0);
 
   // Build zero-filled daily map — fills gaps for days with no events
-  const prevEnd   = new Date(start.getTime() - 1);  // DA-9: 1ms before current start, no overlap
   const daily = buildDailyMap(start, end);
   for (const r of cartRows) {
     const key = dateStr(r.day);
@@ -150,24 +148,100 @@ export async function GET(req: NextRequest) {
   const avgSuccessRate     = totalAttempted > 0 ? Math.round((totalApplied / totalAttempted) * 1000) / 10 : 0;
   const avgCartsWithCoupon = totalWithProducts > 0 ? Math.round((totalWithCoupon / totalWithProducts) * 1000) / 10 : 0;
 
-  // Previous period for compare-to
+  // ---- Compare-to period ----
+  const compareMode = p.get('compareTo') ?? '';
   let successRateComparison: { date: string; value: number }[] | undefined;
-  if (p.get('compareTo')) {
-    const { data: prevRows } = await supabase.rpc('couponmaxx_daily_cart_metrics', {
-      p_shop_id:     shopId,
-      p_start:       prevStart.toISOString(),
-      p_end:         prevEnd.toISOString(),
-      p_device:      device || null,
-      p_session_ids: null,
-    });
-    const prevByOffset = new Map<number, { applied: number; attempted: number }>();
-    for (const r of (prevRows as DailyCartRow[] ?? [])) {
-      const offset = Math.round((new Date(r.day).getTime() - prevStart.getTime()) / 86400000);
-      prevByOffset.set(offset, { applied: r.sessions_coupon_applied, attempted: r.sessions_coupon_attempted });
+  let cartsWithCouponComparison: { date: string; value: number }[] | undefined;
+  let attrSalesComparison: { date: string; value: number }[] | undefined;
+  let cartViewsTotalComparison: { date: string; value: number }[] | undefined;
+  let cartViewsWithProductsComparison: { date: string; value: number }[] | undefined;
+  let cartViewsCheckoutsComparison: { date: string; value: number }[] | undefined;
+
+  if (compareMode) {
+    let cmpStart: Date;
+    let cmpEnd: Date;
+    if (compareMode === 'previous_year') {
+      cmpStart = new Date(start);
+      cmpStart.setFullYear(cmpStart.getFullYear() - 1);
+      cmpEnd = new Date(end);
+      cmpEnd.setFullYear(cmpEnd.getFullYear() - 1);
+    } else {
+      // previous_period (default)
+      cmpEnd = new Date(start.getTime() - 1);
+      cmpStart = new Date(cmpEnd.getTime() - rangeMs);
     }
-    successRateComparison = Array.from(daily.keys()).sort().map((date, i) => {
-      const prev = prevByOffset.get(i);
-      return { date, value: prev && prev.attempted > 0 ? Math.round((prev.applied / prev.attempted) * 1000) / 10 : 0 };
+
+    const [prevCartRes, prevCheckoutRes, prevAttrRes] = await Promise.all([
+      supabase.rpc('couponmaxx_daily_cart_metrics', {
+        p_shop_id: shopId,
+        p_start: cmpStart.toISOString(),
+        p_end: cmpEnd.toISOString(),
+        p_device: device || null,
+        p_session_ids: null,
+      }),
+      supabase.rpc('couponmaxx_daily_checkout_sessions', {
+        p_shop_id: shopId,
+        p_start: cmpStart.toISOString(),
+        p_end: cmpEnd.toISOString(),
+      }),
+      supabase.rpc('couponmaxx_attributed_sales_daily', {
+        p_shop_id: shopId,
+        p_start: cmpStart.toISOString(),
+        p_end: cmpEnd.toISOString(),
+        p_attr_window_days: attrWindow,
+        p_price_type: priceType,
+        p_session_ids: null,
+      }),
+    ]);
+
+    const prevCartRows = (prevCartRes.data ?? []) as DailyCartRow[];
+    const prevCkRows = (prevCheckoutRes.data ?? []) as CheckoutRow[];
+    const prevAttrRows = (prevAttrRes.data ?? []) as AttrRow[];
+
+    const prevCartByOffset = new Map<number, DailyCartRow>();
+    for (const r of prevCartRows) {
+      const offset = Math.round((new Date(r.day).getTime() - cmpStart.getTime()) / 86400000);
+      prevCartByOffset.set(offset, r);
+    }
+    const prevCkByOffset = new Map<number, number>();
+    for (const r of prevCkRows) {
+      const offset = Math.round((new Date(r.day).getTime() - cmpStart.getTime()) / 86400000);
+      prevCkByOffset.set(offset, r.checkout_sessions);
+    }
+    const prevAttrByOffset = new Map<number, number>();
+    for (const r of prevAttrRows) {
+      const offset = Math.round((new Date(r.day).getTime() - cmpStart.getTime()) / 86400000);
+      prevAttrByOffset.set(offset, r.attributed_value);
+    }
+
+    const sortedDates = Array.from(daily.keys()).sort();
+    successRateComparison = sortedDates.map((date, i) => {
+      const prev = prevCartByOffset.get(i);
+      const rate = prev && prev.sessions_coupon_attempted > 0
+        ? Math.round((prev.sessions_coupon_applied / prev.sessions_coupon_attempted) * 1000) / 10
+        : 0;
+      return { date, value: rate };
+    });
+    cartsWithCouponComparison = sortedDates.map((date, i) => {
+      const prev = prevCartByOffset.get(i);
+      const pct = prev && prev.sessions_with_products > 0
+        ? Math.round((prev.sessions_with_coupon / prev.sessions_with_products) * 1000) / 10
+        : 0;
+      return { date, value: pct };
+    });
+    attrSalesComparison = sortedDates.map((date, i) => {
+      return { date, value: Math.round((prevAttrByOffset.get(i) ?? 0) * 100) / 100 };
+    });
+    cartViewsTotalComparison = sortedDates.map((date, i) => {
+      return { date, value: prevCartByOffset.get(i)?.total_sessions ?? 0 };
+    });
+    cartViewsWithProductsComparison = sortedDates.map((date, i) => {
+      return { date, value: prevCartByOffset.get(i)?.sessions_with_products ?? 0 };
+    });
+    cartViewsCheckoutsComparison = sortedDates.map((date, i) => {
+      const cartClicked = prevCartByOffset.get(i)?.checkout_clicked_sessions ?? 0;
+      const ckSessions = prevCkByOffset.get(i) ?? 0;
+      return { date, value: Math.max(cartClicked, ckSessions) };
     });
   }
 
@@ -180,15 +254,22 @@ export async function GET(req: NextRequest) {
     cartsWithCoupon: {
       average: avgCartsWithCoupon,
       daily: cartsWithCouponDaily,
+      comparison: cartsWithCouponComparison,
     },
     attributedSales: {
       total:  Math.round(attrTotal * 100) / 100,
       daily:  attrSalesDaily,
+      comparison: attrSalesComparison,
     },
     cartViews: {
       total:        { total: totalCartViews,    daily: cartViewsDaily },
       withProducts: { total: totalWithProducts, daily: withProductsDaily },
       checkouts:    { total: totalCheckouts,    daily: checkoutsDaily },
+      comparison: compareMode ? {
+        total:        { daily: cartViewsTotalComparison ?? [] },
+        withProducts: { daily: cartViewsWithProductsComparison ?? [] },
+        checkouts:    { daily: cartViewsCheckoutsComparison ?? [] },
+      } : undefined,
     },
     funnel: {
       cartViews:          funnel.total_sessions,

@@ -1,40 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BlockStack, Button, Card, InlineGrid, InlineStack, Text } from '@shopify/polaris';
+import { Banner, BlockStack, Button, Card, Icon, InlineStack, ProgressBar, Text } from '@shopify/polaris';
+import { CheckCircleIcon, AlertCircleIcon } from '@shopify/polaris-icons';
 
 const STORAGE_KEY = 'cm_onboarding_dismissed';
 
-type Step = {
-  title: string;
-  description: string;
-  cta: string;
-  href: string;
+type ExtensionStatus = {
+  cartMonitor: boolean;
+  checkoutPixel: boolean;
 };
 
-const STEPS: Step[] = [
-  {
-    title: 'Pixel is tracking',
-    description: 'Your cart pixel is active and capturing coupon events in real time.',
-    cta: 'View sessions',
-    href: '/couponmaxx/sessions',
-  },
-  {
-    title: 'Review your coupon codes',
-    description: 'See which codes are broken, degraded, or healthy in the Coupons tab.',
-    cta: 'View coupons',
-    href: '/couponmaxx/coupons',
-  },
-  {
-    title: 'Set up alerts',
-    description: 'Get notified when a coupon code breaks or customer activity spikes.',
-    cta: 'Configure alerts',
-    href: '/couponmaxx/notifications',
-  },
-];
+type Props = {
+  hasData: boolean;
+};
 
-export function OnboardingBanner() {
+export function OnboardingBanner({ hasData }: Props) {
   const [dismissed, setDismissed] = useState<boolean | null>(null);
+  const [extensions, setExtensions] = useState<ExtensionStatus>({
+    cartMonitor: false,
+    checkoutPixel: false,
+  });
 
   useEffect(() => {
     try {
@@ -44,53 +30,95 @@ export function OnboardingBanner() {
     }
   }, []);
 
+  // Check extension status via App Bridge
+  useEffect(() => {
+    async function check() {
+      try {
+        if (typeof shopify !== 'undefined' && shopify.app?.extensions) {
+          const exts = (await shopify.app.extensions()) as unknown as Array<Record<string, unknown>>;
+          const cart = exts.find((e) => e['handle'] === 'cart-monitor');
+          const pixel = exts.find((e) => e['handle'] === 'checkout-monitor');
+          setExtensions({
+            cartMonitor: cart?.['status'] === 'active' || cart !== undefined,
+            checkoutPixel: pixel?.['status'] === 'active' || pixel !== undefined,
+          });
+        } else {
+          // Fallback: if API not available, assume active to not block
+          setExtensions({ cartMonitor: true, checkoutPixel: true });
+        }
+      } catch {
+        setExtensions({ cartMonitor: true, checkoutPixel: true });
+      }
+    }
+    check();
+  }, []);
+
   const handleDismiss = () => {
-    try {
-      localStorage.setItem(STORAGE_KEY, 'true');
-    } catch {}
+    try { localStorage.setItem(STORAGE_KEY, 'true'); } catch {}
     setDismissed(true);
   };
 
-  // Don't render until we know the dismissed state (avoids flash)
   if (dismissed === null || dismissed) return null;
+
+  const steps = [
+    {
+      label: 'Cart monitor',
+      done: extensions.cartMonitor,
+      ok: 'Active on your storefront',
+      fail: 'Not active — enable the Cart Monitor block in your theme',
+    },
+    {
+      label: 'Checkout pixel',
+      done: extensions.checkoutPixel,
+      ok: 'Tracking checkout events',
+      fail: 'Not detected — try reinstalling the app',
+    },
+    {
+      label: 'Receiving data',
+      done: hasData,
+      ok: 'Data is flowing into your dashboard',
+      fail: 'Waiting for first customer sessions (usually a few hours)',
+    },
+  ];
+
+  const doneCount = steps.filter(s => s.done).length;
+  const allDone = doneCount === steps.length;
 
   return (
     <Card>
-      <BlockStack gap="300">
+      <BlockStack gap="400">
         <InlineStack align="space-between" blockAlign="center">
-          <Text variant="headingSm" fontWeight="semibold" as="h2">
-            Get started with CouponMaxx
-          </Text>
-          <Button variant="plain" onClick={handleDismiss}>Dismiss</Button>
+          <BlockStack gap="100">
+            <Text variant="headingMd" as="h2">
+              {allDone ? 'Setup complete' : 'Getting started with CouponMaxx'}
+            </Text>
+            <Text variant="bodySm" tone="subdued" as="p">
+              {doneCount} of {steps.length} completed
+            </Text>
+          </BlockStack>
+          {allDone && (
+            <Button variant="plain" onClick={handleDismiss}>Dismiss</Button>
+          )}
         </InlineStack>
 
-        <InlineGrid columns={3} gap="300">
-          {STEPS.map((step, i) => (
-            <Card key={i}>
-              <BlockStack gap="100">
-                <InlineStack gap="200" blockAlign="center">
-                  <span style={{
-                    width: 20, height: 20, borderRadius: '50%',
-                    background: '#1D4ED8', color: '#FFFFFF',
-                    fontSize: 11, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    {i + 1}
-                  </span>
-                  <Text variant="bodyMd" fontWeight="semibold" as="span">{step.title}</Text>
-                </InlineStack>
-                <Text variant="bodySm" tone="subdued" as="p">{step.description}</Text>
-                <a
-                  href={step.href}
-                  style={{ fontSize: 12, color: '#1D4ED8', fontWeight: 500, textDecoration: 'none' }}
-                >
-                  {step.cta} →
-                </a>
-              </BlockStack>
-            </Card>
-          ))}
-        </InlineGrid>
+        <ProgressBar progress={(doneCount / steps.length) * 100} tone="primary" size="small" />
+
+        {steps.map((step) => (
+          <InlineStack key={step.label} gap="300" blockAlign="start">
+            <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <Icon
+                source={step.done ? CheckCircleIcon : AlertCircleIcon}
+                tone={step.done ? 'success' : 'subdued'}
+              />
+            </div>
+            <BlockStack gap="050">
+              <Text variant="bodyMd" fontWeight="semibold" as="span">{step.label}</Text>
+              <Text variant="bodySm" tone={step.done ? 'subdued' : 'caution'} as="span">
+                {step.done ? step.ok : step.fail}
+              </Text>
+            </BlockStack>
+          </InlineStack>
+        ))}
       </BlockStack>
     </Card>
   );

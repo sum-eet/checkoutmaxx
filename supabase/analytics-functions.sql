@@ -236,7 +236,7 @@ LANGUAGE sql STABLE AS $$
     AND CASE p_utm_source
           WHEN 'Direct'      THEN ("utmSource" IS NULL OR "utmSource" = '')
           WHEN 'Paid search' THEN "utmSource" IN ('google','bing')
-          WHEN 'Social'      THEN "utmSource" IN ('instagram','facebook','fb','tiktok')
+          WHEN 'Social'      THEN "utmSource" IN ('instagram','facebook','fb','tiktok','tiktok_ads')
           WHEN 'Email'       THEN "utmSource" IN ('klaviyo','mailchimp','email')
           ELSE "utmSource" = p_utm_source
         END;

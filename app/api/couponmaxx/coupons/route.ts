@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       .eq('shopId', shopId).gte('occurredAt', start.toISOString()).lte('occurredAt', end.toISOString()).limit(20000),
   ]);
 
+  const truncated = (couponEvs?.length === 20000) || (allCartEvs?.length === 20000);
   const cartEvents = allCartEvs ?? [];
   const sessionIds = Array.from(new Set(cartEvents.map((e) => e.sessionId)));
 
@@ -221,6 +222,7 @@ export async function GET(req: NextRequest) {
   const broken = codeRows.filter((r) => r.status === 'broken').length;
 
   return NextResponse.json({
+    truncated,
     boxes: {
       codesTracked: codeRows.length,
       brokenCount: broken,

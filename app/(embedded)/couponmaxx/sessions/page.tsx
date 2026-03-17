@@ -742,13 +742,9 @@ export default function SessionsPage() {
   const sourceOptions = [
     { label: 'All sources', value: '' },
     { label: 'Direct', value: 'Direct' },
-    { label: 'Organic', value: 'Organic' },
-    { label: 'Email', value: 'Email' },
-    { label: 'Paid Search', value: 'Paid Search' },
-    { label: 'Paid Social', value: 'Paid Social' },
+    { label: 'Paid Search', value: 'Paid search' },
     { label: 'Social', value: 'Social' },
-    { label: 'Affiliate', value: 'Affiliate' },
-    { label: 'Referral', value: 'Referral' },
+    { label: 'Email', value: 'Email' },
   ];
 
   // ---------------------------------------------------------------------------

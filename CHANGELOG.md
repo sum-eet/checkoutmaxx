@@ -1305,3 +1305,61 @@ Removed the "Carts Opened" box (noisy, includes empty carts). Sessions KPI row i
 Changed to "Abandoned After Failure". Context (coupons page) makes it obvious. Prevents label wrapping that made this box taller than others.
 
 **Build: zero errors.**
+
+---
+
+## 2026-03-17: Final BFS Fixes (FINAL-BFS-FIXES.md)
+
+7 fixes across data accuracy, compare mode, and BFS compliance.
+
+### D-1 — UTM source: tiktok_ads + remove invalid frontend options
+SQL (`supabase/analytics-functions.sql`): added `tiktok_ads` to the `Social` WHEN clause in `couponmaxx_utm_sessions`. Frontend (`sessions/page.tsx`): removed Organic, Paid Social, Affiliate, Referral from `sourceOptions` — they have no backend mapping. Now only Direct / Paid Search / Social / Email (matching the SQL buckets exactly).
+
+### D-2 — Prisma schema: add notification columns
+`prisma/schema.prisma`: added `notificationSettings Json?`, `notificationEmail String?`, `slackChannelName String?` to Shop model. These columns already exist in the DB (added via `supabase/shop-slack.sql`). Ran `npx prisma generate` to sync client types. Did NOT run `prisma db push`.
+
+### D-3 — Coupons API: truncation warning
+`app/api/couponmaxx/coupons/route.ts`: added `truncated = (couponEvs?.length === 20000) || (allCartEvs?.length === 20000)` after the parallel fetches. Added `truncated` as a top-level field in the response JSON. Frontend can surface this as a banner if needed.
+
+### D-4 — Compare mode: all 4 metrics return comparison data
+`app/api/couponmaxx/analytics/route.ts`: replaced the old compare block (only computed `successRateComparison`) with a full implementation. Now fetches comparison-period data for cart metrics, checkout sessions, and attributed sales in parallel (`Promise.all`). Computes 6 comparison arrays aligned to current-period dates by offset index:
+- `successRateComparison`, `cartsWithCouponComparison`, `attrSalesComparison`
+- `cartViewsTotalComparison`, `cartViewsWithProductsComparison`, `cartViewsCheckoutsComparison`
+Supports `previous_period` (default) and `previous_year` compare modes. Deleted stale `prevStart` and `prevEnd` variables. Updated return JSON to include `comparison` on all 4 metric fields.
+
+### D-5 — Compare mode frontend: no changes needed
+Frontend already reads `data?.cartsWithCoupon.comparison`, `data?.attributedSales.comparison`, `data?.cartViews.comparison?.[cartViewMetric]?.daily` — shape matches the new API response.
+
+### B-1 — OnboardingBanner: real extension status via `shopify.app.extensions()`
+`components/couponmaxx/OnboardingBanner.tsx`: full rewrite. Now calls `shopify.app.extensions()` (App Bridge v4) to check if `cart-monitor` and `checkout-monitor` extensions are active. Added `hasData: boolean` prop for the "Receiving data" step. Shows `<ProgressBar>` with `doneCount / 3`. Steps use `<Icon source={CheckCircleIcon | AlertCircleIcon}>` with success/caution tones. Dismiss button only appears when all 3 steps are complete. Graceful fallback: if `shopify.app.extensions` not available, assumes active (avoids blocking new merchants).
+
+### B-2 — App status banner after onboarding dismissed
+`app/(embedded)/couponmaxx/analytics/page.tsx`: added `onboardingDismissed` state (reads `localStorage` key `cm_onboarding_dismissed`). When dismissed: renders `<AppStatusBanner>` instead of OnboardingBanner. `AppStatusBanner` checks extension status and shows green "CouponMaxx is active" or amber "Cart monitor not active" banner. Passed `hasData` prop to OnboardingBanner.
+
+### B-3 — Contextual Save Bar: already implemented
+`SaveBar` from `@shopify/app-bridge-react` confirmed present (`open={isDirty}`). Old `saveTriggers` / `saveChannels` / `saveDigest` functions confirmed absent (0 matches). No changes needed.
+
+**Final verification suite:**
+```
+D-1 UTM tiktok_ads: 1 ✓
+D-1 No invalid UTM options: 0 ✓
+D-2 Prisma cols: 3 ✓
+D-3 Truncated: 2 ✓
+D-4 Compare previous_year: 1 ✓
+D-4 All comparison fields: 9 ✓
+D-4 No prevStart: 0 ✓
+B-1 Extension check: 2 ✓
+B-1 hasData prop: 3 ✓
+B-2 AppStatusBanner: 2 ✓
+B-3 SaveBar: 3 ✓
+B-3 No old save fns: 0 ✓
+Build: zero errors ✓
+```
+
+**Next steps (manual):**
+1. Deploy to Vercel (push to main — auto-deploys)
+2. Run updated `couponmaxx_utm_sessions` SQL in Supabase SQL editor
+3. Update app name in Partner Dashboard → Apps → App setup → "CouponMaxx"
+4. Wait 28 days for Shopify Web Vitals measurements (LCP, CLS, INP)
+5. Get 50 installs + 5 reviews
+6. Apply for BFS in Partner Dashboard → Distribution → Apply now

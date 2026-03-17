@@ -49,6 +49,11 @@ model Shop {
   alertExtensionEnabled   Boolean @default(true)
   alertPaymentEnabled     Boolean @default(true)
 
+  // CouponMaxx notification settings (added via supabase/shop-slack.sql)
+  notificationSettings Json?
+  notificationEmail    String?
+  slackChannelName     String?
+
   // Alert sensitivity thresholds (overrides from settings page)
   abandonmentThreshold  Float @default(0.20) // 20%
   discountFailureMin    Int   @default(3)

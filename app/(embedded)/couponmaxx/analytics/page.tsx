@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Banner, Card, InlineGrid, Page, BlockStack, Select, InlineStack } from '@shopify/polaris';
 
@@ -101,6 +101,45 @@ async function fetcher(url: string) {
 }
 
 // ---------------------------------------------------------------------------
+// App status banner (shown when onboarding is dismissed)
+// ---------------------------------------------------------------------------
+
+function AppStatusBanner() {
+  const [status, setStatus] = useState<'checking' | 'active' | 'issue'>('checking');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    async function check() {
+      try {
+        if (typeof shopify !== 'undefined' && shopify.app?.extensions) {
+          const exts = (await shopify.app.extensions()) as unknown as Array<Record<string, unknown>>;
+          const cart = exts.find((e) => e['handle'] === 'cart-monitor');
+          if (!cart) {
+            setStatus('issue');
+            setMessage('Cart monitor is not active. Enable it in your theme settings.');
+            return;
+          }
+        }
+        setStatus('active');
+        setMessage('CouponMaxx is active and monitoring your store.');
+      } catch {
+        setStatus('active');
+        setMessage('CouponMaxx is running.');
+      }
+    }
+    check();
+  }, []);
+
+  if (status === 'checking') return null;
+
+  return (
+    <Banner tone={status === 'active' ? 'success' : 'warning'}>
+      {message}
+    </Banner>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -127,6 +166,14 @@ export default function AnalyticsPage() {
 
   // Cart view metric switcher
   const [cartViewMetric, setCartViewMetric] = useState<'total' | 'withProducts' | 'checkouts'>('total');
+
+  // Onboarding dismissed state (controls which banner to show)
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  useEffect(() => {
+    try {
+      setOnboardingDismissed(localStorage.getItem('cm_onboarding_dismissed') === 'true');
+    } catch {}
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Build SWR key
@@ -299,11 +346,16 @@ export default function AnalyticsPage() {
     <Page title="Analytics">
       <BlockStack gap="400">
 
-      {/* Onboarding banner (dismissible setup guide) */}
-      <OnboardingBanner />
+      {/* Onboarding banner — shows until dismissed, checks real extension status */}
+      {!onboardingDismissed && (
+        <OnboardingBanner hasData={hasData} />
+      )}
 
-      {/* App status banner — only after onboarding dismissed, before data arrives */}
-      {!isLoading && !hasData && !error && (
+      {/* App status banner — shown after onboarding dismissed */}
+      {onboardingDismissed && <AppStatusBanner />}
+
+      {/* No data banner — only when no activity in the selected period */}
+      {!isLoading && !hasData && !error && onboardingDismissed && (
         <Banner tone="info">
           No cart activity yet for this period. Data appears as customers visit your cart.
         </Banner>
