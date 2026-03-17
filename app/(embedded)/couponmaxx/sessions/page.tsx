@@ -586,7 +586,7 @@ export default function SessionsPage() {
   });
 
   // Box filter
-  const [boxFilter, setBoxFilter] = useState('products');
+  const [boxFilter, setBoxFilter] = useState('');
 
   // Filters
   const [country, setCountry] = useState('');
@@ -806,7 +806,14 @@ export default function SessionsPage() {
         {/* ---------------------------------------------------------------- */}
         {/* Section 2 — Four KPI boxes                                       */}
         {/* ---------------------------------------------------------------- */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, alignItems: 'stretch' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, alignItems: 'stretch' }}>
+          <KpiBox
+            label="Carts Opened"
+            value={boxes?.cartsOpened ?? (isLoading ? '…' : '—')}
+            sub1={boxes ? `${boxes.withProducts} with products · ${boxes.emptyCount} empty` : undefined}
+            active={boxFilter === ''}
+            onClick={() => handleBoxClick('')}
+          />
           <KpiBox
             label="With Products"
             value={boxes?.withProducts ?? (isLoading ? '…' : '—')}
