@@ -120,6 +120,9 @@ export async function GET(req: NextRequest) {
     });
     console.log("!!!! STEP 5 UPSERT DONE:", shop);
     console.log("[auth/callback] shop upserted:", shop);
+    // Verify what's actually in the DB right now
+    const verify = await prisma.shop.findUnique({ where: { shopDomain: shop }, select: { id: true, isActive: true, pixelId: true, updatedAt: true } });
+    console.log("!!!! STEP 5 DB VERIFY:", JSON.stringify(verify));
   } catch (err: any) {
     console.error("[auth/callback] DB upsert failed:", err.message);
     return new Response(`DB write failed: ${err.message}`, { status: 500 });
