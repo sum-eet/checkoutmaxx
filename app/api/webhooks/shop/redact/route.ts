@@ -1,21 +1,22 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { verifyWebhookHmac } from "@/lib/verifyWebhookHmac";
 
 // Shopify GDPR: shop/redact
 // Sent 48 hours after a shop uninstalls the app. We delete all data
 // we hold for that shop.
 export async function POST(req: NextRequest) {
-  const hmac = req.headers.get("x-shopify-hmac-sha256");
-  if (!hmac) {
+  const verified = await verifyWebhookHmac(req);
+  if (!verified) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const body = await req.json();
+    const body = verified.body as Record<string, unknown>;
     console.log("[webhook] shop/redact", JSON.stringify(body));
 
-    const shopDomain: string | undefined = body?.shop_domain;
+    const shopDomain = body?.shop_domain as string | undefined;
     if (!shopDomain) {
       return NextResponse.json({ error: "Missing shop_domain" }, { status: 400 });
     }
