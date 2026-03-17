@@ -1,34 +1,25 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { shopify } from "@/lib/shopify";
 import prisma from "@/lib/prisma";
 import { deregisterAppPixel } from "@/lib/pixel-registration";
+import { verifyWebhookHmac } from "@/lib/verifyWebhookHmac";
 
 export async function POST(req: NextRequest) {
-  // HMAC verification — Guardrail #8: all webhooks must be verified
-  let topic: string;
-  let shop: string;
-
-  try {
-    const result = await shopify.webhooks.validate({
-      rawBody: await req.text(),
-      rawRequest: req,
-    });
-
-    if (!result.valid) {
-      return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
-    }
-
-    topic = result.topic;
-    shop = result.domain;
-  } catch (err) {
-    console.error("[app-uninstalled] Webhook validation error:", err);
-    return NextResponse.json({ error: "Webhook validation failed" }, { status: 401 });
+  const verified = await verifyWebhookHmac(req);
+  if (!verified) {
+    console.error("[app-uninstalled] HMAC verification failed");
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (topic !== "APP_UNINSTALLED") {
-    return NextResponse.json({ ok: false }, { status: 400 });
+  const body = verified.body as Record<string, unknown>;
+  const shop = (body?.domain || body?.myshopify_domain) as string | undefined;
+
+  if (!shop) {
+    console.error("[app-uninstalled] Missing shop domain in payload");
+    return NextResponse.json({ error: "Missing shop" }, { status: 400 });
   }
+
+  console.log("[app-uninstalled] Verified for shop:", shop);
 
   const shopRecord = await prisma.shop.findUnique({ where: { shopDomain: shop } });
 
@@ -41,7 +32,7 @@ export async function POST(req: NextRequest) {
     // X-Shopify-Triggered-At tells us when the uninstall actually happened.
     // If the shop's updatedAt is AFTER the webhook trigger time, a reinstall
     // has already happened — do not mark inactive.
-    const triggeredAtHeader = (req as NextRequest).headers.get("x-shopify-triggered-at");
+    const triggeredAtHeader = req.headers.get("x-shopify-triggered-at");
     if (triggeredAtHeader) {
       const triggeredAt = new Date(triggeredAtHeader).getTime();
       const shopUpdatedAt = new Date(shopRecord.updatedAt).getTime();
