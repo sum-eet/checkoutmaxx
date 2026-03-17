@@ -1046,3 +1046,107 @@ PostgREST's row cap is irrelevant when an RPC returns 8 aggregate rows instead o
 **Rule going forward:** Never use `supabase.from(table).select(...)` for analytics queries.
 Always aggregate in Postgres and call via `supabase.rpc()`. The PostgREST row cap will silently
 truncate any table with >1000 rows and the API will return wrong data with no error.
+
+---
+
+## 2026-03-17: CouponMaxx data accuracy fixes (DA-1 through DA-16)
+
+**What changed:** Implemented Phase 1 + partial Phase 2 from PRIORITIZED-FIXES.md.
+All fixes are structural — no hardcoded patches, no workarounds.
+
+**DA-1 / DA-2 / DA-3 / DA-5 — Funnel unit mismatch (events vs sessions)**
+
+The funnel was mixing event-level `COUNT(*)` for applied/failed with session-level
+`COUNT(DISTINCT sessionId)` for attempted. This meant `applied + failed` could exceed
+`attempted` — a mathematically impossible funnel. The daily and totals functions used
+different formulas so their numbers never agreed.
+
+Fix: `couponmaxx_daily_cart_metrics` and `couponmaxx_funnel_totals` now both use
+`COUNT(DISTINCT CASE WHEN ... THEN "sessionId" END)` for every coupon column.
+New columns: `sessions_coupon_applied`, `sessions_coupon_attempted`, `sessions_coupon_failed`.
+Invariant guaranteed: `applied + failed ≤ attempted` for any date range.
+Analytics route updated to use new column names; funnel daily now uses `b.failedSessions`
+(not `b.attempted - b.applied` which was the broken formula).
+
+**DA-4 — Attributed sales included failed-coupon sessions**
+
+Sessions where a coupon failed but the customer bought anyway at full price were counted
+as "coupon-attributed revenue." This overstated attribution.
+
+Fix: `couponmaxx_attributed_sales_daily` CTE changed from
+`AND "eventType" IN ('cart_coupon_applied','cart_coupon_failed','cart_coupon_recovered')`
+to `AND ("eventType" = 'cart_coupon_applied' OR "couponRecovered" = true)`.
+Only successful coupon sessions are now attributed.
+
+**DA-6 — Checkout events capped at 500 sessions**
+
+Both `coupons/route.ts` and `coupons/[code]/route.ts` used `.in('sessionId', sessionIds.slice(0, 500))`.
+Sessions 501+ had no checkout data — they all appeared "abandoned" even if they completed orders.
+This corrupted AOV with/without coupon, handoff rate, abandoned-after-fail count.
+
+Fix: Replaced single `.in()` with a batched loop in groups of 500, accumulating all results.
+
+**DA-9 — Off-by-one in previous period boundary**
+
+`prevEnd = start` meant events exactly on the boundary timestamp were counted in both
+current and previous period. Minor but causes inflated comparison numbers.
+
+Fix: `prevEnd = new Date(start.getTime() - 1)` — 1ms before current start.
+Applied to analytics route and both coupons routes.
+
+**DA-10 — "Carts with coupon applied" title doesn't match data**
+
+The metric card title said "applied" but the data measures coupon *attempts* (applied + failed).
+A merchant reading "68% of carts had coupon applied" was being misled.
+
+Fix: Title changed to "Coupon usage rate", definition updated to
+"Percent of product carts where a customer entered a coupon code."
+
+**DA-11 — Product titles always showed ×1 with no price**
+
+`sessionFromSummary` was only using `product_titles` (string array, no qty/price).
+The SQL already returned `line_items` as full JSONB. JS just wasn't using it.
+
+Fix: `sessionFromSummary` now reads `row.line_items` first, falls back to
+`product_titles` only for older sessions where `line_items` is null.
+
+**DA-13 — Country/device/UTM taken from last event instead of first**
+
+SQL used `ORDER BY "occurredAt" DESC` for country/device/UTM aggregation.
+Semantically wrong — the relevant values are where the session *started*, not ended.
+
+Fix: Changed to `ORDER BY "occurredAt" ASC` in `couponmaxx_session_summaries`.
+
+**DA-14 — Health thresholds too generous**
+
+Old: `low_data < 5 attempts`, `healthy ≥ 50%`, `degraded ≥ 20%`
+A code with 49% success rate was labeled "healthy." Half your users hitting errors is not healthy.
+
+Fix: `low_data < 15 attempts`, `healthy ≥ 80%`, `degraded ≥ 50%`
+Applied to both `coupons/route.ts` (table) and `coupons/[code]/route.ts` (detail panel).
+
+**DA-16 — Dead code in zombie detection**
+
+Lines 203-209 in `coupons/route.ts` built a Map that was never used.
+The actual zombie logic below it was correct and unaffected.
+
+Fix: Deleted the dead block.
+
+**SQL deployment:** `couponmaxx_daily_cart_metrics` return type changed (added 3 columns),
+so it was dropped and recreated. All 7 functions redeployed via psql to Supabase.
+
+**Files changed:**
+- `supabase/analytics-functions.sql` (4 functions modified, all redeployed)
+- `app/api/couponmaxx/analytics/route.ts`
+- `app/api/couponmaxx/sessions/route.ts`
+- `app/api/couponmaxx/coupons/route.ts`
+- `app/api/couponmaxx/coupons/[code]/route.ts`
+- `app/(embedded)/couponmaxx/analytics/page.tsx`
+
+**Still to do (from PRIORITIZED-FIXES.md):**
+- DA-7: Coupons page still fetches 20K raw events — needs SQL functions
+- DA-8: AOV units verification (totalPrice dollars vs cents)
+- DA-12: UTM source bucketing inconsistency across SQL/JS/frontend
+- DA-15: Settings API reads columns that may not exist in DB
+- Phase 3: All Polaris UI compliance fixes (UI-1 through UI-16)
+- Phase 4: Compare mode, welcome page, filter options, redirects
