@@ -1,21 +1,20 @@
 'use client';
 
 // CouponMaxx V4 layout
-// NavMenu renders 4 items in Shopify's NATIVE left sidebar via App Bridge
-// Uses <a> tags (not Next.js Link) — App Bridge requires native anchors
-// Parent layout skips its own NavMenu + LiveBanner on /couponmaxx/* routes
-
-import { NavMenu } from '@shopify/app-bridge-react';
+// ui-nav-menu is a web component registered by app-bridge.js CDN script.
+// It works without a React AppProvider and renders items in Shopify's native sidebar.
+// Uses <a> tags (not Next.js Link) — App Bridge requires native anchors.
+// Parent layout skips its own NavMenu + LiveBanner on /couponmaxx/* routes.
 
 export default function CouponMaxxLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <NavMenu>
+      <ui-nav-menu>
         <a href="/couponmaxx/analytics" rel="home">Analytics</a>
         <a href="/couponmaxx/sessions">Cart Sessions</a>
         <a href="/couponmaxx/coupons">Coupons</a>
         <a href="/couponmaxx/notifications">Notifications</a>
-      </NavMenu>
+      </ui-nav-menu>
 
       <div style={{
         minHeight: '100vh',

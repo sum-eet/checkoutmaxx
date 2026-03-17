@@ -1,7 +1,6 @@
 "use client";
 
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
-import { NavMenu } from "@shopify/app-bridge-react";
 import en from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
 import { useShop } from "@/hooks/useShop";
@@ -54,13 +53,14 @@ export default function EmbeddedLayout({ children }: { children: React.ReactNode
     <PolarisProvider i18n={en}>
       {/* CouponMaxx has its own NavMenu in couponmaxx/layout.tsx — skip the old one */}
       {!isCouponMaxx && (
-        <NavMenu>
+        <ui-nav-menu>
           <a href="/dashboard/converted" rel="home">Converted Carts</a>
           <a href="/dashboard/abandoned">Abandoned Carts</a>
           <a href="/dashboard/cart">Cart Activity</a>
           <a href="/alerts">Notifications</a>
           <a href="/settings">Settings</a>
-        </NavMenu>
+        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+        </ui-nav-menu>
       )}
       {/* CouponMaxx has its own Header — skip the live banner there */}
       {!isCouponMaxx && <LiveBanner />}
