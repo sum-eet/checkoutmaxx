@@ -1,4 +1,4 @@
-name = "checkoutmaxx"
+name = "couponmaxx"
 client_id = "0a60bbe935cef2f46838acec2b3918d8"
 application_url = "https://checkoutmaxx-rt55.vercel.app"
 embedded = true

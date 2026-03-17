@@ -14,13 +14,13 @@ import {
 
 export default function WelcomePage() {
   return (
-    <Page title="Welcome to CheckoutMaxx">
+    <Page title="Welcome to CouponMaxx">
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
             <Banner tone="success">
               <Text as="p">
-                Your checkout pixel is active. We&apos;re already monitoring for issues.
+                Your cart pixel is active. We&apos;re already tracking coupon usage across your store.
               </Text>
             </Banner>
 
@@ -28,31 +28,30 @@ export default function WelcomePage() {
               <Card>
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    Abandonment spikes
+                    Broken coupon alerts
                   </Text>
                   <Text as="p" tone="subdued">
-                    We alert you when checkout CVR drops 20%+ below your 7-day baseline.
+                    Get notified the moment a coupon code starts failing so you can fix it before customers give up.
                   </Text>
                 </BlockStack>
               </Card>
               <Card>
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    Broken discount codes
+                    Coupon analytics
                   </Text>
                   <Text as="p" tone="subdued">
-                    When a promo code fails 3+ times in an hour, you get an alert with the exact
-                    code.
+                    See success rates, usage trends, and attributed revenue for every coupon code in one place.
                   </Text>
                 </BlockStack>
               </Card>
               <Card>
                 <BlockStack gap="200">
                   <Text as="h2" variant="headingMd">
-                    Payment failures
+                    Code performance tracking
                   </Text>
                   <Text as="p" tone="subdued">
-                    If payment failures spike above 15%, we flag it immediately.
+                    Understand which codes drive conversions, which fail silently, and which customers abandon after a failed attempt.
                   </Text>
                 </BlockStack>
               </Card>
@@ -60,16 +59,15 @@ export default function WelcomePage() {
 
             <Banner tone="info">
               <Text as="p">
-                Learning period: Alerts activate in ~48 hours once we&apos;ve learned your
-                store&apos;s baseline. Live data is available immediately.
+                Data starts populating as customers visit your cart. Check back in a few hours to see your first sessions.
               </Text>
             </Banner>
 
             <InlineStack gap="300">
-              <Button variant="primary" url="/dashboard/converted">
-                View your dashboard
+              <Button variant="primary" url="/couponmaxx/analytics">
+                View analytics
               </Button>
-              <Button url="/settings">Configure alerts</Button>
+              <Button url="/couponmaxx/notifications">Configure alerts</Button>
             </InlineStack>
           </BlockStack>
         </Layout.Section>

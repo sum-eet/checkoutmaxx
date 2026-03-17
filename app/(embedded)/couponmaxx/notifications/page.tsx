@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { Banner, Spinner } from '@shopify/polaris';
+import { SaveBar } from '@shopify/app-bridge-react';
 import { useShop } from '@/hooks/useShop';
 import { Toggle } from '@/components/couponmaxx/Toggle';
 
@@ -364,6 +365,17 @@ function AlertsTab({ shopDomain }: { shopDomain: string }) {
 // Tab 2 — Settings
 // ---------------------------------------------------------------------------
 
+declare global {
+  interface Window {
+    shopify?: {
+      saveBar?: { show: (id: string) => void; hide: (id: string) => void };
+      toast?: { show: (msg: string, opts?: { isError?: boolean }) => void };
+    };
+  }
+}
+
+const CSB_ID = 'cm-settings-save-bar';
+
 function SettingsTab({ shopDomain }: { shopDomain: string }) {
   const { data, error, isLoading } = useSWR<SettingsResponse>(
     shopDomain ? `/api/couponmaxx/settings?shop=${shopDomain}` : null,
@@ -377,69 +389,53 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
   const [emailDraft, setEmailDraft] = useState('');
   const [slackConnected, setSlackConnected] = useState(false);
   const [slackChannel, setSlackChannel] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
 
-  // Save status states
-  const [triggerSaved, setTriggerSaved] = useState(false);
-  const [triggerError, setTriggerError] = useState(false);
-  const [channelSaved, setChannelSaved] = useState(false);
-  const [channelError, setChannelError] = useState(false);
-  const [digestSaved, setDigestSaved] = useState(false);
-  const [digestError, setDigestError] = useState(false);
+  // Server state snapshot for dirty check and discard
+  const serverSettingsRef = useRef<Settings>(DEFAULT_SETTINGS);
+  const serverEmailRef = useRef<string>('');
 
   // Seed state from API once loaded
   useEffect(() => {
     if (!data) return;
-    setSettings(data.settings as Settings);
-    setEmail(data.email ?? '');
-    setEmailDraft(data.email ?? '');
+    const s = data.settings as Settings;
+    const e = data.email ?? '';
+    serverSettingsRef.current = s;
+    serverEmailRef.current = e;
+    setSettings(s);
+    setEmail(e);
+    setEmailDraft(e);
     setSlackConnected(data.slack.connected);
     setSlackChannel(data.slack.channel);
   }, [data]);
+
 
   const updateSetting = <K extends keyof Settings>(
     key: K,
     patch: Partial<Settings[K]>,
   ) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: { ...(prev[key] as object), ...patch },
-    }));
+    setSettings((prev) => {
+      const next = { ...prev, [key]: { ...(prev[key] as object), ...patch } };
+      setIsDirty(JSON.stringify(next) !== JSON.stringify(serverSettingsRef.current));
+      return next;
+    });
   };
 
   const updateChannel = (
     channel: 'slack' | 'email',
     patch: Partial<ChannelSettings>,
   ) => {
-    setSettings((prev) => ({
-      ...prev,
-      channels: {
-        ...prev.channels,
-        [channel]: { ...prev.channels[channel], ...patch },
-      },
-    }));
+    setSettings((prev) => {
+      const next = {
+        ...prev,
+        channels: { ...prev.channels, [channel]: { ...prev.channels[channel], ...patch } },
+      };
+      setIsDirty(JSON.stringify(next) !== JSON.stringify(serverSettingsRef.current));
+      return next;
+    });
   };
 
-  const saveTriggers = async () => {
-    setTriggerSaved(false);
-    setTriggerError(false);
-    try {
-      const res = await fetch('/api/couponmaxx/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop: shopDomain, settings }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      setTriggerSaved(true);
-      setTimeout(() => setTriggerSaved(false), 3000);
-    } catch {
-      setTriggerError(true);
-      setTimeout(() => setTriggerError(false), 3000);
-    }
-  };
-
-  const saveChannels = async () => {
-    setChannelSaved(false);
-    setChannelError(false);
+  const saveAll = useCallback(async () => {
     const resolvedEmail = editingEmail ? emailDraft : email;
     try {
       const res = await fetch('/api/couponmaxx/settings', {
@@ -448,32 +444,22 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
         body: JSON.stringify({ shop: shopDomain, settings, email: resolvedEmail }),
       });
       if (!res.ok) throw new Error('Failed');
+      serverSettingsRef.current = settings;
+      serverEmailRef.current = resolvedEmail;
       if (editingEmail) { setEmail(emailDraft); setEditingEmail(false); }
-      setChannelSaved(true);
-      setTimeout(() => setChannelSaved(false), 3000);
+      setIsDirty(false);
     } catch {
-      setChannelError(true);
-      setTimeout(() => setChannelError(false), 3000);
+      // error is surfaced via the form staying dirty
     }
-  };
+  }, [shopDomain, settings, email, emailDraft, editingEmail]);
 
-  const saveDigest = async () => {
-    setDigestSaved(false);
-    setDigestError(false);
-    try {
-      const res = await fetch('/api/couponmaxx/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop: shopDomain, settings }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      setDigestSaved(true);
-      setTimeout(() => setDigestSaved(false), 3000);
-    } catch {
-      setDigestError(true);
-      setTimeout(() => setDigestError(false), 3000);
-    }
-  };
+  const discardAll = useCallback(() => {
+    setSettings(serverSettingsRef.current);
+    setEmail(serverEmailRef.current);
+    setEmailDraft(serverEmailRef.current);
+    setEditingEmail(false);
+    setIsDirty(false);
+  }, []);
 
   if (isLoading) {
     return (
@@ -512,12 +498,6 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
   const thresholdRowStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 6, marginTop: 6,
     fontSize: 12, color: '#6B7280', flexWrap: 'wrap',
-  };
-
-  const saveBtnStyle: React.CSSProperties = {
-    background: '#0EA5E9', color: '#FFFFFF', border: 'none',
-    borderRadius: 6, padding: '8px 18px', fontSize: 13, fontWeight: 500,
-    cursor: 'pointer',
   };
 
   // ---- Trigger rows definition ----
@@ -634,11 +614,6 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
           );
         })}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 16, gap: 12 }}>
-          {triggerSaved && <span style={{ fontSize: 13, color: '#16A34A' }}>Settings saved</span>}
-          {triggerError && <span style={{ fontSize: 13, color: '#EF4444' }}>Save failed — please try again</span>}
-          <button onClick={saveTriggers} style={saveBtnStyle}>Save</button>
-        </div>
       </div>
 
       {/* ---- Sub-section 2: Notification channels ---- */}
@@ -770,12 +745,6 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
         </div>
       </div>
 
-      {/* Save channels button */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-        {channelSaved && <span style={{ fontSize: 13, color: '#16A34A' }}>Settings saved</span>}
-        {channelError && <span style={{ fontSize: 13, color: '#EF4444' }}>Save failed — please try again</span>}
-        <button onClick={saveChannels} style={saveBtnStyle}>Save channels</button>
-      </div>
 
       {/* ---- Sub-section 3: Weekly digest ---- */}
       <div style={{
@@ -829,12 +798,13 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 16, gap: 12 }}>
-          {digestSaved && <span style={{ fontSize: 13, color: '#16A34A' }}>Settings saved</span>}
-          {digestError && <span style={{ fontSize: 13, color: '#EF4444' }}>Save failed — please try again</span>}
-          <button onClick={saveDigest} style={saveBtnStyle}>Save digest settings</button>
-        </div>
       </div>
+
+      {/* App Bridge Contextual Save Bar */}
+      <SaveBar id={CSB_ID} open={isDirty}>
+        <button variant="primary" onClick={saveAll} />
+        <button onClick={discardAll} />
+      </SaveBar>
 
     </div>
   );

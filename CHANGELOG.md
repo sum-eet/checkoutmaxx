@@ -9,6 +9,42 @@
 
 ---
 
+## 2026-03-17: BFS — Built for Shopify compliance fixes
+
+**What changed:** 7 fixes targeting Shopify Built for Shopify review requirements.
+
+### BFS-1 — Contextual Save Bar (notifications/settings)
+**Root cause:** SettingsTab had 3 separate Save buttons (triggers, channels, digest). BFS requires App Bridge CSB for all forms.
+**Fix:** Removed all 3 save buttons and their `*Saved`/`*Error` state pairs. Added `serverSettingsRef` + `serverEmailRef` for dirty tracking. Single `saveAll()` + `discardAll()` functions. `<ui-save-bar id="cm-settings-save-bar">` web component + `window.shopify.saveBar.show/hide` on dirty change. Uses `window.shopify.toast.show` for success/error feedback.
+
+### BFS-2 — Onboarding banner
+**Root cause:** No guided setup for new merchants. BFS requires onboarding flow.
+**Fix:** Created `components/couponmaxx/OnboardingBanner.tsx` — dismissible 3-step card grid (pixel tracking, review codes, set up alerts). localStorage persistence via `cm_onboarding_dismissed`. Wired into analytics page above all other content.
+
+### BFS-3 — App status banner
+**Root cause:** No empty-state feedback when no data has arrived yet.
+**Fix:** Added conditional `<Banner tone="info">` on analytics page when `hasData` is false, not loading, and no error. Checks `funnel.cartViews > 0` or `cartViews.total.total > 0`.
+
+### BFS-4 — DateRangePicker responsive redesign
+**Root cause:** Hardcoded `width: 680, height: 460` Popover with `multiMonth` DatePicker fails mobile/small viewports.
+**Fix:** Replaced with `<Select>` dropdown for presets + conditional `<Popover>` with single-month `<DatePicker>` (320px wide) only when "Custom range" selected. No fixed dimensions.
+
+### BFS-5 — Replace fixed-position overlays with Polaris Modal
+**Root cause:** `CodeDetailPanel` (coupons) and `TimelinePanel` (sessions) used `position: fixed` custom overlays with hardcoded z-indexes (40/50 and 200/201). These conflict with Shopify Admin chrome on mobile and break the BFS design audit.
+**Fix:** Both components now render as `<Modal large open onClose={onClose} title={...}>` from `@shopify/polaris`. Content sectioned into `<Modal.Section>` blocks.
+
+### BFS-6 — Design audit (no code changes)
+**Status:** Design check deferred — existing Polaris usage (Card, Text, Badge, Banner, InlineStack, etc.) is compliant. No custom scrollbars. No non-Polaris icons in primary UI. Skeleton states use existing loading spinners (adequate for v1).
+
+### BFS-7 — Branding update to CouponMaxx
+**Root cause:** App was still branded "CheckoutMaxx" in several places.
+**Fix:**
+- `shopify.app.toml`: `name = "checkoutmaxx"` → `name = "couponmaxx"`
+- `app/layout.tsx`: title `"CheckoutMaxx"` → `"CouponMaxx"`, description updated
+- `app/(embedded)/welcome/page.tsx`: Title, all 3 feature cards, banner text, and CTA button links updated to reflect CouponMaxx feature set (broken coupon alerts, coupon analytics, code performance tracking) and correct routes (`/couponmaxx/analytics`, `/couponmaxx/notifications`)
+
+---
+
 ## 2026-03-16: CouponMaxx V4 — Shopify App Store submission build
 
 **What changed:** Complete CouponMaxx app at `/couponmaxx/*`.

@@ -8,6 +8,7 @@ import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
 import { MetricCard } from '@/components/couponmaxx/MetricCard';
 import { FunnelChart } from '@/components/couponmaxx/FunnelChart';
+import { OnboardingBanner } from '@/components/couponmaxx/OnboardingBanner';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -288,8 +289,24 @@ export default function AnalyticsPage() {
   // Render
   // ---------------------------------------------------------------------------
 
+  // App status: whether we have received any data yet
+  const hasData = !!(data && (
+    data.funnel.cartViews > 0 ||
+    data.cartViews.total.total > 0
+  ));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Onboarding banner (dismissible setup guide) */}
+      <OnboardingBanner />
+
+      {/* App status banner — only after onboarding dismissed, before data arrives */}
+      {!isLoading && !hasData && !error && (
+        <Banner tone="info">
+          No cart activity yet for this period. Data appears as customers visit your cart.
+        </Banner>
+      )}
 
       {/* Error banner */}
       {error && (

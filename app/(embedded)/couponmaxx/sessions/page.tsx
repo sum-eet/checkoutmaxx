@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
+import { Banner, Modal, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -466,186 +466,155 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
   const totalValue = session.cartValueEnd ?? session.cartValueStart ?? 0;
 
   return (
-    <>
-      {/* Dark overlay */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 200,
-        }}
-      />
+    <Modal
+      size="large"
+      open
+      onClose={onClose}
+      title={summary}
+    >
+      <Modal.Section>
+        {/* Session metadata */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <OutcomeBadge outcome={session.outcome} />
+          {session.country && (
+            <span style={{ fontSize: 12, color: '#374151' }}>
+              {countryFlag(session.country)} {session.country}
+            </span>
+          )}
+          {session.device && (
+            <DeviceCell device={session.device} />
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>
+          {session.sessionId}
+        </div>
+      </Modal.Section>
 
-      {/* Panel */}
-      <div
-        style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0,
-          width: 480, background: '#FFFFFF',
-          borderLeft: '1px solid #E3E3E3',
-          zIndex: 201, overflowY: 'auto',
-          display: 'flex', flexDirection: 'column',
-        }}
-      >
-        {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E3E3E3', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {session.sessionId}
-              </div>
-              <div style={{ fontSize: 13, color: '#374151', marginBottom: 8, lineHeight: 1.4 }}>
-                {summary}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <OutcomeBadge outcome={session.outcome} />
-                {session.country && (
-                  <span style={{ fontSize: 12, color: '#374151' }}>
-                    {countryFlag(session.country)} {session.country}
+      {/* Products section */}
+      {session.products.length > 0 && (
+        <Modal.Section>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Products
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {session.products.map((p, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ fontSize: 13, color: '#1A1A1A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {p.productTitle ?? 'Unknown'}
+                </span>
+                <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>×{p.quantity}</span>
+                {p.price != null && (
+                  <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>
+                    {fmtMoneyFromCents(p.price)}
                   </span>
                 )}
-                {session.device && (
-                  <DeviceCell device={session.device} />
-                )}
               </div>
-            </div>
-            <button
-              onClick={onClose}
-              style={{
-                flexShrink: 0, background: 'none', border: '1px solid #E3E3E3',
-                borderRadius: 6, padding: 6, cursor: 'pointer',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <CloseIcon />
-            </button>
+            ))}
           </div>
+          {totalValue > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
+                Total: {fmtMoney(totalValue)}
+              </span>
+            </div>
+          )}
+        </Modal.Section>
+      )}
+
+      {/* Timeline section */}
+      <Modal.Section>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Timeline
         </div>
 
-        {/* Products section */}
-        {session.products.length > 0 && (
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid #E3E3E3', flexShrink: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Products
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {session.products.map((p, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 13, color: '#1A1A1A', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.productTitle ?? 'Unknown'}
-                  </span>
-                  <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>×{p.quantity}</span>
-                  {p.price != null && (
-                    <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>
-                      {fmtMoneyFromCents(p.price)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            {totalValue > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, paddingTop: 8, borderTop: '1px solid #F3F4F6' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A' }}>
-                  Total: {fmtMoney(totalValue)}
-                </span>
-              </div>
-            )}
+        {isLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
+            <Spinner size="small" />
           </div>
         )}
 
-        {/* Timeline section */}
-        <div style={{ padding: '16px 20px', flex: 1 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Timeline
+        {error && (
+          <Banner tone="critical">Failed to load timeline.</Banner>
+        )}
+
+        {data && data.timeline.length === 0 && (
+          <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: 24 }}>
+            No events recorded.
           </div>
+        )}
 
-          {isLoading && (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-              <Spinner size="small" />
-            </div>
-          )}
+        {data && data.timeline.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {data.timeline.map((ev, i) => {
+              const prevAt = i > 0 ? new Date(data.timeline[i - 1].occurredAt).getTime() : null;
+              const thisAt = new Date(ev.occurredAt).getTime();
+              const elapsedMs = prevAt != null ? thisAt - prevAt : null;
 
-          {error && (
-            <Banner tone="critical">Failed to load timeline.</Banner>
-          )}
+              const isCart = ev.source === 'cart';
+              const isPositive = ev.sentiment === 'positive';
+              const isNegative = ev.sentiment === 'negative';
 
-          {data && data.timeline.length === 0 && (
-            <div style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: 24 }}>
-              No events recorded.
-            </div>
-          )}
+              const labelColor = isPositive ? '#15803D' : isNegative ? '#B91C1C' : '#1A1A1A';
+              const isCompleted = ev.eventType === 'checkout_completed';
 
-          {data && data.timeline.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {data.timeline.map((ev, i) => {
-                const prevAt = i > 0 ? new Date(data.timeline[i - 1].occurredAt).getTime() : null;
-                const thisAt = new Date(ev.occurredAt).getTime();
-                const elapsedMs = prevAt != null ? thisAt - prevAt : null;
-
-                const isCart = ev.source === 'cart';
-                const isPositive = ev.sentiment === 'positive';
-                const isNegative = ev.sentiment === 'negative';
-
-                const labelColor = isPositive ? '#15803D' : isNegative ? '#B91C1C' : '#1A1A1A';
-                const isCompleted = ev.eventType === 'checkout_completed';
-
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      display: 'flex', gap: 12, paddingTop: 12, paddingBottom: 12,
-                      borderBottom: i < data.timeline.length - 1 ? '1px solid #F3F4F6' : undefined,
-                    }}
-                  >
-                    {/* Time column */}
-                    <div style={{ width: 72, flexShrink: 0, textAlign: 'right' }}>
-                      <div style={{ fontSize: 11, color: '#374151' }}>
-                        {fmtTimelineTime(ev.occurredAt)}
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex', gap: 12, paddingTop: 12, paddingBottom: 12,
+                    borderBottom: i < data.timeline.length - 1 ? '1px solid #F3F4F6' : undefined,
+                  }}
+                >
+                  {/* Time column */}
+                  <div style={{ width: 72, flexShrink: 0, textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#374151' }}>
+                      {fmtTimelineTime(ev.occurredAt)}
+                    </div>
+                    {elapsedMs != null && (
+                      <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>
+                        {fmtElapsed(elapsedMs)}
                       </div>
-                      {elapsedMs != null && (
-                        <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 2 }}>
-                          {fmtElapsed(elapsedMs)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Badge */}
-                    <div style={{ flexShrink: 0, paddingTop: 1 }}>
-                      <span style={{
-                        display: 'inline-block',
-                        background: isCart ? '#F3F4F6' : '#EFF6FF',
-                        color: isCart ? '#374151' : '#1D4ED8',
-                        border: `1px solid ${isCart ? '#E5E7EB' : '#BFDBFE'}`,
-                        borderRadius: 20,
-                        padding: '1px 7px',
-                        fontSize: 10,
-                        fontWeight: 500,
-                      }}>
-                        {isCart ? 'Cart' : 'Checkout'}
-                      </span>
-                    </div>
-
-                    {/* Label + detail */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: 13,
-                        color: labelColor,
-                        fontWeight: isCompleted ? 600 : 400,
-                      }}>
-                        {ev.label}
-                      </div>
-                      {ev.detail && (
-                        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
-                          {ev.detail}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+
+                  {/* Badge */}
+                  <div style={{ flexShrink: 0, paddingTop: 1 }}>
+                    <span style={{
+                      display: 'inline-block',
+                      background: isCart ? '#F3F4F6' : '#EFF6FF',
+                      color: isCart ? '#374151' : '#1D4ED8',
+                      border: `1px solid ${isCart ? '#E5E7EB' : '#BFDBFE'}`,
+                      borderRadius: 20,
+                      padding: '1px 7px',
+                      fontSize: 10,
+                      fontWeight: 500,
+                    }}>
+                      {isCart ? 'Cart' : 'Checkout'}
+                    </span>
+                  </div>
+
+                  {/* Label + detail */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 13,
+                      color: labelColor,
+                      fontWeight: isCompleted ? 600 : 400,
+                    }}>
+                      {ev.label}
+                    </div>
+                    {ev.detail && (
+                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
+                        {ev.detail}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal.Section>
+    </Modal>
   );
 }
 

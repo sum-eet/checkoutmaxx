@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Spinner } from '@shopify/polaris';
+import { Modal, Spinner, Text, Banner } from '@shopify/polaris';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, Cell, Legend,
@@ -195,73 +195,27 @@ function CodeDetailPanel({
   const dateRangeLabel = `${fmtShortDate(start.toISOString())} – ${fmtShortDate(end.toISOString())}`;
 
   return (
-    <>
-      {/* Dark overlay */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 40,
-          background: 'rgba(0,0,0,0.35)',
-        }}
-      />
-
-      {/* Panel */}
-      <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          width: 480,
-          height: '100vh',
-          zIndex: 50,
-          background: '#FFFFFF',
-          borderLeft: '1px solid #E3E3E3',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: 16,
-            right: 16,
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#6B7280',
-            fontSize: 20,
-            lineHeight: 1,
-            padding: 4,
-          }}
-        >
-          ×
-        </button>
-
-        <div style={{ padding: '24px 24px 32px' }}>
-          {isLoading && (
-            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}>
-              <Spinner size="small" />
-            </div>
+    <Modal
+      size="large"
+      open
+      onClose={onClose}
+      title={<span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{code}</span>}
+    >
+      <Modal.Section>
+        {isLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40, paddingBottom: 40 }}>
+            <Spinner size="small" />
+          </div>
           )}
 
           {error && (
-            <div style={{ color: '#B91C1C', fontSize: 13, paddingTop: 20 }}>
-              Failed to load code details.
-            </div>
+            <Banner tone="critical">Failed to load code details.</Banner>
           )}
 
           {data && (
             <>
               {/* Header */}
-              <div style={{ marginBottom: 20, paddingRight: 32 }}>
-                <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 600, color: '#111827', marginBottom: 6 }}>
-                  {data.code}
-                </div>
+              <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <span style={{
                     width: 8, height: 8, borderRadius: '50%',
@@ -474,9 +428,8 @@ function CodeDetailPanel({
               </div>
             </>
           )}
-        </div>
-      </div>
-    </>
+      </Modal.Section>
+    </Modal>
   );
 }
 
