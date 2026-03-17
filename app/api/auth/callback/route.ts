@@ -125,8 +125,17 @@ export async function GET(req: NextRequest) {
     return new Response(`DB write failed: ${err.message}`, { status: 500 });
   }
 
-  // 7. Redirect into the embedded app
+  // 7. Redirect into the embedded app (must go via Shopify admin URL so App Bridge initialises)
+  // host = base64("admin.shopify.com/store/{handle}") → redirect to admin-framed app URL
   console.log("!!!! STEP 6 REDIRECTING:", shop);
-  const appUrl = process.env.SHOPIFY_APP_URL || `https://${req.nextUrl.host}`;
-  return NextResponse.redirect(`${appUrl}/welcome?shop=${shop}&host=${host}`);
+  const apiKey = process.env.SHOPIFY_API_KEY!;
+  let redirectUrl: string;
+  try {
+    const hostDecoded = Buffer.from(host, "base64").toString("utf8"); // e.g. admin.shopify.com/store/testingstoresumeet
+    redirectUrl = `https://${hostDecoded}/apps/${apiKey}/welcome`;
+  } catch {
+    // Fallback: legacy /admin/apps path
+    redirectUrl = `https://${shop}/admin/apps/${apiKey}/welcome`;
+  }
+  return NextResponse.redirect(redirectUrl);
 }

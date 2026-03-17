@@ -26,11 +26,10 @@ export async function registerWebhooks(session: Session) {
   const client = new shopify.clients.Rest({ session });
   const base = process.env.SHOPIFY_APP_URL;
 
+  // GDPR topics (customers/data_request, customers/redact, shop/redact) cannot be
+  // registered via the REST API — they must be set in the Shopify Partner Dashboard.
   const topics = [
     { topic: "app/uninstalled", address: `${base}/api/webhooks/app-uninstalled` },
-    { topic: "customers/data_request", address: `${base}/api/webhooks/customers/data-request` },
-    { topic: "customers/redact", address: `${base}/api/webhooks/customers/redact` },
-    { topic: "shop/redact", address: `${base}/api/webhooks/shop/redact` },
   ];
 
   for (const { topic, address } of topics) {
