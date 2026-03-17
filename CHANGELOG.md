@@ -1188,6 +1188,45 @@ so it was dropped and recreated. All 7 functions redeployed via psql to Supabase
 
 ---
 
+## 2026-03-17: Polaris Migration — Tasks 1–11
+
+All from POLARIS-MIGRATION-ATOMIC.md.
+
+### Task 1 — Delete Header.tsx + remove from layout
+Deleted `components/couponmaxx/Header.tsx`. Removed `import { Header }` and `<Header />` from `app/(embedded)/couponmaxx/layout.tsx`. Simplified outer div (removed `display: flex, flexDirection: column`).
+
+### Task 2 — Delete FilterPill.tsx
+Deleted `components/couponmaxx/FilterPill.tsx`. No files import it.
+
+### Task 3 — Fix lowData threshold
+`app/api/couponmaxx/coupons/route.ts`: `lowData: s.attempts.size < 5` → `< 15`. Matches the `getStatus()` function which already used `< 15`.
+
+### Task 4 — Remove coupons page double padding
+Removed `background: '#F1F1F1', minHeight: '100vh', padding: 24` from outermost wrapper div in coupons page. Layout already provides this.
+
+### Task 5 — MetricCard rewritten with Polaris
+`components/couponmaxx/MetricCard.tsx`: outer div → `<Card>`, title → `<Text variant="bodyMd" fontWeight="semibold">`, definition → `<Text variant="bodySm" tone="subdued">`, big number → `<Text variant="heading2xl">`, loading placeholder → `<SkeletonDisplayText size="large">`. Removed custom TitleDropdown component, replaced with `<Select labelHidden>`. Removed "···" button (did nothing).
+
+### Task 6 — KpiBox rewritten with Polaris
+`components/couponmaxx/KpiBox.tsx`: outer div kept for `onClick` + active outline, inner → `<Card><BlockStack gap="100">`, value → `<Text variant="headingXl">`, sub-lines → `<Text variant="bodySm" tone="subdued">`.
+
+### Task 7 — Analytics page wrapped in `<Page>`
+`app/(embedded)/couponmaxx/analytics/page.tsx`: wrapped in `<Page title="Analytics">`, vertical spacing → `<BlockStack gap="400">`, funnel chart wrapper → `<Card>`. Date/filter controls merged into single `<InlineStack>`.
+
+### Task 8 — Sessions page wrapped in `<Page>`
+`app/(embedded)/couponmaxx/sessions/page.tsx`: wrapped in `<Page title="Cart Sessions">`, filter bar div → `<Card>`, table wrapper → `<Card padding="0">`.
+
+### Task 9 — Sessions table → IndexTable + Pagination + polaris-icons
+Replaced raw `<table>` with `<IndexTable selectable={false}>`. Replaced custom prev/next buttons with `<Pagination hasPrevious hasNext onPrevious onNext>`. Replaced 5 custom SVG icon functions (`DesktopIcon`, `MobileIcon`, `TabletIcon`, `RefreshIcon`, `CloseIcon`) with imports from `@shopify/polaris-icons`. `DeviceCell` now uses `<Icon source={...} tone="subdued">`.
+
+### Task 10 — Coupons page wrapped in `<Page>`
+`app/(embedded)/couponmaxx/coupons/page.tsx`: wrapped in `<Page title="Coupons">`, chart div → `<Card>`, code table div → `<Card padding="0">`.
+
+### Task 11 — Coupons main table → IndexTable + ButtonGroup + Tabs
+Replaced main code table (`<table>`) with `<IndexTable selectable={false}>` with 8 column headings. Replaced custom sort pills with `<ButtonGroup variant="segmented">` (Attempts / Success rate / Avg cart / Last seen). Replaced status filter pills with `<Tabs>` (All / Healthy / Degraded / Broken / Low data). Rows clickable via `onClick` → opens detail panel. 3 small tables inside `<Modal>` (product breakdown, recent sessions, zombie codes) left as raw `<table>` — appropriate for compact modal content.
+
+---
+
 ## 2026-03-17: Polaris Migration — Final Verification (Tasks 12–15)
 
 Completed the remaining tasks from POLARIS-MIGRATION-ATOMIC.md.
