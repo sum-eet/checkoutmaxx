@@ -3,7 +3,12 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const version = process.env.DASHBOARD_VERSION ?? 'v1';
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
+
+  // Preserve query params (shop, host, etc.) when redirecting
+  function redirect(path: string) {
+    return NextResponse.redirect(new URL(path + search, request.url));
+  }
 
   // Root dashboard — redirect to version home
   if (pathname === '/dashboard') {
@@ -12,7 +17,7 @@ export function middleware(request: NextRequest) {
       version === 'v3' ? '/dashboard/v3/overview' :
       version === 'v2' ? '/dashboard/v2/overview' :
       '/dashboard/cart';
-    return NextResponse.redirect(new URL(dest, request.url));
+    return redirect(dest);
   }
 
   // V1 routes accessed while version is v2/v3/v4 — redirect to version home
@@ -22,7 +27,7 @@ export function middleware(request: NextRequest) {
       version === 'v4' ? '/couponmaxx/analytics' :
       version === 'v3' ? '/dashboard/v3/overview' :
       '/dashboard/v2/overview';
-    return NextResponse.redirect(new URL(dest, request.url));
+    return redirect(dest);
   }
 }
 

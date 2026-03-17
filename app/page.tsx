@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 export default function RootPage({
   searchParams,
 }: {
-  searchParams: { shop?: string; host?: string };
+  searchParams: { shop?: string; host?: string; [key: string]: string | undefined };
 }) {
+  // Forward all params (shop, host, embedded, etc.) directly to the app home
   const params = new URLSearchParams();
-  if (searchParams.shop) params.set("shop", searchParams.shop);
-  if (searchParams.host) params.set("host", searchParams.host);
+  for (const [k, v] of Object.entries(searchParams)) {
+    if (v) params.set(k, v);
+  }
   const qs = params.toString();
-  redirect(`/dashboard${qs ? `?${qs}` : ""}`);
+  redirect(`/couponmaxx/analytics${qs ? `?${qs}` : ""}`);
 }
