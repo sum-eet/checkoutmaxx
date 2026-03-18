@@ -227,12 +227,12 @@ async function processEvent({
 
   const { data: shop, error: shopError } = await supabase
     .from("Shop")
-    .select("id, isActive")
+    .select("id")
     .eq("shopDomain", shopDomain)
     .single();
 
-  if (shopError || !shop || !shop.isActive) {
-    logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found" });
+  if (shopError || !shop) {
+    logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found or db error" });
     return;
   }
 

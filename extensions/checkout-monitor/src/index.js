@@ -55,6 +55,28 @@ register(({ analytics, browser, init }) => {
     browser.sendBeacon(INGEST_URL, body);
   }
 
+  // Storefront events — homepage/cart analytics
+  analytics.subscribe("page_viewed", (event) => {
+    send("page_viewed", event.data);
+  });
+
+  analytics.subscribe("cart_viewed", (event) => {
+    send("cart_viewed", event.data);
+  });
+
+  analytics.subscribe("product_viewed", (event) => {
+    send("product_viewed", event.data);
+  });
+
+  analytics.subscribe("product_added_to_cart", (event) => {
+    send("product_added_to_cart", event.data);
+  });
+
+  analytics.subscribe("product_removed_from_cart", (event) => {
+    send("product_removed_from_cart", event.data);
+  });
+
+  // Checkout events
   analytics.subscribe("checkout_started", (event) => {
     currentSessionId = extractSessionId(event.data?.checkout);
     send("checkout_started", event.data);

@@ -24,22 +24,13 @@ export async function POST(req: NextRequest) {
   const shopRecord = await prisma.shop.findUnique({ where: { shopDomain: shop } });
 
   if (shopRecord) {
-    // Guard against the race condition where:
-    //   1. merchant uninstalls → Shopify queues this webhook (delayed delivery)
-    //   2. merchant immediately reinstalls → auth callback sets isActive=true, updatedAt=now
-    //   3. this old webhook finally arrives → would wrongly set isActive=false
-    //
-    // X-Shopify-Triggered-At tells us when the uninstall actually happened.
-    // If the shop's updatedAt is AFTER the webhook trigger time, a reinstall
-    // has already happened — do not mark inactive.
-    const triggeredAtHeader = req.headers.get("x-shopify-triggered-at");
-    if (triggeredAtHeader) {
-      const triggeredAt = new Date(triggeredAtHeader).getTime();
-      const shopUpdatedAt = new Date(shopRecord.updatedAt).getTime();
-      if (shopUpdatedAt > triggeredAt) {
-        console.log(`[app-uninstalled] Skipping stale webhook for ${shop} — shop reinstalled at ${shopRecord.updatedAt}, webhook triggered at ${triggeredAtHeader}`);
-        return NextResponse.json({ ok: true });
-      }
+    // Skip deactivation if the shop was installed within the last 60 seconds —
+    // Shopify fires app/uninstalled during reinstall sequences (uninstall+reinstall
+    // back-to-back), which would immediately flip isActive back to false.
+    const secondsSinceInstall = (Date.now() - new Date(shopRecord.installedAt).getTime()) / 1000;
+    if (secondsSinceInstall < 60) {
+      console.log(`[app-uninstalled] skipping deactivation for ${shop} — reinstall in progress (${secondsSinceInstall.toFixed(0)}s since install)`);
+      return NextResponse.json({ ok: true });
     }
 
     if (shopRecord.pixelId && shopRecord.accessToken) {
@@ -50,7 +41,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mark inactive, keep data — merchant may reinstall
     await prisma.shop.update({
       where: { id: shopRecord.id },
       data: { isActive: false, pixelId: null },
