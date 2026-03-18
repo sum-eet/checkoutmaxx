@@ -1,9 +1,10 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getShopFromRequest } from "@/lib/verify-session-token";
 
 export async function GET(req: NextRequest) {
-  const shop = req.nextUrl.searchParams.get("shop");
+  const shop = getShopFromRequest(req);
   if (!shop) return NextResponse.json({ active: false });
 
   try {

@@ -2,13 +2,14 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { buildSessionsFromEvents } from '@/lib/v3/session-builder';
+import { getShopFromRequest } from "@/lib/verify-session-token";
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = p.get('shop');
+  const shopDomain = getShopFromRequest(req);
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
   const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();

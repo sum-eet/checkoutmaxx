@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getShopFromRequest } from "@/lib/verify-session-token";
 
 type TimelineEvent = {
   source: 'cart' | 'checkout';
@@ -37,7 +38,7 @@ const CHECKOUT_LABELS: Record<string, string> = {
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = p.get('shop');
+  const shopDomain = getShopFromRequest(req);
   const sessionId = p.get('sessionId');
   if (!shopDomain || !sessionId) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
 

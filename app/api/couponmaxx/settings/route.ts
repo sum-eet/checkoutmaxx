@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getShopFromRequest } from "@/lib/verify-session-token";
 
 const DEFAULT_SETTINGS = {
   brokenCoupon:       { enabled: true,  threshold: 10, attempts: 10 },
@@ -24,7 +25,7 @@ const DEFAULT_SETTINGS = {
 };
 
 export async function GET(req: NextRequest) {
-  const shopDomain = req.nextUrl.searchParams.get('shop');
+  const shopDomain = getShopFromRequest(req);
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
   const { data: shop } = await supabase.from('Shop').select('id, notificationSettings, notificationEmail, slackChannelName, slackWebhookUrl')

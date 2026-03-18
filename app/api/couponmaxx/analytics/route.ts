@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getShopFromRequest } from "@/lib/verify-session-token";
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date | string) { return new Date(d).toISOString().slice(0, 10); }
@@ -19,7 +20,7 @@ function buildDailyMap(start: Date, end: Date) {
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = p.get('shop');
+  const shopDomain = getShopFromRequest(req);
   console.log('[analytics] GET shop=%s start=%s end=%s', shopDomain, p.get('start'), p.get('end'));
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
