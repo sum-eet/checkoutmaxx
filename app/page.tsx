@@ -1,13 +1,11 @@
 import { redirect } from "next/navigation";
 
+const APP_URL = process.env.SHOPIFY_APP_URL || "https://couponmaxx.vercel.app";
+
 export default async function RootPage({
   searchParams,
 }: {
-  searchParams: {
-    shop?: string;
-    host?: string;
-    [key: string]: string | undefined;
-  };
+  searchParams: { shop?: string; host?: string; [key: string]: string | undefined };
 }) {
   console.log("!!!! ROOT PAGE HIT — shop:", searchParams.shop, "host:", searchParams.host);
 
@@ -17,13 +15,21 @@ export default async function RootPage({
   }
   const qs = params.toString();
 
-  // Fresh install: Shopify sends ?shop=xxx with no host
-  // Embedded re-open: Shopify sends ?shop=xxx&host=xxx
-  if (searchParams.shop && !searchParams.host) {
-    console.log("!!!! ROOT PAGE — fresh install, starting OAuth");
-    redirect(`/api/auth/begin?${qs}`);
+  if (searchParams.shop) {
+    try {
+      const res = await fetch(`${APP_URL}/api/shop-status?shop=${searchParams.shop}`, { cache: "no-store" });
+      const json = await res.json();
+      console.log("!!!! ROOT PAGE shop-status:", searchParams.shop, JSON.stringify(json));
+      if (!json.active) {
+        console.log("!!!! ROOT PAGE — not active, starting OAuth");
+        redirect(`/api/auth/begin?${qs}`);
+      }
+    } catch (err: any) {
+      console.error("!!!! ROOT PAGE shop-status error:", err.message);
+      redirect(`/api/auth/begin?${qs}`);
+    }
   }
 
-  console.log("!!!! ROOT PAGE — redirecting to analytics");
+  console.log("!!!! ROOT PAGE — shop active, going to analytics");
   redirect(`/couponmaxx/analytics${qs ? `?${qs}` : ""}`);
 }
