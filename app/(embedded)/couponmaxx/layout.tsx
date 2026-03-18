@@ -6,7 +6,7 @@ export default function CouponMaxxLayout({ children }: { children: React.ReactNo
   // Delay nav mount to ensure App Bridge is initialized before ui-nav-menu renders
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 500);
+    const timer = setTimeout(() => setMounted(true), 800);
     return () => clearTimeout(timer);
   }, []);
 
