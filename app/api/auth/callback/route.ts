@@ -128,10 +128,10 @@ export async function GET(req: NextRequest) {
     return new Response(`DB write failed: ${err.message}`, { status: 500 });
   }
 
-  // 7. Redirect back into our app — App Bridge will handle embedding
+  // 7. Redirect into the embedded app with shop+host so useShop can read them from URL
   console.log("!!!! STEP 6 REDIRECTING:", shop);
   const appUrl = process.env.SHOPIFY_APP_URL || "https://couponmaxx.vercel.app";
-  const redirectUrl = `${appUrl}/welcome?shop=${shop}&host=${host}`;
+  const redirectUrl = `${appUrl}/couponmaxx/analytics?shop=${shop}&host=${host}`;
   console.log("!!!! STEP 6 redirect URL:", redirectUrl);
   return NextResponse.redirect(redirectUrl);
 }
