@@ -35,6 +35,7 @@ export function verifySessionToken(token: string): string | null {
  * Tries session token first, falls back to query param.
  */
 export function getShopFromRequest(req: Request): string | null {
+  // 1. Try Authorization header
   const auth = req.headers.get("authorization");
   if (auth?.startsWith("Bearer ")) {
     const shop = verifySessionToken(auth.slice(7));
@@ -42,5 +43,14 @@ export function getShopFromRequest(req: Request): string | null {
   }
 
   const url = new URL(req.url);
+
+  // 2. Try id_token from URL (App Bridge 4.x passes it here)
+  const idToken = url.searchParams.get("id_token");
+  if (idToken) {
+    const shop = verifySessionToken(idToken);
+    if (shop) return shop;
+  }
+
+  // 3. Fallback to shop query param
   return url.searchParams.get("shop");
 }

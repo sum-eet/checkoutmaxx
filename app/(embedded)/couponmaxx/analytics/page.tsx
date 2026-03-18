@@ -95,9 +95,13 @@ type CompareOption = '' | 'previous_period' | 'previous_year';
 // ---------------------------------------------------------------------------
 
 async function fetcher(url: string) {
+  console.log('[DEBUG] fetching:', url);
   const res = await fetch(url);
+  console.log('[DEBUG] response status:', res.status);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json() as Promise<AnalyticsData>;
+  const json = await res.json();
+  console.log('[DEBUG] response data keys:', Object.keys(json));
+  return json as AnalyticsData;
 }
 
 // ---------------------------------------------------------------------------
