@@ -7,55 +7,46 @@ import prisma from "@/lib/prisma";
 import { registerAppPixel, deregisterAppPixel } from "@/lib/pixel-registration";
 import { registerWebhooks } from "@/lib/shopify";
 
-/**
- * Manual OAuth callback — no state/cookie dependency.
- * Validates HMAC (proves Shopify signed this), exchanges code for access token,
- * stores session and upserts shop row.
- */
 export async function GET(req: NextRequest) {
-  console.log("!!!!!!! AUTH CALLBACK HIT !!!!!!!", new Date().toISOString(), req.url);
-  console.log("[auth/callback] incoming:", req.url);
+  const t0 = Date.now();
+  console.log("[AUTH] ====== CALLBACK START ======", new Date().toISOString());
 
   const params = req.nextUrl.searchParams;
   const shop = params.get("shop");
   const code = params.get("code");
   const hmac = params.get("hmac");
-  const host = params.get("host") ?? "";
+  // host param not used — redirect goes to admin.shopify.com canonical URL
+  params.get("host");
 
   if (!shop || !code || !hmac) {
-    console.error("[auth/callback] missing params:", { shop, code: !!code, hmac: !!hmac });
+    console.error("[AUTH] MISSING PARAMS:", { shop: !!shop, code: !!code, hmac: !!hmac });
     return new Response("Missing required OAuth params", { status: 400 });
   }
 
-  // 1. Validate HMAC — proves Shopify sent this request
+  // ── STEP 1: HMAC ──
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
-    console.error("[auth/callback] SHOPIFY_API_SECRET not set");
+    console.error("[AUTH] NO SHOPIFY_API_SECRET ENV VAR");
     return new Response("Server misconfiguration", { status: 500 });
   }
 
   const pairs: string[] = [];
-  params.forEach((v, k) => {
-    if (k !== "hmac") pairs.push(`${k}=${v}`);
-  });
+  params.forEach((v, k) => { if (k !== "hmac") pairs.push(`${k}=${v}`); });
   pairs.sort();
-  const message = pairs.join("&");
-  const expected = createHmac("sha256", secret).update(message).digest("hex");
+  const expected = createHmac("sha256", secret).update(pairs.join("&")).digest("hex");
 
   try {
     if (!timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(hmac, "hex"))) {
-      console.error("[auth/callback] HMAC mismatch");
+      console.error("[AUTH] HMAC MISMATCH");
       return new Response("HMAC validation failed", { status: 403 });
     }
   } catch {
-    console.error("[auth/callback] HMAC comparison error (likely bad hmac format)");
+    console.error("[AUTH] HMAC COMPARISON ERROR");
     return new Response("Invalid HMAC", { status: 403 });
   }
+  console.log(`[AUTH] STEP 1 HMAC OK (${Date.now() - t0}ms):`, shop);
 
-  console.log("!!!! STEP 1 HMAC OK:", shop);
-  console.log("[auth/callback] HMAC valid for shop:", shop);
-
-  // 2. Exchange code for access token
+  // ── STEP 2: TOKEN EXCHANGE ──
   let accessToken: string;
   let scope: string;
   try {
@@ -70,68 +61,115 @@ export async function GET(req: NextRequest) {
     });
     const body = await tokenRes.json();
     if (!tokenRes.ok || !body.access_token) {
-      console.error("[auth/callback] token exchange failed:", body);
-      return new Response(`Token exchange failed: ${JSON.stringify(body)}`, { status: 500 });
+      console.error("[AUTH] TOKEN EXCHANGE FAILED:", JSON.stringify(body));
+      return new Response("Token exchange failed", { status: 500 });
     }
     accessToken = body.access_token;
     scope = body.scope ?? "";
-    console.log("!!!! STEP 2 TOKEN OK:", shop);
-    console.log("[auth/callback] token received for:", shop);
   } catch (err: any) {
-    console.error("[auth/callback] token exchange error:", err.message);
-    return new Response(`Token exchange error: ${err.message}`, { status: 500 });
+    console.error("[AUTH] TOKEN EXCHANGE ERROR:", err.message);
+    return new Response("Token exchange error", { status: 500 });
   }
+  console.log(`[AUTH] STEP 2 TOKEN OK (${Date.now() - t0}ms):`, shop);
 
-  // 3. Store Shopify session (so the rest of the app can use shopify API clients)
-  const sessionId = `offline_${shop}`;
-  const session = new Session({ id: sessionId, shop, state: "installed", isOnline: false });
-  session.accessToken = accessToken;
-  session.scope = scope;
-  await sessionStorage.storeSession(session);
-  console.log("!!!! STEP 3 SESSION STORED:", shop);
-  console.log("[auth/callback] session stored for:", shop);
-
-  // 4. Register webhooks (fire and forget)
-  registerWebhooks(session).catch(console.error);
-
-  // 5. Register pixel (deregister old one first if exists)
-  console.log("!!!! STEP 4 PIXEL START:", shop);
-  const existingShop = await prisma.shop.findUnique({ where: { shopDomain: shop } });
-  if (existingShop?.pixelId) {
-    deregisterAppPixel(shop, accessToken, existingShop.pixelId).catch(console.error);
-  }
-
-  let pixelId: string | undefined;
+  // ── STEP 3: STORE SESSION ──
   try {
-    pixelId = await registerAppPixel(shop, accessToken);
-    console.log("!!!! STEP 4 PIXEL DONE:", shop, "pixelId:", pixelId);
-    console.log("[auth/callback] pixel registered:", pixelId);
-  } catch (err) {
-    console.error("[auth/callback] pixel registration failed:", err);
-  }
-
-  // 6. Upsert shop row
-  console.log("!!!! STEP 5 UPSERT START:", shop);
-  try {
-    await prisma.shop.upsert({
-      where: { shopDomain: shop },
-      update: { accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
-      create: { shopDomain: shop, accessToken, isActive: true, ...(pixelId ? { pixelId } : {}) },
+    const session = new Session({
+      id: `offline_${shop}`,
+      shop,
+      state: "installed",
+      isOnline: false,
     });
-    console.log("!!!! STEP 5 UPSERT DONE:", shop);
-    console.log("[auth/callback] shop upserted:", shop);
-    // Verify what's actually in the DB right now
-    const verify = await prisma.shop.findUnique({ where: { shopDomain: shop }, select: { id: true, isActive: true, pixelId: true, updatedAt: true } });
-    console.log("!!!! STEP 5 DB VERIFY:", JSON.stringify(verify));
+    session.accessToken = accessToken;
+    session.scope = scope;
+    await sessionStorage.storeSession(session);
   } catch (err: any) {
-    console.error("[auth/callback] DB upsert failed:", err.message);
-    return new Response(`DB write failed: ${err.message}`, { status: 500 });
+    console.error("[AUTH] SESSION STORE FAILED:", err.message);
+    // Don't return 500 — shop upsert is more important
+  }
+  console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
+
+  // ── STEP 4: UPSERT SHOP ROW ──
+  let shopRecord: { id: string; pixelId: string | null } | null = null;
+  try {
+    const existing = await prisma.shop.findUnique({
+      where: { shopDomain: shop },
+      select: { id: true, pixelId: true },
+    });
+
+    const result = await prisma.shop.upsert({
+      where: { shopDomain: shop },
+      update: {
+        accessToken,
+        isActive: true,
+        installedAt: new Date(),
+        pixelId: null,
+      },
+      create: {
+        shopDomain: shop,
+        accessToken,
+        isActive: true,
+        installedAt: new Date(),
+      },
+      select: { id: true, pixelId: true, isActive: true, shopDomain: true },
+    });
+
+    shopRecord = { id: result.id, pixelId: existing?.pixelId ?? null };
+    console.log(`[AUTH] STEP 4 SHOP UPSERTED (${Date.now() - t0}ms):`, JSON.stringify(result));
+  } catch (err: any) {
+    console.error("[AUTH] STEP 4 SHOP UPSERT FAILED:", err.message, err.stack);
   }
 
-  // 7. Redirect into the embedded app with shop+host so useShop can read them from URL
-  console.log("!!!! STEP 6 REDIRECTING:", shop);
-  const appUrl = process.env.SHOPIFY_APP_URL || "https://couponmaxx.vercel.app";
-  const redirectUrl = `${appUrl}/couponmaxx/analytics?shop=${shop}&host=${host}`;
-  console.log("!!!! STEP 6 redirect URL:", redirectUrl);
+  // ── STEP 5: REDIRECT ──
+  const shopHandle = shop.replace(".myshopify.com", "");
+  const redirectUrl = `https://admin.shopify.com/store/${shopHandle}/apps/${process.env.SHOPIFY_API_KEY}`;
+  console.log(`[AUTH] STEP 5 REDIRECTING (${Date.now() - t0}ms):`, redirectUrl);
+
+  // ── STEP 6: BACKGROUND WORK ──
+  const backgroundWork = async () => {
+    const bgStart = Date.now();
+
+    if (shopRecord?.pixelId) {
+      try {
+        await deregisterAppPixel(shop, accessToken, shopRecord.pixelId);
+        console.log(`[AUTH] BG: old pixel deregistered (${Date.now() - bgStart}ms)`);
+      } catch (err: any) {
+        console.error("[AUTH] BG: deregister pixel error:", err.message);
+      }
+    }
+
+    try {
+      const newPixelId = await registerAppPixel(shop, accessToken);
+      if (newPixelId) {
+        await prisma.shop.update({
+          where: { shopDomain: shop },
+          data: { pixelId: newPixelId },
+        });
+        console.log(`[AUTH] BG: pixel registered (${Date.now() - bgStart}ms):`, newPixelId);
+      }
+    } catch (err: any) {
+      console.error("[AUTH] BG: pixel registration error:", err.message);
+    }
+
+    try {
+      const session = new Session({
+        id: `offline_${shop}`,
+        shop,
+        state: "installed",
+        isOnline: false,
+      });
+      session.accessToken = accessToken;
+      await registerWebhooks(session);
+      console.log(`[AUTH] BG: webhooks registered (${Date.now() - bgStart}ms)`);
+    } catch (err: any) {
+      console.error("[AUTH] BG: webhook registration error:", err.message);
+    }
+
+    console.log(`[AUTH] BG: all background work done (${Date.now() - bgStart}ms)`);
+  };
+
+  backgroundWork().catch((err) => console.error("[AUTH] BG: uncaught error:", err));
+
+  console.log(`[AUTH] ====== CALLBACK DONE (${Date.now() - t0}ms) ======`);
   return NextResponse.redirect(redirectUrl);
 }
