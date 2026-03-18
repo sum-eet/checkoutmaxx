@@ -1,6 +1,6 @@
 name = "couponmaxx"
 client_id = "ef34a3eb07ec4333b42d63385823433b"
-application_url = "https://checkoutmaxx-rt55.vercel.app"
+application_url = "https://couponmaxx.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -8,20 +8,20 @@ scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_anal
 
 [auth]
 redirect_urls = [
-  "https://checkoutmaxx-rt55.vercel.app/api/auth/callback"
+  "https://couponmaxx.vercel.app/api/auth/callback"
 ]
 
 [webhooks]
 api_version = "2025-04"
 
 [webhooks.privacy_compliance]
-customer_data_request_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/data-request"
-customer_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/redact"
-shop_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/shop/redact"
+customer_data_request_url = "https://couponmaxx.vercel.app/api/webhooks/customers/data-request"
+customer_deletion_url = "https://couponmaxx.vercel.app/api/webhooks/customers/redact"
+shop_deletion_url = "https://couponmaxx.vercel.app/api/webhooks/shop/redact"
 
 [pos]
 embedded = false
 
 [[extensions]]
-type = "theme"
+type = "web_pixel"
 handle = "cart-monitor"
