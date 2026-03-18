@@ -24,8 +24,8 @@ export async function GET(req: NextRequest) {
     try {
       await sendAlertEmail({
         to: shop.alertEmail,
-        title: "Test alert — CheckoutMaxx is working",
-        body: "This is a test alert fired from the CheckoutMaxx test endpoint.\n\nIf you received this, email alerts are configured correctly.",
+        title: "Test alert — CouponMaxx is working",
+        body: "This is a test alert fired from the CouponMaxx test endpoint.\n\nIf you received this, email alerts are configured correctly.",
         actionUrl: `https://${shopDomain}/admin/settings/payments`,
         actionLabel: "Example deep link (Check payment settings)",
         shopDomain,
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     try {
       await sendSlackMessage({
         webhookUrl: shop.slackWebhookUrl,
-        title: "Test alert — CheckoutMaxx is working",
+        title: "Test alert — CouponMaxx is working",
         body: "This is a test alert. If you see this, Slack alerts are configured correctly.",
         shopDomain,
       });

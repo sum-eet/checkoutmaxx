@@ -397,7 +397,7 @@ export default function SettingsPage() {
                 </Text>
               </Text>
               <Text as="p" tone="subdued">
-                The CheckoutMaxx pixel is active on your store and sending events. Go through a
+                The CouponMaxx pixel is active on your store and sending events. Go through a
                 test checkout to confirm events are flowing.
               </Text>
             </BlockStack>
@@ -409,7 +409,7 @@ export default function SettingsPage() {
           <Box background="bg-surface-secondary" padding="600" borderRadius="300">
             <BlockStack gap="400">
               <Text as="h2" variant="headingLg">
-                CheckoutMaxx is monitoring your store
+                CouponMaxx is monitoring your store
               </Text>
               <InlineGrid columns={4} gap="400">
                 {[

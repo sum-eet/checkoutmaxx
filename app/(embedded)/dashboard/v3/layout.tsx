@@ -35,7 +35,7 @@ export default function V3Layout({ children }: { children: React.ReactNode }) {
           alignItems: 'center',
           gap: 8,
         }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#202223' }}>CheckoutMaxx</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: '#202223' }}>CouponMaxx</span>
           <span style={{
             fontSize: 10,
             background: '#d9f5e8',

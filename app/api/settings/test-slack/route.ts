@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
   try {
     await sendSlackMessage({
       webhookUrl,
-      title: "CheckoutMaxx test message",
-      body: "This is a test notification from CheckoutMaxx. Your Slack integration is working correctly.",
+      title: "CouponMaxx test message",
+      body: "This is a test notification from CouponMaxx. Your Slack integration is working correctly.",
       shopDomain: shop,
     });
     return NextResponse.json({ ok: true });

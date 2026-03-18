@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>1. Who We Are</h2>
         <p>
-          CheckoutMaxx ("we", "us", "our") is a Shopify app that helps merchants monitor
+          CouponMaxx ("we", "us", "our") is a Shopify app that helps merchants monitor
           their checkout funnel, detect conversion drops, and receive alerts about
           checkout errors.
         </p>
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>2. Data We Collect</h2>
         <p>
-          CheckoutMaxx collects the following data from your Shopify store:
+          CouponMaxx collects the following data from your Shopify store:
         </p>
         <ul style={{ paddingLeft: 24, marginTop: 8 }}>
           <li>
@@ -56,20 +56,20 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>3. How We Use Data</h2>
         <p>Data is used solely to:</p>
         <ul style={{ paddingLeft: 24, marginTop: 8 }}>
-          <li>Power the CheckoutMaxx dashboard and funnel analytics for your store.</li>
+          <li>Power the CouponMaxx dashboard and funnel analytics for your store.</li>
           <li>Send you alerts when checkout conversion drops significantly.</li>
           <li>Compute baseline conversion rates for anomaly detection.</li>
         </ul>
         <p style={{ marginTop: 8 }}>
           We do not sell, share, or use your data for advertising or any purpose
-          beyond providing the CheckoutMaxx service to you.
+          beyond providing the CouponMaxx service to you.
         </p>
       </section>
 
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>4. Data Retention</h2>
         <p>
-          Checkout event data is retained for as long as your store has CheckoutMaxx
+          Checkout event data is retained for as long as your store has CouponMaxx
           installed. When you uninstall the app, all data associated with your shop is
           deleted within 48 hours in compliance with Shopify's GDPR requirements.
         </p>

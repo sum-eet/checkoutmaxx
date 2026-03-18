@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = "CheckoutMaxx Alerts <alerts@flowymails.com>";
+const FROM = "CouponMaxx Alerts <alerts@flowymails.com>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "";
 
 export async function sendAlertEmail({
@@ -28,7 +28,7 @@ export async function sendAlertEmail({
     "",
     `View your dashboard: ${APP_URL}/dashboard?shop=${shopDomain}`,
     "",
-    "— CheckoutMaxx",
+    "— CouponMaxx",
   ].filter((l) => l !== null);
 
   await resend.emails.send({

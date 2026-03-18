@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
         .sort((a, b) => b.dropPct - a.dropPct)[0];
 
       const body = [
-        "CheckoutMaxx Weekly Summary",
+        "CouponMaxx Weekly Summary",
         `Week of ${fmt(monday)} - ${fmt(sunday)}`,
         "",
         `Checkouts monitored this week: ${thisWeekStarted.toLocaleString()}`,
@@ -103,15 +103,15 @@ export async function GET(req: NextRequest) {
         "",
         "--------------------------------------------",
         "To stop these emails, go to Settings in the app.",
-        "CheckoutMaxx - Checkout monitoring for Shopify stores.",
+        "CouponMaxx - Checkout monitoring for Shopify stores.",
       ]
         .filter((l) => l !== undefined)
         .join("\n");
 
       await resend.emails.send({
-        from: "CheckoutMaxx <alerts@flowymails.com>",
+        from: "CouponMaxx <alerts@flowymails.com>",
         to: shop.alertEmail!,
-        subject: `CheckoutMaxx Weekly - ${shop.shopDomain}`,
+        subject: `CouponMaxx Weekly - ${shop.shopDomain}`,
         text: body,
       });
       sent++;
