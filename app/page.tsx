@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 
 export default async function RootPage({
   searchParams,
@@ -18,28 +17,13 @@ export default async function RootPage({
   }
   const qs = params.toString();
 
-  if (searchParams.shop) {
-    let shopRecord;
-    try {
-      shopRecord = await prisma.shop.findUnique({
-        where: { shopDomain: searchParams.shop },
-        select: { isActive: true },
-      });
-      console.log("!!!! ROOT PAGE DB RESULT — shop:", searchParams.shop, "record:", JSON.stringify(shopRecord));
-    } catch (err: any) {
-      console.error("!!!! ROOT PAGE DB ERROR:", err.message);
-      // DB down — still try OAuth so install can complete
-      console.log("!!!! ROOT PAGE — DB error, falling through to auth/begin");
-      redirect(`/api/auth/begin?${qs}`);
-    }
-
-    if (!shopRecord || !shopRecord.isActive) {
-      console.log("!!!! ROOT PAGE — no active shop, redirecting to auth/begin");
-      redirect(`/api/auth/begin?${qs}`);
-    }
+  // Fresh install: Shopify sends ?shop=xxx with no host
+  // Embedded re-open: Shopify sends ?shop=xxx&host=xxx
+  if (searchParams.shop && !searchParams.host) {
+    console.log("!!!! ROOT PAGE — fresh install, starting OAuth");
+    redirect(`/api/auth/begin?${qs}`);
   }
 
-  // Installed → go to app
-  console.log("!!!! ROOT PAGE — shop active, redirecting to analytics");
+  console.log("!!!! ROOT PAGE — redirecting to analytics");
   redirect(`/couponmaxx/analytics${qs ? `?${qs}` : ""}`);
 }
