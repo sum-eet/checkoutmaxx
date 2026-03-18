@@ -12,10 +12,20 @@ export function useShop(): string {
     if (fromUrl) {
       localStorage.setItem(STORAGE_KEY, fromUrl);
       setShop(fromUrl);
-    } else {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setShop(stored);
+      return;
     }
+    // Try App Bridge
+    try {
+      const shopify = (window as any).shopify;
+      if (shopify?.config?.shop) {
+        localStorage.setItem(STORAGE_KEY, shopify.config.shop);
+        setShop(shopify.config.shop);
+        return;
+      }
+    } catch {}
+    // Fall back to localStorage
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) setShop(stored);
   }, []);
 
   return shop;
