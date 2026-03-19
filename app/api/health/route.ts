@@ -1,6 +1,16 @@
 export const dynamic = "force-dynamic";
+export const maxDuration = 10;
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+
+function withTimeout<T>(thenable: PromiseLike<T>, ms: number): Promise<T> {
+  return Promise.race([
+    Promise.resolve(thenable),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), ms)
+    ),
+  ]);
+}
 
 function timeAgo(iso: string): string {
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
@@ -16,38 +26,53 @@ export async function GET() {
 
   const [supabaseCheck, lastCartEvent, lastCheckoutEvent, recentFailures, lastCartPing, lastCheckoutPing] =
     await Promise.allSettled([
-      supabase.from("Shop").select("id").limit(1),
-      supabase
-        .from("CartEvent")
-        .select("occurredAt")
-        .order("occurredAt", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("CheckoutEvent")
-        .select("occurredAt")
-        .order("occurredAt", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("IngestLog")
-        .select("*", { count: "exact", head: true })
-        .eq("success", false)
-        .gte("occurredAt", oneHourAgo),
-      supabase
-        .from("SessionPing")
-        .select("occurredAt")
-        .eq("source", "cart")
-        .order("occurredAt", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("SessionPing")
-        .select("occurredAt")
-        .eq("source", "checkout")
-        .order("occurredAt", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      withTimeout(supabase.from("Shop").select("id").limit(1), 5000),
+      withTimeout(
+        supabase
+          .from("CartEvent")
+          .select("occurredAt")
+          .order("occurredAt", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        5000
+      ),
+      withTimeout(
+        supabase
+          .from("CheckoutEvent")
+          .select("occurredAt")
+          .order("occurredAt", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        5000
+      ),
+      withTimeout(
+        supabase
+          .from("IngestLog")
+          .select("*", { count: "exact", head: true })
+          .eq("success", false)
+          .gte("occurredAt", oneHourAgo),
+        5000
+      ),
+      withTimeout(
+        supabase
+          .from("SessionPing")
+          .select("occurredAt")
+          .eq("source", "cart")
+          .order("occurredAt", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        5000
+      ),
+      withTimeout(
+        supabase
+          .from("SessionPing")
+          .select("occurredAt")
+          .eq("source", "checkout")
+          .order("occurredAt", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        5000
+      ),
     ]);
 
   // Check 1: Can we reach Supabase?
