@@ -181,12 +181,21 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Scoped KPI boxes — reflect whatever filters are active
+  const scopedBoxes = {
+    cartsOpened:     sessions.length,
+    withProducts:    sessions.filter(s => s.products.length > 0 || (s.cartItemCount ?? 0) > 0 || (s.cartValueEnd ?? 0) > 0).length,
+    couponAttempted: sessions.filter(s => s.coupons.length > 0).length,
+    reachedCheckout: sessions.filter(s => s.outcome !== 'abandoned').length,
+  };
+
   const total           = sessions.length;
   const paginated       = sessions.slice((page - 1) * perPage, page * perPage);
   const scopedCheckouts = sessions.filter((s) => s.outcome !== 'abandoned').length;
   const scopedOrdered   = sessions.filter((s) => s.outcome === 'ordered').length;
 
   return NextResponse.json({
+    scopedBoxes,
     boxes: {
       cartsOpened:      kpi.carts_opened,
       emptyCount:       kpi.carts_opened - kpi.with_products,

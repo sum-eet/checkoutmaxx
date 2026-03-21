@@ -34,8 +34,16 @@ type ScopedCounts = {
   completionRate: number;
 };
 
+type ScopedBoxes = {
+  cartsOpened: number;
+  withProducts: number;
+  couponAttempted: number;
+  reachedCheckout: number;
+};
+
 type SessionsResponse = {
   boxes: Boxes;
+  scopedBoxes?: ScopedBoxes;
   sessions: CartSessionV3[];
   total: number;
   page: number;
@@ -586,7 +594,7 @@ export default function SessionsPage() {
   });
 
   // Box filter
-  const [boxFilter, setBoxFilter] = useState('');
+  const [boxFilter, setBoxFilter] = useState('products');
 
   // Filters
   const [country, setCountry] = useState('');
@@ -657,6 +665,7 @@ export default function SessionsPage() {
   // ---------------------------------------------------------------------------
 
   const boxes = data?.boxes;
+  const activeBoxes = boxFilter !== '' && data?.scopedBoxes ? data.scopedBoxes : data?.boxes;
   const sessions = data?.sessions ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / (data?.perPage ?? 25)));
@@ -809,28 +818,28 @@ export default function SessionsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, alignItems: 'stretch' }}>
           <KpiBox
             label="Carts Opened"
-            value={boxes?.cartsOpened ?? (isLoading ? '…' : '—')}
+            value={activeBoxes?.cartsOpened ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.withProducts} with products · ${boxes.emptyCount} empty` : undefined}
             active={boxFilter === ''}
             onClick={() => handleBoxClick('')}
           />
           <KpiBox
             label="With Products"
-            value={boxes?.withProducts ?? (isLoading ? '…' : '—')}
+            value={activeBoxes?.withProducts ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.withProductsPct}% of carts opened` : undefined}
             active={boxFilter === 'products'}
             onClick={() => handleBoxClick('products')}
           />
           <KpiBox
             label="Coupon Attempted"
-            value={boxes?.couponAttempted ?? (isLoading ? '…' : '—')}
+            value={activeBoxes?.couponAttempted ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.couponAttemptedPct}% of product carts` : undefined}
             active={boxFilter === 'coupon'}
             onClick={() => handleBoxClick('coupon')}
           />
           <KpiBox
             label="Reached Checkout"
-            value={boxes?.reachedCheckout ?? (isLoading ? '…' : '—')}
+            value={activeBoxes?.reachedCheckout ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.reachedCheckoutPct}% of product carts` : undefined}
             sub2={
               boxes

@@ -18,7 +18,8 @@ export function KpiBox({ label, value, sub1, sub2, active, onClick }: KpiBoxProp
       style={{
         cursor: onClick ? 'pointer' : undefined,
         borderRadius: 'var(--p-border-radius-300)',
-        outline: active ? '2px solid var(--p-color-border-interactive)' : undefined,
+        outline: active ? '2px solid var(--p-color-border-interactive)' : '2px solid transparent',
+        background: active ? 'var(--p-color-bg-surface-selected)' : undefined,
         outlineOffset: -1,
         height: '100%',
       }}
