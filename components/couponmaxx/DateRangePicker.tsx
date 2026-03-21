@@ -111,7 +111,7 @@ export function DateRangePicker({ value, onChange }: Props) {
       preferredAlignment="left"
       fluidContent
     >
-      <div style={{ display: 'flex', minWidth: showCalendar ? 560 : 200 }}>
+      <div style={{ display: 'flex', minWidth: showCalendar ? 420 : 200 }}>
         {/* Left: Presets */}
         <div style={{
           borderRight: showCalendar ? '1px solid var(--p-color-border-subdued)' : 'none',
@@ -129,7 +129,7 @@ export function DateRangePicker({ value, onChange }: Props) {
 
         {/* Right: Calendar (only when custom is selected) */}
         {showCalendar && (
-          <div style={{ padding: 16 }}>
+          <div style={{ padding: 12 }}>
             <BlockStack gap="300">
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--p-color-text)' }}>
                 {fmtShort(pending.start)} – {fmtShort(pending.end)}
@@ -143,7 +143,6 @@ export function DateRangePicker({ value, onChange }: Props) {
                 onMonthChange={(m, y) => setDate({ month: m, year: y })}
                 selected={{ start: pending.start, end: pending.end }}
                 allowRange
-                multiMonth
               />
               <InlineStack gap="200" align="end">
                 <Button onClick={() => setShowCalendar(false)}>Back</Button>

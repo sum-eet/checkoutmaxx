@@ -685,11 +685,16 @@ export default function CouponsPage() {
               <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 12 }}>Sorted by attempt volume</div>
               {data.successRateChart.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9CA3AF', paddingTop: 60, textAlign: 'center' }}>No data</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={Math.max(300, data.successRateChart.length * 35)}>
+              ) : (() => {
+                const successRateChartData = data.successRateChart
+                  .filter(c => c.attempts > 0)
+                  .sort((a, b) => b.attempts - a.attempts)
+                  .slice(0, 8);
+                return (
+                <ResponsiveContainer width="100%" height={280}>
                   <BarChart
                     layout="vertical"
-                    data={data.successRateChart}
+                    data={successRateChartData}
                     margin={{ top: 0, right: 60, bottom: 0, left: 8 }}
                   >
                     <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10 }} tickFormatter={(v) => `${v}%`} />
@@ -706,7 +711,7 @@ export default function CouponsPage() {
                     />
                     <Bar dataKey="successRate" radius={[0, 3, 3, 0]} label={(props) => {
                       const idx = props.index as number | undefined;
-                      const row = idx !== undefined ? (data.successRateChart[idx] ?? null) : null;
+                      const row = idx !== undefined ? (successRateChartData[idx] ?? null) : null;
                       return (
                         <BarLabel
                           x={typeof props.x === 'number' ? props.x : 0}
@@ -718,13 +723,14 @@ export default function CouponsPage() {
                         />
                       );
                     }}>
-                      {data.successRateChart.map((entry) => (
+                      {successRateChartData.map((entry) => (
                         <Cell key={entry.code} fill={barColor(entry.successRate, entry.status)} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              )}
+                );
+              })()}
             </Card>
           </div>
 

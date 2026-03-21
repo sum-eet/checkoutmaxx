@@ -22,6 +22,7 @@ export function KpiBox({ label, value, sub1, sub2, active, onClick }: KpiBoxProp
         background: active ? 'var(--p-color-bg-surface-selected)' : undefined,
         outlineOffset: -1,
         height: '100%',
+        minHeight: 110,
       }}
     >
       <Card>
