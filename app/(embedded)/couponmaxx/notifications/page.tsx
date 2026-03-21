@@ -7,6 +7,7 @@ import { Banner, BlockStack, Card, Page, Spinner, Tabs, Text } from '@shopify/po
 import { SaveBar } from '@shopify/app-bridge-react';
 import { useShop } from '@/hooks/useShop';
 import { Toggle } from '@/components/couponmaxx/Toggle';
+import { LoadingBar } from '@/components/couponmaxx/LoadingBar';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -246,9 +247,12 @@ function AlertsTab({ shopDomain }: { shopDomain: string }) {
 
   if (isLoading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-        <Spinner size="small" />
-      </div>
+      <>
+        <LoadingBar loading={isLoading} />
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <Spinner size="small" />
+        </div>
+      </>
     );
   }
 

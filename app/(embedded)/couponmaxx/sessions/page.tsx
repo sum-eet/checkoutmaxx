@@ -8,6 +8,7 @@ import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon } from '@shopify/polar
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
 import { KpiBox } from '@/components/couponmaxx/KpiBox';
+import { LoadingBar } from '@/components/couponmaxx/LoadingBar';
 import { deriveSourceV3 } from '@/lib/session-utils';
 import type { CartSessionV3, CouponV3, LineItemV3 } from '@/lib/session-utils';
 
@@ -805,6 +806,7 @@ export default function SessionsPage() {
 
   return (
     <>
+      <LoadingBar loading={isLoading} />
       {/* Keyframe injection for spinner animation */}
       <Page title="Cart Sessions">
       <BlockStack gap="400">

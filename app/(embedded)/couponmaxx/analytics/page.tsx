@@ -9,6 +9,7 @@ import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePic
 import { MetricCard } from '@/components/couponmaxx/MetricCard';
 import { FunnelChart } from '@/components/couponmaxx/FunnelChart';
 import { OnboardingBanner } from '@/components/couponmaxx/OnboardingBanner';
+import { LoadingBar } from '@/components/couponmaxx/LoadingBar';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -350,6 +351,7 @@ export default function AnalyticsPage() {
 
   return (
     <Page title="Analytics">
+      <LoadingBar loading={isLoading} />
       <BlockStack gap="400">
 
       {/* Onboarding banner — shows until dismissed, checks real extension status */}

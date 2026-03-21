@@ -11,6 +11,7 @@ import {
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
 import { KpiBox } from '@/components/couponmaxx/KpiBox';
+import { LoadingBar } from '@/components/couponmaxx/LoadingBar';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -511,6 +512,7 @@ export default function CouponsPage() {
 
   return (
     <Page title="Coupons" subtitle="Track every code, find what's failing, understand what's driving revenue.">
+      <LoadingBar loading={isLoading} />
       <BlockStack gap="400">
 
       {/* Date range picker */}

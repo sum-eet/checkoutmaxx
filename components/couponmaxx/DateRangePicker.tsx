@@ -87,6 +87,7 @@ export function DateRangePicker({ value, onChange }: Props) {
       setShowCalendar(true);
       return;
     }
+    setShowCalendar(false);
     onChange(getPresetRange(Number(val)));
     setActive(false);
   }, [onChange]);
@@ -110,38 +111,48 @@ export function DateRangePicker({ value, onChange }: Props) {
       preferredAlignment="left"
       fluidContent
     >
-      {!showCalendar ? (
-        <OptionList
-          onChange={handlePresetSelect}
-          options={[
-            ...PRESETS.map(p => ({ label: p.label, value: p.value })),
-            { label: 'Custom range...', value: 'custom' },
-          ]}
-          selected={matched ? [matched] : []}
-        />
-      ) : (
-        <div style={{ padding: 16 }}>
-          <BlockStack gap="300">
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--p-color-text)' }}>
-              {fmtShort(pending.start)} – {fmtShort(pending.end)}
-            </div>
-            <DatePicker
-              month={month}
-              year={year}
-              onChange={({ start, end }) => {
-                setPending({ start: startOfDay(start), end: endOfDay(end) });
-              }}
-              onMonthChange={(m, y) => setDate({ month: m, year: y })}
-              selected={{ start: pending.start, end: pending.end }}
-              allowRange
-            />
-            <InlineStack gap="200" align="end">
-              <Button onClick={() => setShowCalendar(false)}>Back</Button>
-              <Button variant="primary" onClick={handleApply}>Apply</Button>
-            </InlineStack>
-          </BlockStack>
+      <div style={{ display: 'flex', minWidth: showCalendar ? 560 : 200 }}>
+        {/* Left: Presets */}
+        <div style={{
+          borderRight: showCalendar ? '1px solid var(--p-color-border-subdued)' : 'none',
+          minWidth: 160,
+        }}>
+          <OptionList
+            onChange={handlePresetSelect}
+            options={[
+              ...PRESETS.map(p => ({ label: p.label, value: p.value })),
+              { label: 'Custom range...', value: 'custom' },
+            ]}
+            selected={matched ? [matched] : showCalendar ? ['custom'] : []}
+          />
         </div>
-      )}
+
+        {/* Right: Calendar (only when custom is selected) */}
+        {showCalendar && (
+          <div style={{ padding: 16 }}>
+            <BlockStack gap="300">
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--p-color-text)' }}>
+                {fmtShort(pending.start)} – {fmtShort(pending.end)}
+              </div>
+              <DatePicker
+                month={month}
+                year={year}
+                onChange={({ start, end }) => {
+                  setPending({ start: startOfDay(start), end: endOfDay(end) });
+                }}
+                onMonthChange={(m, y) => setDate({ month: m, year: y })}
+                selected={{ start: pending.start, end: pending.end }}
+                allowRange
+                multiMonth
+              />
+              <InlineStack gap="200" align="end">
+                <Button onClick={() => setShowCalendar(false)}>Back</Button>
+                <Button variant="primary" onClick={handleApply}>Apply</Button>
+              </InlineStack>
+            </BlockStack>
+          </div>
+        )}
+      </div>
     </Popover>
   );
 }
