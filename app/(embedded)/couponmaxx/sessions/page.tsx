@@ -1,15 +1,36 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import useSWR from 'swr';
-import { Banner, BlockStack, Card, Icon, IndexTable, Modal, Page, Pagination, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
-import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon, XSmallIcon } from '@shopify/polaris-icons';
+import { Banner, BlockStack, Card, Icon, IndexTable, Page, Pagination, Spinner, Select, InlineStack, Badge, Button as PolarisButton } from '@shopify/polaris';
+import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon } from '@shopify/polaris-icons';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
 import { KpiBox } from '@/components/couponmaxx/KpiBox';
 import { deriveSourceV3 } from '@/lib/session-utils';
 import type { CartSessionV3, CouponV3, LineItemV3 } from '@/lib/session-utils';
+
+// ---------------------------------------------------------------------------
+// Human-readable event labels
+// ---------------------------------------------------------------------------
+
+const EVENT_LABELS: Record<string, string> = {
+  cart_bulk_updated: 'Cart updated',
+  cart_item_added: 'Added item to cart',
+  cart_item_removed: 'Removed item from cart',
+  cart_coupon_applied: '✓ Coupon applied',
+  cart_coupon_failed: '✗ Coupon failed',
+  cart_coupon_removed: 'Coupon removed',
+  cart_checkout_clicked: 'Proceeded to checkout',
+  cart_page_hidden: 'Left the page',
+  cart_page_visible: 'Returned to page',
+  cart_atc_clicked: 'Add to cart clicked',
+  cart_viewed: 'Viewed cart',
+  checkout_started: 'Checkout started',
+  checkout_completed: 'Order completed',
+  payment_info_submitted: 'Entered payment info',
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -418,15 +439,13 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
   const totalValue = session.cartValueEnd ?? session.cartValueStart ?? 0;
 
   return (
-    <Modal
-      size="large"
-      open
-      onClose={onClose}
-      title={summary}
-    >
-      <Modal.Section>
-        {/* Session metadata */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+    <>
+      {/* Session metadata */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1A1A1A', marginBottom: 8, lineHeight: 1.4 }}>
+          {summary}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <OutcomeBadge outcome={session.outcome} />
           {session.country && (
             <span style={{ fontSize: 12, color: '#374151' }}>
@@ -440,11 +459,11 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
         <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>
           {session.sessionId}
         </div>
-      </Modal.Section>
+      </div>
 
       {/* Products section */}
       {session.products.length > 0 && (
-        <Modal.Section>
+        <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid #F3F4F6' }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Products
           </div>
@@ -470,11 +489,11 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
               </span>
             </div>
           )}
-        </Modal.Section>
+        </div>
       )}
 
       {/* Timeline section */}
-      <Modal.Section>
+      <div>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Timeline
         </div>
@@ -552,7 +571,7 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
                       color: labelColor,
                       fontWeight: isCompleted ? 600 : 400,
                     }}>
-                      {ev.label}
+                      {EVENT_LABELS[ev.eventType] || ev.label}
                     </div>
                     {ev.detail && (
                       <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
@@ -565,8 +584,8 @@ function TimelinePanel({ session, shop, onClose }: TimelinePanelProps) {
             })}
           </div>
         )}
-      </Modal.Section>
-    </Modal>
+      </div>
+    </>
   );
 }
 
@@ -940,12 +959,16 @@ export default function SessionsPage() {
                 { title: 'Cart value' },
                 { title: 'Coupons' },
                 { title: 'Outcome' },
-                { title: '' },
               ]}
               selectable={false}
             >
               {sessions.map((s, i) => (
-                <IndexTable.Row key={s.sessionId} id={s.sessionId} position={i}>
+                <IndexTable.Row
+                  key={s.sessionId}
+                  id={s.sessionId}
+                  position={i}
+                  onClick={() => setPanelSession(s)}
+                >
                   <IndexTable.Cell>
                     <div style={{ fontSize: 13, fontWeight: 500, color: '#1A1A1A', lineHeight: 1.3 }}>
                       {fmtRelativeTime(s.startTime)}
@@ -982,9 +1005,6 @@ export default function SessionsPage() {
                   <IndexTable.Cell>
                     <OutcomeBadge outcome={s.outcome} />
                   </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <PolarisButton variant="plain" onClick={() => setPanelSession(s)}>View →</PolarisButton>
-                  </IndexTable.Cell>
                 </IndexTable.Row>
               ))}
             </IndexTable>
@@ -1013,15 +1033,51 @@ export default function SessionsPage() {
       </Page>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Timeline panel (portal-style, rendered outside main flow)          */}
+      {/* Slide-in session detail panel                                      */}
       {/* ------------------------------------------------------------------ */}
-      {panelSession && shop && (
-        <TimelinePanel
-          session={panelSession}
-          shop={shop}
-          onClose={() => setPanelSession(null)}
+
+      {/* Overlay */}
+      {panelSession && (
+        <div
+          onClick={() => setPanelSession(null)}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.3)', zIndex: 99,
+          }}
         />
       )}
+
+      {/* Slide-in panel */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        width: 480,
+        height: '100vh',
+        background: '#fff',
+        boxShadow: '-4px 0 20px rgba(0,0,0,0.08)',
+        overflowY: 'auto',
+        zIndex: 100,
+        transform: panelSession ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.2s ease',
+        padding: '20px',
+      }}>
+        {panelSession && shop && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <button onClick={() => setPanelSession(null)} style={{
+                background: 'none', border: 'none', fontSize: 20, cursor: 'pointer',
+                color: 'var(--p-color-text-subdued)',
+              }}>✕</button>
+            </div>
+            <TimelinePanel
+              session={panelSession}
+              shop={shop}
+              onClose={() => setPanelSession(null)}
+            />
+          </>
+        )}
+      </div>
     </>
   );
 }
