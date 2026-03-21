@@ -296,4 +296,48 @@ async function processEvent({
   if (insertError) {
     console.error("[pixel/ingest] DB write failed:", insertError);
   }
+
+  // When an order completes, write a CartEvent so the session builder can
+  // detect it. CheckoutEvent.sessionId is the Shopify checkout token, not the
+  // cart monitor session ID — so we correlate by finding the most recent
+  // cart_checkout_clicked for this shop within the last 30 minutes.
+  if (eventType === "checkout_completed") {
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    const { data: recentCart } = await supabase
+      .from("CartEvent")
+      .select("sessionId, cartToken, country, device, utmSource, utmMedium, utmCampaign")
+      .eq("shopId", shop.id)
+      .eq("eventType", "cart_checkout_clicked")
+      .gte("occurredAt", thirtyMinAgo)
+      .order("occurredAt", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (recentCart) {
+      const { error: cartInsertError } = await supabase.from("CartEvent").insert({
+        id: crypto.randomUUID(),
+        shopId: shop.id,
+        sessionId: recentCart.sessionId,
+        cartToken: recentCart.cartToken ?? "",
+        eventType: "checkout_completed",
+        cartValue: totalPrice != null ? Math.round(totalPrice * 100) : null,
+        couponCode: discountCode ?? null,
+        country: country ?? recentCart.country ?? null,
+        device: deviceType ?? recentCart.device ?? null,
+        utmSource: recentCart.utmSource ?? null,
+        utmMedium: recentCart.utmMedium ?? null,
+        utmCampaign: recentCart.utmCampaign ?? null,
+        occurredAt: new Date(occurredAt).toISOString(),
+      });
+
+      if (cartInsertError) {
+        console.error("[pixel/ingest] CartEvent mirror write failed:", cartInsertError);
+      } else {
+        console.log(`[pixel/ingest] checkout_completed mirrored to CartEvent session ${recentCart.sessionId}`);
+      }
+    } else {
+      console.warn(`[pixel/ingest] checkout_completed received but no cart_checkout_clicked found within 30min for shop ${shopDomain}`);
+    }
+  }
 }
