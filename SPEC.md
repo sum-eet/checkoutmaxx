@@ -233,3 +233,34 @@ Prisma Accelerate was misconfigured with wrong DB host. Even after reconfigurati
 Accelerate's TCP tunnel cannot reach Supabase's postgres on port 5432 from external
 hosts. Supabase JS HTTP client has no such restriction. All 8 dashboard-serving
 API routes migrated in same session.
+
+
+
+toml:
+name = "checkoutmaxx"
+client_id = "0a60bbe935cef2f46838acec2b3918d8"
+application_url = "https://checkoutmaxx-rt55.vercel.app"
+embedded = true
+
+[access_scopes]
+scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics"
+
+[auth]
+redirect_urls = [
+  "https://checkoutmaxx-rt55.vercel.app/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2025-04"
+
+[webhooks.privacy_compliance]
+customer_data_request_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/data-request"
+customer_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/customers/redact"
+shop_deletion_url = "https://checkoutmaxx-rt55.vercel.app/api/webhooks/shop/redact"
+
+[pos]
+embedded = false
+
+[[extensions]]
+type = "theme"
+handle = "cart-monitor"

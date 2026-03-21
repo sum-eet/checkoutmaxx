@@ -8,8 +8,8 @@ import { DesktopIcon, MobileIcon, TabletIcon, RefreshIcon, XSmallIcon } from '@s
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
 import { KpiBox } from '@/components/couponmaxx/KpiBox';
-import { deriveSourceV3 } from '@/lib/v3/session-builder';
-import type { CartSessionV3, CouponV3, LineItemV3 } from '@/lib/v3/session-builder';
+import { deriveSourceV3 } from '@/lib/session-utils';
+import type { CartSessionV3, CouponV3, LineItemV3 } from '@/lib/session-utils';
 
 // ---------------------------------------------------------------------------
 // Types

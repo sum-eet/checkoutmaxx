@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { deriveSourceV3 } from '@/lib/v3/session-builder';
+import { deriveSourceV3 } from '@/lib/session-utils';
 import { getShopFromRequest } from "@/lib/verify-session-token";
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
