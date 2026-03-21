@@ -685,7 +685,7 @@ export default function SessionsPage() {
   // ---------------------------------------------------------------------------
 
   const boxes = data?.boxes;
-  const activeBoxes = boxFilter !== '' && data?.scopedBoxes ? data.scopedBoxes : data?.boxes;
+  const activeBoxes = data?.boxes;
   const sessions = data?.sessions ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / (data?.perPage ?? 25)));
@@ -961,6 +961,7 @@ export default function SessionsPage() {
                 { title: 'Cart value' },
                 { title: 'Coupons' },
                 { title: 'Outcome' },
+                { title: '' },
               ]}
               selectable={false}
             >
@@ -1006,6 +1007,9 @@ export default function SessionsPage() {
                   </IndexTable.Cell>
                   <IndexTable.Cell>
                     <OutcomeBadge outcome={s.outcome} />
+                  </IndexTable.Cell>
+                  <IndexTable.Cell>
+                    <span style={{ color: 'var(--p-color-text-subdued)', fontSize: 16 }}>›</span>
                   </IndexTable.Cell>
                 </IndexTable.Row>
               ))}

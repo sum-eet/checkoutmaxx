@@ -15,14 +15,16 @@ export function KpiBox({ label, value, sub1, sub2, active, onClick }: KpiBoxProp
   return (
     <div
       onClick={onClick}
+      onMouseEnter={(e) => { if (!active && onClick) (e.currentTarget as HTMLElement).style.background = '#FAFBFB'; }}
+      onMouseLeave={(e) => { if (!active) (e.currentTarget as HTMLElement).style.background = ''; }}
       style={{
         cursor: onClick ? 'pointer' : undefined,
         borderRadius: 'var(--p-border-radius-300)',
-        outline: active ? '2px solid var(--p-color-border-interactive)' : '2px solid transparent',
-        background: active ? 'var(--p-color-bg-surface-selected)' : undefined,
-        outlineOffset: -1,
+        borderTop: active ? '3px solid #2C6ECB' : '3px solid transparent',
+        background: active ? '#F4F6F8' : undefined,
         height: '100%',
         minHeight: 110,
+        transition: 'all 0.15s ease',
       }}
     >
       <Card>
