@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
   if (outcome === 'ordered')    sessions = sessions.filter((s) => s.outcome === 'ordered');
   if (outcome === 'checkout')   sessions = sessions.filter((s) => s.outcome === 'checkout');
   if (outcome === 'abandoned')  sessions = sessions.filter((s) => s.outcome === 'abandoned');
-  if (boxFilter === 'products') sessions = sessions.filter((s) => (s.cartItemCount ?? 0) > 0 || s.products.length > 0 || (s.cartValueEnd ?? 0) > 0);
+  if (boxFilter === 'products') sessions = sessions.filter((s) => (s.cartItemCount ?? 0) > 0);
   if (boxFilter === 'coupon')   sessions = sessions.filter((s) => s.coupons.length > 0);
   if (boxFilter === 'checkout') sessions = sessions.filter((s) => s.outcome !== 'abandoned');
   if (search) {

@@ -841,6 +841,7 @@ export default function SessionsPage() {
             label="Carts Opened"
             value={activeBoxes?.cartsOpened ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.withProducts} with products · ${boxes.emptyCount} empty` : undefined}
+            sub2={boxes ? `${boxes.couponAttempted} tried a coupon` : undefined}
             active={boxFilter === ''}
             onClick={() => handleBoxClick('')}
           />
@@ -848,6 +849,7 @@ export default function SessionsPage() {
             label="With Products"
             value={activeBoxes?.withProducts ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.withProductsPct}% of carts opened` : undefined}
+            sub2={boxes ? `${boxes.couponAttempted} attempted a coupon` : undefined}
             active={boxFilter === 'products'}
             onClick={() => handleBoxClick('products')}
           />
@@ -855,6 +857,7 @@ export default function SessionsPage() {
             label="Coupon Attempted"
             value={activeBoxes?.couponAttempted ?? (isLoading ? '…' : '—')}
             sub1={boxes ? `${boxes.couponAttemptedPct}% of product carts` : undefined}
+            sub2={boxes ? `${(boxes.couponAttempted ?? 0) - (boxes.reachedCheckout ?? 0)} abandoned after trying` : undefined}
             active={boxFilter === 'coupon'}
             onClick={() => handleBoxClick('coupon')}
           />

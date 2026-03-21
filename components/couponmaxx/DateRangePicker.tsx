@@ -121,8 +121,8 @@ function MiniCalendar({
           let color = '#202223';
           let fontWeight: number | string = 400;
 
-          if (isStart || isEnd) { bg = '#2C6ECB'; color = '#fff'; fontWeight = 600; }
-          else if (isInRange) { bg = '#E4EFFE'; }
+          if (isStart || isEnd) { bg = '#202223'; color = '#fff'; fontWeight = 600; }
+          else if (isInRange) { bg = '#EDEEEF'; }
           if (isToday && !isStart && !isEnd) { fontWeight = 700; }
           if (isFuture) { color = '#c9cccf'; }
 
@@ -198,9 +198,14 @@ export function DateRangePicker({ value, onChange }: Props) {
       onClose={() => setActive(false)}
       preferredAlignment="left"
     >
-      <div style={{ padding: '8px 0', minWidth: mode === 'calendar' ? 280 : 180 }}>
-        {/* Presets */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', padding: '8px 0' }}>
+        {/* Left: Presets */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minWidth: 160,
+          borderRight: mode === 'calendar' ? '1px solid #e1e3e5' : 'none',
+        }}>
           {PRESETS.map(p => (
             <button
               key={p.days}
@@ -230,7 +235,7 @@ export function DateRangePicker({ value, onChange }: Props) {
               fontSize: 13,
               textAlign: 'left',
               cursor: 'pointer',
-              color: '#2C6ECB',
+              color: '#202223',
               fontWeight: mode === 'calendar' ? 600 : 400,
             }}
             onMouseEnter={(e) => (e.target as HTMLElement).style.background = '#F6F6F7'}
@@ -240,45 +245,42 @@ export function DateRangePicker({ value, onChange }: Props) {
           </button>
         </div>
 
-        {/* Calendar (shown below presets when custom is selected) */}
+        {/* Right: Calendar (side-by-side with presets) */}
         {mode === 'calendar' && (
-          <>
-            <div style={{ borderTop: '1px solid #e1e3e5', margin: '8px 0' }} />
-            <div style={{ padding: '4px 16px 8px' }}>
-              <div style={{ fontSize: 12, color: '#6d7175', marginBottom: 8 }}>
-                {selectingStart ? 'Select start date' : 'Select end date'}: {fmtShort(pending.start)} – {fmtShort(pending.end)}
-              </div>
-              <MiniCalendar
-                month={viewMonth}
-                year={viewYear}
-                range={pending}
-                selectingStart={selectingStart}
-                onDayClick={handleDayClick}
-                onPrevMonth={() => {
-                  if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
-                  else setViewMonth(viewMonth - 1);
-                }}
-                onNextMonth={() => {
-                  if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
-                  else setViewMonth(viewMonth + 1);
-                }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
-                <button
-                  onClick={() => setMode('presets')}
-                  style={{ padding: '6px 12px', fontSize: 12, background: '#fff', border: '1px solid #c9cccf', borderRadius: 6, cursor: 'pointer' }}
-                >
-                  Back
-                </button>
-                <button
-                  onClick={handleApply}
-                  style={{ padding: '6px 12px', fontSize: 12, background: '#2C6ECB', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
-                >
-                  Apply
-                </button>
-              </div>
+          <div style={{ padding: '4px 16px 8px' }}>
+            <div style={{ fontSize: 12, color: '#6d7175', marginBottom: 8 }}>
+              {selectingStart ? 'Select start date' : 'Select end date'}: {fmtShort(pending.start)} – {fmtShort(pending.end)}
             </div>
-          </>
+            <MiniCalendar
+              month={viewMonth}
+              year={viewYear}
+              range={pending}
+              selectingStart={selectingStart}
+              onDayClick={handleDayClick}
+              onPrevMonth={() => {
+                if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+                else setViewMonth(viewMonth - 1);
+              }}
+              onNextMonth={() => {
+                if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+                else setViewMonth(viewMonth + 1);
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => setMode('presets')}
+                style={{ padding: '6px 12px', fontSize: 12, background: '#fff', border: '1px solid #c9cccf', borderRadius: 6, cursor: 'pointer' }}
+              >
+                Back
+              </button>
+              <button
+                onClick={handleApply}
+                style={{ padding: '6px 12px', fontSize: 12, background: '#202223', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </Popover>
