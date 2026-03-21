@@ -60,16 +60,20 @@ export function OnboardingBanner({ hasData }: Props) {
 
   if (dismissed === null || dismissed) return null;
 
+  // If hasData is true, data is flowing — force all checks green
+  const cartMonitorActive = hasData ? true : extensions.cartMonitor;
+  const checkoutPixelActive = hasData ? true : extensions.checkoutPixel;
+
   const steps = [
     {
       label: 'Cart monitor',
-      done: extensions.cartMonitor,
+      done: cartMonitorActive,
       ok: 'Active on your storefront',
       fail: 'Not active — enable the Cart Monitor block in your theme',
     },
     {
       label: 'Checkout pixel',
-      done: extensions.checkoutPixel,
+      done: checkoutPixelActive,
       ok: 'Tracking checkout events',
       fail: 'Not detected — try reinstalling the app',
     },

@@ -58,6 +58,11 @@ type AnalyticsData = {
       reachedCheckout: DailyPoint[];
     };
   };
+  revenueAtRisk?: {
+    total: number;
+    sessions: number;
+    avgCart: number;
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -95,12 +100,9 @@ type CompareOption = '' | 'previous_period' | 'previous_year';
 // ---------------------------------------------------------------------------
 
 async function fetcher(url: string) {
-  console.log('[DEBUG] fetching:', url);
   const res = await fetch(url);
-  console.log('[DEBUG] response status:', res.status);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
-  console.log('[DEBUG] response data keys:', Object.keys(json));
   return json as AnalyticsData;
 }
 
@@ -199,15 +201,8 @@ export default function AnalyticsPage() {
       })()
     : null;
 
-  // Debug log — remove once data pipeline is confirmed working
-  useEffect(() => {
-    console.log('[analytics] shop=', shop || '(empty)', 'swrKey=', swrKey || '(null - no fetch)');
-  }, [shop, swrKey]);
-
   const { data, isLoading, error } = useSWR<AnalyticsData>(swrKey, fetcher, {
     keepPreviousData: true,
-    onSuccess: (d) => console.log('[analytics] API OK — cartViews.total=', d?.cartViews?.total?.total, 'funnel.cartViews=', d?.funnel?.cartViews),
-    onError:   (e) => console.error('[analytics] API error:', e?.message),
   });
 
   // ---------------------------------------------------------------------------
@@ -443,9 +438,9 @@ export default function AnalyticsPage() {
       </InlineGrid>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Row 2 — Attributed sales + Cart views                              */}
+      {/* Row 2 — Attributed sales + Revenue at risk + Cart views            */}
       {/* ------------------------------------------------------------------ */}
-      <InlineGrid columns={2} gap="400">
+      <InlineGrid columns={3} gap="400">
         <MetricCard
           title="Attributed sales"
           titleDropdowns={[
@@ -467,6 +462,16 @@ export default function AnalyticsPage() {
           formatY={fmtDollars}
           formatTooltip={(v) => `$${v.toLocaleString()}`}
           emptyMessage="No attributed sales in this period"
+          loading={isLoading}
+          error={!!error}
+        />
+
+        <MetricCard
+          title="Revenue at risk"
+          definition="Cart value lost from sessions where a coupon failed and the customer abandoned"
+          bigNumber={data ? `$${data.revenueAtRisk?.total.toLocaleString() ?? 0}` : '—'}
+          data={[]}
+          emptyMessage="No failed coupon abandonments"
           loading={isLoading}
           error={!!error}
         />

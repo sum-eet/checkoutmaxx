@@ -250,6 +250,49 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Revenue at risk: cart value of sessions where coupon failed + outcome = abandoned
+  const { data: riskSessions } = await supabase
+    .from('CartEvent')
+    .select('sessionId, cartValue')
+    .eq('shopId', shopId)
+    .eq('eventType', 'cart_coupon_failed')
+    .gte('occurredAt', start.toISOString())
+    .lte('occurredAt', end.toISOString());
+
+  // Deduplicate by sessionId, take max cartValue per session
+  const riskBySession = new Map<string, number>();
+  for (const row of (riskSessions ?? [])) {
+    const current = riskBySession.get(row.sessionId) ?? 0;
+    riskBySession.set(row.sessionId, Math.max(current, row.cartValue ?? 0));
+  }
+
+  // Filter to only sessions that were abandoned (no checkout event)
+  const { data: checkoutSessions } = await supabase
+    .from('CartEvent')
+    .select('sessionId')
+    .eq('shopId', shopId)
+    .eq('eventType', 'cart_checkout_clicked')
+    .gte('occurredAt', start.toISOString())
+    .lte('occurredAt', end.toISOString());
+
+  const checkoutSet = new Set((checkoutSessions ?? []).map((r: { sessionId: string }) => r.sessionId));
+
+  let revenueAtRiskTotal = 0;
+  let riskSessionCount = 0;
+  for (const [sid, value] of Array.from(riskBySession)) {
+    if (!checkoutSet.has(sid)) {
+      revenueAtRiskTotal += value;
+      riskSessionCount++;
+    }
+  }
+  revenueAtRiskTotal = Math.round(revenueAtRiskTotal) / 100; // cents to dollars
+
+  const revenueAtRisk = {
+    total: revenueAtRiskTotal,
+    sessions: riskSessionCount,
+    avgCart: riskSessionCount > 0 ? Math.round(revenueAtRiskTotal / riskSessionCount * 100) / 100 : 0,
+  };
+
   return NextResponse.json({
     couponSuccessRate: {
       average: avgSuccessRate,
@@ -285,5 +328,6 @@ export async function GET(req: NextRequest) {
       reachedCheckout:    funnel.reached_checkout,
       daily:              funnelDaily,
     },
+    revenueAtRisk,
   });
 }
