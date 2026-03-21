@@ -684,7 +684,7 @@ export default function CouponsPage() {
               {data.successRateChart.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9CA3AF', paddingTop: 60, textAlign: 'center' }}>No data</div>
               ) : (
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={Math.max(300, data.successRateChart.length * 35)}>
                   <BarChart
                     layout="vertical"
                     data={data.successRateChart}
@@ -696,7 +696,7 @@ export default function CouponsPage() {
                       dataKey="code"
                       tick={{ fontSize: 10, fontFamily: 'monospace' }}
                       width={120}
-                      tickFormatter={(v) => v}
+                      tickFormatter={(v) => v.length > 12 ? v.slice(0, 12) + '…' : v}
                     />
                     <Tooltip
                       formatter={(value) => [`${value}%`, 'Success rate']}
@@ -872,7 +872,7 @@ export default function CouponsPage() {
                     <IndexTable.Cell>
                       <span style={{ color: STATUS_COLOR[row.status], fontWeight: 600 }}>{row.successRate.toFixed(1)}%</span>
                     </IndexTable.Cell>
-                    <IndexTable.Cell>${Math.round(row.avgCart)}</IndexTable.Cell>
+                    <IndexTable.Cell>{row.successRate === 0 ? '—' : `$${Math.round(row.avgCart)}`}</IndexTable.Cell>
                     <IndexTable.Cell>${Math.round(row.avgCartFail)}</IndexTable.Cell>
                     <IndexTable.Cell>
                       {row.recoveries > 0 ? <span style={{ color: '#1D4ED8' }}>{row.recoveries} unlocked</span> : '—'}
