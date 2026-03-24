@@ -19,5 +19,13 @@ export async function GET(req: NextRequest) {
   const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`;
 
   console.log("[auth/begin] redirecting to Shopify OAuth:", installUrl);
-  return NextResponse.redirect(installUrl);
+  const response = NextResponse.redirect(installUrl);
+  response.cookies.set("shopify_oauth_state", state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    maxAge: 300, // 5 minutes
+    path: "/",
+  });
+  return response;
 }

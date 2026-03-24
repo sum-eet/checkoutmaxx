@@ -15,12 +15,20 @@ export async function GET(req: NextRequest) {
   const shop = params.get("shop");
   const code = params.get("code");
   const hmac = params.get("hmac");
+  const state = params.get("state");
   // host param not used — redirect goes to admin.shopify.com canonical URL
   params.get("host");
 
   if (!shop || !code || !hmac) {
     console.error("[AUTH] MISSING PARAMS:", { shop: !!shop, code: !!code, hmac: !!hmac });
     return new Response("Missing required OAuth params", { status: 400 });
+  }
+
+  // ── STEP 0: STATE VALIDATION (CSRF) ──
+  const storedState = req.cookies.get("shopify_oauth_state")?.value;
+  if (!state || !storedState || state !== storedState) {
+    console.error("[AUTH] STATE MISMATCH — possible CSRF attack");
+    return new Response("State validation failed", { status: 403 });
   }
 
   // ── STEP 1: HMAC ──
@@ -171,5 +179,7 @@ export async function GET(req: NextRequest) {
   backgroundWork().catch((err) => console.error("[AUTH] BG: uncaught error:", err));
 
   console.log(`[AUTH] ====== CALLBACK DONE (${Date.now() - t0}ms) ======`);
-  return NextResponse.redirect(redirectUrl);
+  const finalResponse = NextResponse.redirect(redirectUrl);
+  finalResponse.cookies.delete("shopify_oauth_state");
+  return finalResponse;
 }

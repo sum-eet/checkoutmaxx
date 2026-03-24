@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     if (shop) {
       // Delete in dependency order
       await prisma.checkoutEvent.deleteMany({ where: { shopId: shop.id } });
+      await prisma.cartEvent.deleteMany({ where: { shopId: shop.id } });
       await prisma.alertLog.deleteMany({ where: { shopId: shop.id } });
       await prisma.baseline.deleteMany({ where: { shopId: shop.id } });
       await prisma.shop.delete({ where: { id: shop.id } });

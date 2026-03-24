@@ -5,8 +5,11 @@ import { sendAlertEmail } from "@/lib/send-email";
 import { sendSlackMessage } from "@/lib/send-slack";
 
 // Test-only endpoint — bypasses all guards (48h, cooldown, thresholds)
-// Remove or gate this before App Store submission
 export async function GET(req: NextRequest) {
+  if (process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const authHeader = req.headers.get("authorization");
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
