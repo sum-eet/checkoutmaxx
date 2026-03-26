@@ -192,7 +192,10 @@ $$;
 
 -- ─────────────────────────────────────────────────────────────
 -- 4. cart_abandoned_last_event
---    Section 3: last event in abandoned sessions
+--    Section 3: last ACTIVE event in abandoned sessions.
+--    Passive events (cart_page_hidden, cart_viewed, cart_fetched)
+--    are excluded — only meaningful cart actions are bucketed.
+--    Sessions with no active events → 'no_active_events'.
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION cart_abandoned_last_event(
   p_shop_id text,
@@ -236,7 +239,8 @@ LANGUAGE sql STABLE AS $$
         WHERE "shopId" = p_shop_id AND "eventType" = 'checkout_completed'
       )
   ),
-  last_events AS (
+  -- Only look at active (meaningful) cart events — exclude passive page events
+  last_active_events AS (
     SELECT DISTINCT ON ("sessionId")
       "sessionId",
       "eventType"
@@ -244,15 +248,28 @@ LANGUAGE sql STABLE AS $$
     WHERE "shopId" = p_shop_id
       AND "occurredAt" >= p_start AND "occurredAt" <= p_end
       AND "sessionId" IN (SELECT "sessionId" FROM abandoned)
+      AND "eventType" IN (
+        'cart_item_added', 'cart_item_removed', 'cart_item_changed',
+        'cart_coupon_applied', 'cart_coupon_failed', 'cart_bulk_updated',
+        'cart_atc_clicked', 'cart_checkout_clicked'
+      )
     ORDER BY "sessionId", "occurredAt" DESC
+  ),
+  -- All abandoned sessions, with NULL for those that had no active events
+  all_abandoned AS (
+    SELECT
+      a."sessionId",
+      COALESCE(le."eventType", 'no_active_events') AS "eventType"
+    FROM (SELECT "sessionId" FROM abandoned) a
+    LEFT JOIN last_active_events le ON a."sessionId" = le."sessionId"
   )
   SELECT
     CASE
-      WHEN le."sessionId" IN (SELECT "sessionId" FROM returned_from_checkout) THEN 'returned_from_checkout'
-      ELSE le."eventType"
+      WHEN s."sessionId" IN (SELECT "sessionId" FROM returned_from_checkout) THEN 'returned_from_checkout'
+      ELSE s."eventType"
     END AS last_event,
     COUNT(*) AS session_count
-  FROM last_events le
+  FROM all_abandoned s
   GROUP BY 1
   ORDER BY session_count DESC;
 $$;
@@ -339,7 +356,9 @@ $$;
 
 -- ─────────────────────────────────────────────────────────────
 -- 6. cart_converter_comparison
---    Section 5: converters vs non-converters
+--    Section 5: converters vs non-converters.
+--    Uses MEDIAN (not avg) for time in cart.
+--    Session duration capped at 30 minutes to suppress outliers.
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION cart_converter_comparison(
   p_shop_id text,
@@ -347,32 +366,32 @@ CREATE OR REPLACE FUNCTION cart_converter_comparison(
   p_end     timestamptz
 )
 RETURNS TABLE(
-  converted             boolean,
-  session_count         bigint,
-  avg_time_seconds      numeric,
-  avg_items             numeric,
+  converted              boolean,
+  session_count          bigint,
+  avg_time_seconds       numeric,   -- actually median; name kept for API compatibility
+  avg_items              numeric,
   avg_cart_value_dollars numeric,
-  coupon_usage_pct      numeric,
-  coupon_failed_pct     numeric,
-  removal_pct           numeric,
-  paid_traffic_pct      numeric,
-  mobile_pct            numeric
+  coupon_usage_pct       numeric,
+  coupon_failed_pct      numeric,
+  removal_pct            numeric,
+  paid_traffic_pct       numeric,
+  mobile_pct             numeric
 )
 LANGUAGE sql STABLE AS $$
   WITH sessions AS (
     SELECT
       "sessionId",
-      BOOL_OR("eventType" = 'cart_checkout_clicked')                                         AS converted,
-      MAX("cartValue")                                                                        AS max_cart_value,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added' THEN "occurredAt" END)        AS items_added,
-      BOOL_OR("eventType" = 'cart_coupon_applied')                                           AS used_coupon,
-      BOOL_OR("eventType" = 'cart_coupon_failed')                                            AS coupon_failed,
-      BOOL_OR("eventType" = 'cart_item_removed')                                             AS had_removal,
-      MAX("device")                                                                           AS device,
-      MAX("utmSource")                                                                        AS utm_source,
-      MIN("occurredAt")                                                                       AS first_event,
-      MAX("occurredAt")                                                                       AS last_event,
-      MAX(CASE WHEN "eventType" = 'cart_checkout_clicked' THEN "occurredAt" END)             AS checkout_time
+      BOOL_OR("eventType" = 'cart_checkout_clicked')                                  AS converted,
+      MAX("cartValue")                                                                 AS max_cart_value,
+      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added' THEN "occurredAt" END) AS items_added,
+      BOOL_OR("eventType" = 'cart_coupon_applied')                                    AS used_coupon,
+      BOOL_OR("eventType" = 'cart_coupon_failed')                                     AS coupon_failed,
+      BOOL_OR("eventType" = 'cart_item_removed')                                      AS had_removal,
+      MAX("device")                                                                    AS device,
+      MAX("utmSource")                                                                 AS utm_source,
+      MIN("occurredAt")                                                                AS first_event,
+      MAX("occurredAt")                                                                AS last_event,
+      MAX(CASE WHEN "eventType" = 'cart_checkout_clicked' THEN "occurredAt" END)      AS checkout_time
     FROM "CartEvent"
     WHERE "shopId" = p_shop_id
       AND "occurredAt" >= p_start AND "occurredAt" <= p_end
@@ -382,17 +401,21 @@ LANGUAGE sql STABLE AS $$
   )
   SELECT
     converted,
-    COUNT(*)                                                                              AS session_count,
-    ROUND(AVG(EXTRACT(EPOCH FROM (
-      COALESCE(checkout_time, last_event) - first_event
-    ))))                                                                                  AS avg_time_seconds,
-    ROUND(AVG(items_added), 1)                                                            AS avg_items,
-    ROUND(AVG(max_cart_value) / 100.0, 2)                                                 AS avg_cart_value_dollars,
-    ROUND(COUNT(*) FILTER (WHERE used_coupon)::numeric  / NULLIF(COUNT(*), 0) * 100, 1)  AS coupon_usage_pct,
-    ROUND(COUNT(*) FILTER (WHERE coupon_failed)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS coupon_failed_pct,
-    ROUND(COUNT(*) FILTER (WHERE had_removal)::numeric   / NULLIF(COUNT(*), 0) * 100, 1) AS removal_pct,
+    COUNT(*)                                                                               AS session_count,
+    -- Median time in cart, capped at 30 minutes per session
+    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY
+      LEAST(
+        EXTRACT(EPOCH FROM (COALESCE(checkout_time, last_event) - first_event)),
+        1800
+      )
+    ))                                                                                     AS avg_time_seconds,
+    ROUND(AVG(items_added), 1)                                                             AS avg_items,
+    ROUND(AVG(max_cart_value) / 100.0, 2)                                                  AS avg_cart_value_dollars,
+    ROUND(COUNT(*) FILTER (WHERE used_coupon)::numeric   / NULLIF(COUNT(*), 0) * 100, 1)  AS coupon_usage_pct,
+    ROUND(COUNT(*) FILTER (WHERE coupon_failed)::numeric  / NULLIF(COUNT(*), 0) * 100, 1) AS coupon_failed_pct,
+    ROUND(COUNT(*) FILTER (WHERE had_removal)::numeric    / NULLIF(COUNT(*), 0) * 100, 1) AS removal_pct,
     ROUND(COUNT(*) FILTER (WHERE utm_source IS NOT NULL)::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS paid_traffic_pct,
-    ROUND(COUNT(*) FILTER (WHERE device = 'mobile')::numeric / NULLIF(COUNT(*), 0) * 100, 1)      AS mobile_pct
+    ROUND(COUNT(*) FILTER (WHERE device = 'mobile')::numeric      / NULLIF(COUNT(*), 0) * 100, 1) AS mobile_pct
   FROM sessions
   GROUP BY converted;
 $$;
