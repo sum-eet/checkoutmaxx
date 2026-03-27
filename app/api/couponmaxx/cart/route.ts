@@ -13,46 +13,35 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
   const start = searchParams.get('start');
-  const end = searchParams.get('end');
+  const end   = searchParams.get('end');
 
   if (!start || !end) return NextResponse.json({ error: 'Missing date range' }, { status: 400 });
 
-  // Section 1 always shows today vs 7-day avg — not tied to date picker
-  const now = new Date();
-  const todayStart = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z').toISOString();
-  const todayEnd = now.toISOString();
-
+  // Date picker controls everything — no special "today" logic
   const args = { p_shop_id: shop.id, p_start: start, p_end: end };
-  const todayArgs = { p_shop_id: shop.id, p_today_start: todayStart, p_today_end: todayEnd };
 
   const [
-    funnelToday,
+    funnelData,
     funnelBySource,
     checkoutSteps,
     lastEvents,
     checkoutTiming,
     converterComparison,
-    timeDistribution,
   ] = await Promise.all([
-    supabase.rpc('cart_funnel_today_vs_avg', todayArgs),
-    supabase.rpc('cart_funnel_by_source_today', todayArgs),
-    supabase.rpc('checkout_step_funnel', args),
-    supabase.rpc('cart_abandoned_last_event', args),
-    supabase.rpc('checkout_timing_distribution', args),
-    supabase.rpc('cart_converter_comparison', args),
-    supabase.rpc('cart_time_distribution', args),
+    supabase.rpc('cart_funnel_with_prior',            args),
+    supabase.rpc('cart_funnel_by_source_with_prior',  args),
+    supabase.rpc('checkout_step_funnel',              args),
+    supabase.rpc('cart_abandoned_last_event',         args),
+    supabase.rpc('checkout_timing_distribution',      args),
+    supabase.rpc('cart_converter_comparison',         args),
   ]);
 
   return NextResponse.json({
-    funnelToday: funnelToday.data ?? [],
-    funnelBySource: funnelBySource.data ?? [],
-    checkoutSteps: checkoutSteps.data ?? [],
-    lastEvents: lastEvents.data ?? [],
-    checkoutTiming: checkoutTiming.data ?? [],
+    funnelData:          funnelData.data          ?? [],
+    funnelBySource:      funnelBySource.data      ?? [],
+    checkoutSteps:       checkoutSteps.data       ?? [],
+    lastEvents:          lastEvents.data          ?? [],
+    checkoutTiming:      checkoutTiming.data      ?? [],
     converterComparison: converterComparison.data ?? [],
-    timeDistribution: (timeDistribution.data ?? []).map((r: { bucket: string; sessions: number }) => ({
-      bucket: r.bucket,
-      sessions: Number(r.sessions),
-    })),
   });
 }

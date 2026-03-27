@@ -8,13 +8,14 @@
 
 
 -- ─────────────────────────────────────────────────────────────
--- 1. cart_funnel_today_vs_avg
---    Section 1: today's funnel vs 7-day trailing average
+-- 1. cart_funnel_with_prior
+--    Section 1: funnel for selected range vs prior period of
+--    equal length. Date picker controls both periods.
 -- ─────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION cart_funnel_today_vs_avg(
-  p_shop_id      text,
-  p_today_start  timestamptz,
-  p_today_end    timestamptz
+CREATE OR REPLACE FUNCTION cart_funnel_with_prior(
+  p_shop_id text,
+  p_start   timestamptz,
+  p_end     timestamptz
 )
 RETURNS TABLE(
   period             text,
@@ -24,137 +25,115 @@ RETURNS TABLE(
   completed_checkout bigint
 )
 LANGUAGE sql STABLE AS $$
-  WITH today_combined AS (
+  WITH
+  prior_start AS (
+    SELECT p_start - (p_end - p_start) AS ts
+  ),
+  current_combined AS (
+    SELECT "sessionId", "eventType"
+    FROM "CartEvent"
+    WHERE "shopId" = p_shop_id AND "occurredAt" >= p_start AND "occurredAt" <= p_end
+    UNION ALL
+    SELECT "sessionId", "eventType"
+    FROM "CheckoutEvent"
+    WHERE "shopId" = p_shop_id AND "occurredAt" >= p_start AND "occurredAt" <= p_end
+  ),
+  prior_combined AS (
     SELECT "sessionId", "eventType"
     FROM "CartEvent"
     WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start AND "occurredAt" <= p_today_end
+      AND "occurredAt" >= (SELECT ts FROM prior_start)
+      AND "occurredAt" <  p_start
     UNION ALL
     SELECT "sessionId", "eventType"
     FROM "CheckoutEvent"
     WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start AND "occurredAt" <= p_today_end
-  ),
-  today AS (
-    SELECT
-      COUNT(DISTINCT CASE WHEN "eventType" IN ('page_viewed', 'product_viewed') THEN "sessionId" END) AS sessions,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added'        THEN "sessionId" END) AS added_to_cart,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked'  THEN "sessionId" END) AS started_checkout,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'checkout_completed'     THEN "sessionId" END) AS completed_checkout
-    FROM today_combined
-  ),
-  past_combined AS (
-    SELECT "sessionId", "eventType", "occurredAt"
-    FROM "CartEvent"
-    WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start - interval '7 days'
-      AND "occurredAt" <  p_today_start
-    UNION ALL
-    SELECT "sessionId", "eventType", "occurredAt"
-    FROM "CheckoutEvent"
-    WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start - interval '7 days'
-      AND "occurredAt" <  p_today_start
-  ),
-  past_daily AS (
-    SELECT
-      DATE_TRUNC('day', "occurredAt") AS day,
-      COUNT(DISTINCT CASE WHEN "eventType" IN ('page_viewed', 'product_viewed') THEN "sessionId" END) AS sessions,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added'        THEN "sessionId" END) AS added_to_cart,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked'  THEN "sessionId" END) AS started_checkout,
-      COUNT(DISTINCT CASE WHEN "eventType" = 'checkout_completed'     THEN "sessionId" END) AS completed_checkout
-    FROM past_combined
-    GROUP BY day
+      AND "occurredAt" >= (SELECT ts FROM prior_start)
+      AND "occurredAt" <  p_start
   )
-  SELECT 'today'::text, t.sessions, t.added_to_cart, t.started_checkout, t.completed_checkout
-  FROM today t
+  SELECT 'current'::text,
+    COUNT(DISTINCT CASE WHEN "eventType" IN ('page_viewed','product_viewed') THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added'       THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked' THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'checkout_completed'    THEN "sessionId" END)
+  FROM current_combined
   UNION ALL
-  SELECT 'avg_7d'::text,
-    ROUND(AVG(sessions))::bigint,
-    ROUND(AVG(added_to_cart))::bigint,
-    ROUND(AVG(started_checkout))::bigint,
-    ROUND(AVG(completed_checkout))::bigint
-  FROM past_daily;
+  SELECT 'prior'::text,
+    COUNT(DISTINCT CASE WHEN "eventType" IN ('page_viewed','product_viewed') THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_item_added'       THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'cart_checkout_clicked' THEN "sessionId" END),
+    COUNT(DISTINCT CASE WHEN "eventType" = 'checkout_completed'    THEN "sessionId" END)
+  FROM prior_combined;
 $$;
 
 
 -- ─────────────────────────────────────────────────────────────
--- 2. cart_funnel_by_source_today
---    Section 1: UTM source breakdown for today vs 7-day avg
+-- 2. cart_funnel_by_source_with_prior
+--    Section 1: UTM source breakdown for selected range vs prior
 -- ─────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION cart_funnel_by_source_today(
-  p_shop_id      text,
-  p_today_start  timestamptz,
-  p_today_end    timestamptz
+CREATE OR REPLACE FUNCTION cart_funnel_by_source_with_prior(
+  p_shop_id text,
+  p_start   timestamptz,
+  p_end     timestamptz
 )
 RETURNS TABLE(
-  source         text,
-  medium         text,
-  today_atc      bigint,
-  today_checkout bigint,
-  avg_atc        numeric,
-  avg_checkout   numeric
+  source           text,
+  medium           text,
+  current_atc      bigint,
+  current_checkout bigint,
+  prior_atc        bigint,
+  prior_checkout   bigint
 )
 LANGUAGE sql STABLE AS $$
-  WITH today_sessions AS (
+  WITH
+  prior_start AS (
+    SELECT p_start - (p_end - p_start) AS ts
+  ),
+  current_sessions AS (
     SELECT
-      "utmSource"                                         AS src,
-      "utmMedium"                                         AS med,
-      "sessionId",
-      BOOL_OR("eventType" = 'cart_item_added')            AS had_atc,
-      BOOL_OR("eventType" = 'cart_checkout_clicked')      AS had_checkout
+      "utmSource" AS src, "utmMedium" AS med, "sessionId",
+      BOOL_OR("eventType" = 'cart_item_added')       AS had_atc,
+      BOOL_OR("eventType" = 'cart_checkout_clicked') AS had_checkout
     FROM "CartEvent"
     WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start AND "occurredAt" <= p_today_end
+      AND "occurredAt" >= p_start AND "occurredAt" <= p_end
       AND "utmSource" IS NOT NULL
     GROUP BY src, med, "sessionId"
   ),
-  today_agg AS (
+  current_agg AS (
     SELECT src, med,
-      COUNT(*) FILTER (WHERE had_atc)::bigint      AS today_atc,
-      COUNT(*) FILTER (WHERE had_checkout)::bigint AS today_checkout
-    FROM today_sessions
-    GROUP BY src, med
+      COUNT(*) FILTER (WHERE had_atc)::bigint      AS current_atc,
+      COUNT(*) FILTER (WHERE had_checkout)::bigint AS current_checkout
+    FROM current_sessions GROUP BY src, med
   ),
-  past_sessions AS (
+  prior_sessions AS (
     SELECT
-      DATE_TRUNC('day', "occurredAt")                     AS day,
-      "utmSource"                                         AS src,
-      "utmMedium"                                         AS med,
-      "sessionId",
-      BOOL_OR("eventType" = 'cart_item_added')            AS had_atc,
-      BOOL_OR("eventType" = 'cart_checkout_clicked')      AS had_checkout
+      "utmSource" AS src, "utmMedium" AS med, "sessionId",
+      BOOL_OR("eventType" = 'cart_item_added')       AS had_atc,
+      BOOL_OR("eventType" = 'cart_checkout_clicked') AS had_checkout
     FROM "CartEvent"
     WHERE "shopId" = p_shop_id
-      AND "occurredAt" >= p_today_start - interval '7 days'
-      AND "occurredAt" <  p_today_start
+      AND "occurredAt" >= (SELECT ts FROM prior_start)
+      AND "occurredAt" <  p_start
       AND "utmSource" IS NOT NULL
-    GROUP BY day, src, med, "sessionId"
+    GROUP BY src, med, "sessionId"
   ),
-  past_daily AS (
-    SELECT day, src, med,
-      COUNT(*) FILTER (WHERE had_atc)      AS daily_atc,
-      COUNT(*) FILTER (WHERE had_checkout) AS daily_checkout
-    FROM past_sessions
-    GROUP BY day, src, med
-  ),
-  past_agg AS (
+  prior_agg AS (
     SELECT src, med,
-      AVG(daily_atc)      AS avg_atc,
-      AVG(daily_checkout) AS avg_checkout
-    FROM past_daily
-    GROUP BY src, med
+      COUNT(*) FILTER (WHERE had_atc)::bigint      AS prior_atc,
+      COUNT(*) FILTER (WHERE had_checkout)::bigint AS prior_checkout
+    FROM prior_sessions GROUP BY src, med
   )
   SELECT
-    t.src                           AS source,
-    t.med                           AS medium,
-    t.today_atc,
-    t.today_checkout,
-    COALESCE(p.avg_atc, 0)          AS avg_atc,
-    COALESCE(p.avg_checkout, 0)     AS avg_checkout
-  FROM today_agg t
-  LEFT JOIN past_agg p ON t.src = p.src AND COALESCE(t.med, '') = COALESCE(p.med, '')
-  ORDER BY t.today_atc DESC
+    c.src                           AS source,
+    c.med                           AS medium,
+    c.current_atc,
+    c.current_checkout,
+    COALESCE(p.prior_atc, 0)        AS prior_atc,
+    COALESCE(p.prior_checkout, 0)   AS prior_checkout
+  FROM current_agg c
+  LEFT JOIN prior_agg p ON c.src = p.src AND COALESCE(c.med,'') = COALESCE(p.med,'')
+  ORDER BY c.current_atc DESC
   LIMIT 5;
 $$;
 
@@ -195,7 +174,7 @@ $$;
 --    Section 3: last ACTIVE event in abandoned sessions.
 --    Passive events (cart_page_hidden, cart_viewed, cart_fetched)
 --    are excluded — only meaningful cart actions are bucketed.
---    Sessions with no active events → 'no_active_events'.
+--    Sessions with no active events → 'browsed_cart_only'.
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION cart_abandoned_last_event(
   p_shop_id text,
@@ -259,7 +238,7 @@ LANGUAGE sql STABLE AS $$
   all_abandoned AS (
     SELECT
       a."sessionId",
-      COALESCE(le."eventType", 'no_active_events') AS "eventType"
+      COALESCE(le."eventType", 'browsed_cart_only') AS "eventType"
     FROM (SELECT "sessionId" FROM abandoned) a
     LEFT JOIN last_active_events le ON a."sessionId" = le."sessionId"
   )
