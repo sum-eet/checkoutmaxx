@@ -75,7 +75,7 @@ const DEFAULT_SETTINGS: MerchantSettings = {
     min_not_met:      { action: 'show_hint_and_suggest', collections: 'all' },
     usage_limit:      { action: 'explanation_only' },
     wrong_collection: { action: 'redirect_collection' },
-    invalid:          { action: 'explanation_only' },
+    invalid:          { action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
     already_used:     { action: 'explanation_only' },
   },
   hunterThreshold: 3,
@@ -95,7 +95,7 @@ function explainFailure(reason: FailureReason, _code: string): string {
     case 'min_not_met':      return 'Your cart doesn\u2019t meet the minimum for this code yet.';
     case 'usage_limit':      return 'That code has been fully redeemed.';
     case 'wrong_collection': return 'That code only works on certain products.';
-    case 'invalid':          return 'We couldn\u2019t find that code. Check the spelling?';
+    case 'invalid':          return 'That code didn\u2019t work.';
     case 'already_used':     return 'You\u2019ve already used this code.';
     default:                 return 'That code didn\u2019t work.';
   }
