@@ -101,6 +101,113 @@ function explainFailure(reason: FailureReason, _code: string): string {
   }
 }
 
+// ── Admin API: resolve actual failure reason ──────────────────────────────────
+
+async function resolveFailureReason(
+  shopDomain: string,
+  accessToken: string,
+  code: string,
+  cartValue: number,
+): Promise<FailureReason> {
+  try {
+    const session = new Session({
+      id: `offline_${shopDomain}`,
+      shop: shopDomain,
+      state: '',
+      isOnline: false,
+      accessToken,
+    });
+
+    const client = new shopify.clients.Graphql({ session });
+
+    const response = await client.query({
+      data: {
+        query: `query lookupDiscount($code: String!) {
+          codeDiscountNodeByCode(code: $code) {
+            codeDiscount {
+              ... on DiscountCodeBasic {
+                status
+                endsAt
+                usageLimit
+                asyncUsageCount
+                appliesOncePerCustomer
+                minimumRequirement {
+                  ... on DiscountMinimumSubtotal {
+                    greaterThanOrEqualToSubtotal { amount }
+                  }
+                  ... on DiscountMinimumQuantity {
+                    greaterThanOrEqualToQuantity
+                  }
+                }
+                customerGets {
+                  items {
+                    ... on AllDiscountItems { allItems }
+                    ... on DiscountProducts { __typename }
+                    ... on DiscountCollections { __typename }
+                  }
+                }
+              }
+              ... on DiscountCodeBxgy {
+                status
+                endsAt
+                usageLimit
+                asyncUsageCount
+                appliesOncePerCustomer
+              }
+              ... on DiscountCodeFreeShipping {
+                status
+                endsAt
+                usageLimit
+                asyncUsageCount
+                appliesOncePerCustomer
+              }
+            }
+          }
+        }`,
+        variables: { code },
+      },
+    });
+
+    const body = response.body as any;
+    const discount = body?.data?.codeDiscountNodeByCode?.codeDiscount;
+
+    // Code doesn't exist at all
+    if (!discount) return 'invalid';
+
+    const { status, endsAt, usageLimit, asyncUsageCount, appliesOncePerCustomer, minimumRequirement } = discount;
+
+    // Shopify status: ACTIVE | EXPIRED | SCHEDULED
+    if (status === 'EXPIRED') return 'expired';
+    if (endsAt && new Date(endsAt) < new Date()) return 'expired';
+
+    // Usage limit exhausted
+    if (usageLimit !== null && asyncUsageCount >= usageLimit) return 'usage_limit';
+
+    // Minimum cart value not met
+    if (minimumRequirement?.greaterThanOrEqualToSubtotal) {
+      const minCents = Math.round(
+        parseFloat(minimumRequirement.greaterThanOrEqualToSubtotal.amount) * 100,
+      );
+      if (cartValue < minCents) return 'min_not_met';
+    }
+
+    // Product/collection restriction (items not allItems)
+    const items = discount.customerGets?.items;
+    if (items && items.allItems === false) return 'wrong_collection';
+
+    // Per-customer limit — we can't check server-side without customer ID,
+    // but if appliesOncePerCustomer and code is otherwise valid, assume already_used
+    if (appliesOncePerCustomer) return 'already_used';
+
+    // Code exists and looks valid — treat as invalid (conditions mismatch)
+    return 'invalid';
+  } catch (err) {
+    console.error('[recovery/decide] Admin API lookup failed:', (err as Error).message);
+    // Fall back to client-supplied reason on error
+    return 'invalid';
+  }
+}
+
 // ── Unique code generation ────────────────────────────────────────────────────
 
 function randomAlphanumeric(length: number): string {
@@ -244,6 +351,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Shop not found' }, { status: 404, headers: CORS_HEADERS });
   }
 
+  // Override client-supplied failure reason with ground truth from Admin API
+  const resolvedReason = await resolveFailureReason(
+    shopDomain,
+    shop.accessToken,
+    failedCode,
+    cartValue,
+  );
+
   // Load merchant recovery settings (or use defaults)
   const { data: settingsRow } = await supabase
     .from('MerchantRecoverySettings')
@@ -273,7 +388,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const line1 = explainFailure(failureReason, failedCode);
+  const line1 = explainFailure(resolvedReason, failedCode);
   const recoveryId = crypto.randomUUID();
 
   // Serial hunter protection
@@ -283,7 +398,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.id,
       sessionId,
       failedCode,
-      failureReason,
+      failureReason: resolvedReason,
       recoveryAction: 'show_nothing',
       cartValueAtFailure: cartValue,
       customerName: settings.useCustomerName ? customerName : null,
@@ -298,7 +413,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Get rule for this failure reason
-  const rule: RuleConfig = settings.rules[failureReason] ?? { action: 'explanation_only' };
+  const rule: RuleConfig = settings.rules[resolvedReason] ?? { action: 'explanation_only' };
 
   // Rule is individually disabled — show explanation only, no recovery
   if (rule.enabled === false) {
@@ -307,7 +422,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.id,
       sessionId,
       failedCode,
-      failureReason,
+      failureReason: resolvedReason,
       recoveryAction: 'show_hint',
       cartValueAtFailure: cartValue,
       customerName: settings.useCustomerName ? customerName : null,
@@ -382,7 +497,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.id,
       sessionId,
       failedCode,
-      failureReason,
+      failureReason: resolvedReason,
       recoveryAction,
       recoveryCode,
       discountValue: effectiveDiscount,
@@ -417,7 +532,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.id,
       sessionId,
       failedCode,
-      failureReason,
+      failureReason: resolvedReason,
       recoveryAction: 'show_upsell',
       cartValueAtFailure: cartValue,
       customerName: settings.useCustomerName ? customerName : null,
@@ -443,7 +558,7 @@ export async function POST(req: NextRequest) {
       shopId: shop.id,
       sessionId,
       failedCode,
-      failureReason,
+      failureReason: resolvedReason,
       recoveryAction: 'show_hint',
       cartValueAtFailure: cartValue,
       customerName: settings.useCustomerName ? customerName : null,
@@ -471,7 +586,7 @@ export async function POST(req: NextRequest) {
     shopId: shop.id,
     sessionId,
     failedCode,
-    failureReason,
+    failureReason: resolvedReason,
     recoveryAction: finalAction,
     cartValueAtFailure: cartValue,
     customerName: settings.useCustomerName ? customerName : null,
