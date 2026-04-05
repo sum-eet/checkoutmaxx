@@ -52,9 +52,70 @@ export async function evaluateAlerts() {
         });
         if (recentAlert) continue;
 
-        // 3. Fire alert
-        const title = `Code ${code} failed ${stats.failed} times (${failRate}% failure rate)`;
-        const body = `In the last 2 hours, ${stats.failed} customers tried code ${code} and it didn't work. ${stats.applied} uses succeeded. Check if this code has expired, hit its usage limit, or has collection restrictions.`;
+        // 3. Enrich with cart value + recovery stats
+        const { data: failedSessions } = await supabase
+          .from('CartEvent')
+          .select('sessionId, cartValue')
+          .eq('shopId', shop.id)
+          .eq('couponCode', code)
+          .eq('eventType', 'cart_coupon_failed')
+          .gte('occurredAt', twoHoursAgo.toISOString());
+
+        const affectedSessionIds = Array.from(new Set((failedSessions ?? []).map((s: Record<string, unknown>) => s.sessionId as string)));
+        const totalCartValue = (failedSessions ?? []).reduce((sum: number, s: Record<string, unknown>) => sum + ((s.cartValue as number) ?? 0), 0);
+
+        // How many of those sessions reached checkout (completed)?
+        const { count: completedCount } = await supabase
+          .from('CartEvent')
+          .select('*', { count: 'exact', head: true })
+          .eq('shopId', shop.id)
+          .eq('eventType', 'cart_checkout_clicked')
+          .in('sessionId', affectedSessionIds.slice(0, 50)); // cap for query perf
+
+        const abandonedCount = affectedSessionIds.length - (completedCount ?? 0);
+        const abandonedValue = Math.round(totalCartValue * (abandonedCount / Math.max(affectedSessionIds.length, 1)));
+        const recoveredValue = totalCartValue - abandonedValue;
+
+        // Recovery events for this code in the same window
+        const { data: recoveryEvents } = await supabase
+          .from('RecoveryEvent')
+          .select('recoveryUsed, revenueRecovered, recoveryAction')
+          .eq('shopId', shop.id)
+          .eq('failedCode', code)
+          .gte('createdAt', twoHoursAgo.toISOString());
+
+        const recOffered = (recoveryEvents ?? []).filter((r: Record<string, unknown>) => r.recoveryAction === 'show_code').length;
+        const recUsed    = (recoveryEvents ?? []).filter((r: Record<string, unknown>) => r.recoveryUsed).length;
+        const recRevenue = (recoveryEvents ?? []).reduce((sum: number, r: Record<string, unknown>) =>
+          sum + (r.recoveryUsed && r.revenueRecovered ? (r.revenueRecovered as number) : 0), 0);
+
+        // 4. Fire alert
+        const title = `Code ${code} failed ${stats.failed} times today`;
+
+        const bodyLines = [
+          `Cart value at risk: $${(totalCartValue / 100).toFixed(2)}`,
+          `Customers affected: ${affectedSessionIds.length}`,
+          `Abandoned after failure: ${abandonedCount} ($${(abandonedValue / 100).toFixed(2)} in cart value left behind)`,
+          `Completed anyway: ${completedCount ?? 0}`,
+          '',
+        ];
+
+        if (recOffered > 0) {
+          bodyLines.push(
+            `\u2192 Smart Recovery caught ${recOffered} of these and offered a fallback code.`,
+            recUsed > 0
+              ? `  ${recUsed} customer${recUsed > 1 ? 's' : ''} used it \u2014 $${(recRevenue / 100).toFixed(2)} recovered.`
+              : `  None used it yet.`,
+            '',
+          );
+        }
+
+        bodyLines.push(
+          `\u2192 Fix this code: https://couponmaxx.vercel.app/couponmaxx/coupons`,
+          `\u2192 View recovery stats: https://couponmaxx.vercel.app/couponmaxx/analytics`,
+        );
+
+        const body = bodyLines.join('\n');
 
         // Log to AlertLog
         await prisma.alertLog.create({
@@ -64,7 +125,19 @@ export async function evaluateAlerts() {
             severity: failRate >= 80 ? 'critical' : 'warning',
             title,
             body,
-            metadata: { code, failedCount: stats.failed, appliedCount: stats.applied, failRate },
+            metadata: {
+              code,
+              failedCount: stats.failed,
+              appliedCount: stats.applied,
+              failRate,
+              cartValueAtRisk: totalCartValue,
+              abandonedCount,
+              abandonedValue,
+              recoveredValue,
+              recOffered,
+              recUsed,
+              recRevenue,
+            },
           },
         });
 

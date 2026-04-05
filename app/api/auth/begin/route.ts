@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   console.log("[auth/begin] shop:", shop);
 
   const apiKey = process.env.SHOPIFY_API_KEY!;
-  const scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics";
+  const scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics,write_discounts";
   const redirectUri = `${process.env.SHOPIFY_APP_URL}/api/auth/callback`;
   const state = crypto.randomBytes(8).toString("hex");
 

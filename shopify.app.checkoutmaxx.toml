@@ -4,7 +4,7 @@ application_url = "https://checkoutmaxx-rt55.vercel.app"
 embedded = true
 
 [access_scopes]
-scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics"
+scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics,write_discounts"
 
 [auth]
 redirect_urls = [

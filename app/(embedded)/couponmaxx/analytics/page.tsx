@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { Banner, Card, InlineGrid, Page, BlockStack, Select, InlineStack } from '@shopify/polaris';
+import { Banner, Card, InlineGrid, Page, BlockStack, Select, InlineStack, Text, Box, Divider } from '@shopify/polaris';
 
 import { useShop } from '@/hooks/useShop';
 import { DateRangePicker, DateRange } from '@/components/couponmaxx/DateRangePicker';
@@ -103,8 +103,7 @@ type CompareOption = '' | 'previous_period' | 'previous_year';
 async function fetcher(url: string) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
-  return json as AnalyticsData;
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +204,20 @@ export default function AnalyticsPage() {
   const { data, isLoading, error } = useSWR<AnalyticsData>(swrKey, fetcher, {
     keepPreviousData: true,
   });
+
+  // Smart Recovery stats — same date window
+  const recoveryKey = shop
+    ? `/api/couponmaxx/recovery/stats?shop=${shop}&from=${toISO(dateRange.start)}&to=${toISO(dateRange.end)}`
+    : null;
+  const { data: recoveryData } = useSWR<{
+    enabled: boolean;
+    codesOffered: number;
+    codesUsed: number;
+    useRate: number;
+    revenueRecovered: number;
+    avgRevenuePerUse: number;
+    topTrigger: string | null;
+  }>(recoveryKey, fetcher, { keepPreviousData: true });
 
   // ---------------------------------------------------------------------------
   // Derived values
@@ -504,6 +517,97 @@ export default function AnalyticsPage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <FunnelChart columns={funnelColumns} loading={isLoading} />
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Row 4 — Smart Recovery                                             */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <BlockStack gap="400">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="p" variant="headingMd">Smart Recovery</Text>
+            <Text as="p" tone="subdued" variant="bodySm">Last 7 days</Text>
+          </InlineStack>
+          <Divider />
+
+          {recoveryData && !recoveryData.enabled && recoveryData.codesOffered === 0 ? (
+            <Text as="p" tone="subdued">
+              Smart Recovery is turned off. Turn it on in{' '}
+              <a href="/couponmaxx/settings" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                Settings
+              </a>{' '}
+              to start recovering failed coupon sessions.
+            </Text>
+          ) : recoveryData && recoveryData.enabled && recoveryData.codesOffered === 0 ? (
+            <Text as="p" tone="subdued">
+              Smart Recovery is active but hasn&apos;t triggered yet. It activates when a
+              customer enters a coupon that doesn&apos;t work.
+            </Text>
+          ) : (
+            <InlineGrid columns={3} gap="400">
+              <Box
+                background="bg-surface-secondary"
+                padding="400"
+                borderRadius="200"
+              >
+                <BlockStack gap="100">
+                  <Text as="p" tone="subdued" variant="bodySm">Recovery codes offered</Text>
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {recoveryData?.codesOffered ?? '—'}
+                  </Text>
+                </BlockStack>
+              </Box>
+              <Box
+                background="bg-surface-secondary"
+                padding="400"
+                borderRadius="200"
+              >
+                <BlockStack gap="100">
+                  <Text as="p" tone="subdued" variant="bodySm">Codes used</Text>
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {recoveryData?.codesUsed ?? '—'}
+                  </Text>
+                  {recoveryData && recoveryData.codesOffered > 0 && (
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      {recoveryData.useRate}% use rate
+                    </Text>
+                  )}
+                </BlockStack>
+              </Box>
+              <Box
+                background="bg-surface-secondary"
+                padding="400"
+                borderRadius="200"
+              >
+                <BlockStack gap="100">
+                  <Text as="p" tone="subdued" variant="bodySm">Revenue recovered</Text>
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {recoveryData
+                      ? `$${(recoveryData.revenueRecovered / 100).toLocaleString()}`
+                      : '—'}
+                  </Text>
+                  {recoveryData && recoveryData.avgRevenuePerUse > 0 && (
+                    <Text as="p" tone="subdued" variant="bodySm">
+                      +${(recoveryData.avgRevenuePerUse / 100).toFixed(0)}/use
+                    </Text>
+                  )}
+                </BlockStack>
+              </Box>
+            </InlineGrid>
+          )}
+
+          {recoveryData?.topTrigger && recoveryData.codesOffered > 0 && (
+            <Text as="p" tone="subdued" variant="bodySm">
+              Top recovery trigger:{' '}
+              <strong>
+                {{ expired: 'Expired codes', min_not_met: 'Minimum not met',
+                   usage_limit: 'Usage limit reached', wrong_collection: 'Wrong collection',
+                   invalid: 'Invalid code', already_used: 'Already used' }[recoveryData.topTrigger]
+                  ?? recoveryData.topTrigger}
+              </strong>
+            </Text>
+          )}
+        </BlockStack>
       </Card>
 
       </BlockStack>

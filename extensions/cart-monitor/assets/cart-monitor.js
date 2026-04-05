@@ -67,6 +67,9 @@
   var lastDiscountCodes = {};
   // Last discount field string sent, to deduplicate rapid-fire requests
   var lastDiscountPayload = null;
+  // Smart Recovery — track failures this session for hunter-protection
+  var _couponFailureCount = 0;
+
 
   function extractCartToken(responseData) {
     if (responseData && responseData.token) {
@@ -488,6 +491,20 @@
         var events = Array.isArray(classified) ? classified : [classified];
         events.forEach(function(ev) {
           logEvent(buildEvent(ev.type, ev.data));
+          // Smart Recovery hook — dispatch custom event for smart-recovery extension
+          if (ev.type === 'cart_coupon_failed') {
+            _couponFailureCount++;
+            window.dispatchEvent(new CustomEvent('cmx:coupon_failed', {
+              detail: {
+                code: ev.data.code,
+                failureReason: ev.data.failureReason,
+                cartValue: ev.data.cartValue,
+                lineItems: ev.data.lineItems || [],
+                sessionId: getSessionId(),
+                attemptsThisSession: _couponFailureCount,
+              }
+            }));
+          }
         });
       }).catch(function() {
         // Non-JSON response — skip silently (sections HTML, redirects, etc.)
@@ -545,6 +562,20 @@
           var events = Array.isArray(classified) ? classified : [classified];
           events.forEach(function(ev) {
             logEvent(buildEvent(ev.type, ev.data));
+            // Smart Recovery hook
+            if (ev.type === 'cart_coupon_failed') {
+              _couponFailureCount++;
+              window.dispatchEvent(new CustomEvent('cmx:coupon_failed', {
+                detail: {
+                  code: ev.data.code,
+                  failureReason: ev.data.failureReason,
+                  cartValue: ev.data.cartValue,
+                  lineItems: ev.data.lineItems || [],
+                  sessionId: getSessionId(),
+                  attemptsThisSession: _couponFailureCount,
+                }
+              }));
+            }
           });
         } catch (e) {
           logEvent(buildEvent('cart_xhr_parse_error', { url: url, status: self.status }));

@@ -9,6 +9,7 @@ export default function CouponMaxxLayout({ children }: { children: React.ReactNo
         <a href="/couponmaxx/coupons">Coupons</a>
         <a href="/couponmaxx/cart">Cart</a>
         <a href="/couponmaxx/notifications">Notifications</a>
+        <a href="/couponmaxx/settings">Settings</a>
       </ui-nav-menu>
 
       <div style={{
