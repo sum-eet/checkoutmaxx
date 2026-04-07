@@ -1,177 +1,133 @@
 /**
  * CouponMaxx Smart Recovery — storefront script
- *
- * Listens for the 'cmx:coupon_failed' custom event dispatched by cart-monitor.js.
- * Calls the recovery decision API, then injects an inline recovery message
- * into the coupon error area — replacing Shopify's generic "Enter a valid
- * discount code" message with a contextual, actionable response.
- *
- * No modals. No toasts. No pop-ups.
+ * One short line + code pill with copy. No modals, no pop-ups.
  */
-
 (function () {
   'use strict';
 
-  var script = document.currentScript ||
-    document.querySelector('script[data-recovery-url]');
+  var script = document.currentScript || document.querySelector('script[data-recovery-url]');
 
   var CONFIG = {
-    shopDomain: script && script.dataset.shop
-      ? script.dataset.shop
-      : window.location.hostname,
+    shopDomain: script && script.dataset.shop ? script.dataset.shop : window.location.hostname,
     recoveryUrl: script && script.dataset.recoveryUrl
       ? script.dataset.recoveryUrl
       : 'https://couponmaxx.vercel.app/api/couponmaxx/recovery/decide',
+    style: (script && script.dataset.style) || 'minimal',
   };
 
-  // ── Selectors for Shopify coupon error elements ───────────────────────────
-  // We try these in order; first match wins. Covers Dawn, Debut, Sense, Craft,
-  // and most paid themes. The container receives our recovery message markup.
+  var _inflight = false;
+  var _lastGoodResponse = null;
+  var _observer = null;
+  var _lastInputValue = '';
+
+  var COPY_ICON = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 4v-2a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2h-2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm2 0h4a2 2 0 012 2v4h-1V6a1 1 0 00-1-1H6V4zm-2 2a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V6a1 1 0 00-1-1H4z"/></svg>';
+
+  // ── Selectors ──────────────────────────────────────────────────────────────
 
   var ERROR_SELECTORS = [
-    // Dawn 9+ (2024)
-    '[data-cart-discount-errors]',
-    '.cart-discount__error',
-    // Debut / older
+    '[data-cart-discount-errors]', '.cart-discount__error',
     '#CartDiscountCode-CartDrawer ~ .field__message--error',
     '#CartDiscountCode ~ .field__message--error',
-    // Generic field error
     '[id*="DiscountCode"] + .field__message--error',
     '[id*="discount"] + .field__message--error',
-    // Broad fallback: any error near a discount input
-    '.discount-field ~ p.error',
-    '.discount__message--error',
-    '[data-discount-error]',
-  ];
-
-  var FORM_SELECTORS = [
-    'form[data-cart-discount-form]',
-    'form[action*="discount"]',
-    '#cart-discount-form',
-    '.cart-discount form',
+    '.discount-field ~ p.error', '.discount__message--error', '[data-discount-error]',
   ];
 
   var INPUT_SELECTORS = [
-    '#CartDiscountCode-CartDrawer',
-    '#CartDiscountCode',
-    '[name="discount"]',
-    '[data-discount-input]',
-    '[id*="DiscountCode"]',
+    '#CartDiscountCode-CartDrawer', '#CartDiscountCode',
+    '[name="discount"]', '[data-discount-input]', '[id*="DiscountCode"]',
   ];
 
-  // ── DOM helpers ───────────────────────────────────────────────────────────
+  var FORM_SELECTORS = [
+    'form[data-cart-discount-form]', 'form[action*="discount"]',
+    '#cart-discount-form', '.cart-discount form',
+  ];
 
-  function findFirst(selectors) {
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) return el;
-    }
+  function findFirst(s) {
+    for (var i = 0; i < s.length; i++) { var el = document.querySelector(s[i]); if (el) return el; }
     return null;
   }
+  function findInput() { return findFirst(INPUT_SELECTORS); }
 
-  function findDiscountInput() {
-    return findFirst(INPUT_SELECTORS);
-  }
-
-  function findOrCreateErrorContainer() {
-    // Try to find the existing Shopify error element
-    var existing = findFirst(ERROR_SELECTORS);
-    if (existing) return existing;
-
-    // Fallback: inject a container right after the discount input or form
-    var anchor = findDiscountInput() || findFirst(FORM_SELECTORS);
+  function findOrCreateContainer() {
+    var el = findFirst(ERROR_SELECTORS);
+    if (el) return el;
+    var anchor = findInput() || findFirst(FORM_SELECTORS);
     if (!anchor) return null;
-
-    var container = document.createElement('p');
-    container.className = 'cmx-recovery-message';
-    container.id = 'cmx-recovery-container';
-    var parent = anchor.closest('form') || anchor.parentElement;
-    if (parent) {
-      parent.appendChild(container);
-    }
-    return container;
+    var c = document.createElement('p');
+    c.className = 'cmx-recovery-message';
+    c.id = 'cmx-recovery-container';
+    (anchor.closest('form') || anchor.parentElement).appendChild(c);
+    return c;
   }
 
-  // ── Recovery message renderer ─────────────────────────────────────────────
+  // ── Short failure text ─────────────────────────────────────────────────────
 
-  function renderRecovery(response) {
-    if (response.action === 'show_nothing' || !response.action) return;
+  function failureText(reason, hasCode) {
+    if (hasCode) {
+      switch (reason) {
+        case 'expired': return "That code expired \u2014 try this one:";
+        case 'min_not_met': return "Cart minimum not met \u2014 here\u2019s a code:";
+        case 'usage_limit': return "That code\u2019s used up \u2014 try this:";
+        case 'already_used': return "Already used \u2014 here\u2019s a fresh one:";
+        default: return "That code didn\u2019t work \u2014 try this:";
+      }
+    }
+    switch (reason) {
+      case 'expired': return "That code has expired.";
+      case 'min_not_met': return "Add more to your cart to use this code.";
+      case 'usage_limit': return "That code has been fully redeemed.";
+      case 'wrong_collection': return "That code only works on certain products.";
+      case 'already_used': return "You\u2019ve already used this code.";
+      default: return "That code didn\u2019t work.";
+    }
+  }
 
-    var container = findOrCreateErrorContainer();
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  function render(resp) {
+    if (resp.action === 'show_nothing' || !resp.action) return;
+
+    // Keep best response
+    if (!resp.code && _lastGoodResponse && _lastGoodResponse.code) resp = _lastGoodResponse;
+    if (resp.code) _lastGoodResponse = resp;
+
+    var style = resp.displayStyle || CONFIG.style;
+    var container = findOrCreateContainer();
     if (!container) return;
 
-    // Clear the Shopify default error text
+    if (_observer) _observer.disconnect();
+
+    var reason = resp._resolvedReason || 'invalid';
+    var hasCode = resp.action === 'show_code' && resp.code;
+    var text = failureText(reason, hasCode);
+
     container.innerHTML = '';
-    container.classList.add('cmx-recovery-active');
+    container.className = 'cmx-recovery-active cmx-style-' + style;
 
-    // Line 1: failure explanation
-    if (response.line1) {
-      var line1 = document.createElement('span');
-      line1.className = 'cmx-recovery-line1';
-      line1.textContent = response.line1;
-      container.appendChild(line1);
-    }
+    // Text
+    var span = document.createElement('span');
+    span.className = 'cmx-recovery-text';
+    span.textContent = text;
+    container.appendChild(span);
 
-    // Line 2: recovery action
-    if (response.line2 && response.action !== 'show_nothing') {
-      var br = document.createElement('br');
-      container.appendChild(br);
+    // Code pill
+    if (hasCode) {
+      var pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'cmx-code-pill';
+      pill.innerHTML = resp.code + ' ' + COPY_ICON;
+      pill.addEventListener('click', function () { applyCode(resp.code, pill); });
+      container.appendChild(pill);
 
-      if (response.action === 'show_code' && response.code) {
-        var line2 = document.createElement('span');
-        line2.className = 'cmx-recovery-line2';
-        line2.textContent = response.line2 + ' ';
-        container.appendChild(line2);
-
-        // Code pill (tap-to-apply)
-        var pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = 'cmx-code-pill';
-        pill.textContent = response.code;
-        pill.setAttribute('data-recovery-code', response.code);
-        pill.setAttribute('data-recovery-id', response.recoveryId || '');
-        pill.addEventListener('click', function () { applyCode(response.code, pill); });
-        container.appendChild(pill);
-
-        // Line 3: terms + countdown
-        if (response.discountLabel || response.expiresInMinutes) {
-          var br2 = document.createElement('br');
-          container.appendChild(br2);
-
-          var terms = document.createElement('span');
-          terms.className = 'cmx-recovery-terms';
-          var termsText = response.discountLabel || '';
-          if (response.expiresInMinutes) {
-            termsText += (termsText ? ' \u00b7 ' : '') + 'expires in ';
-            var span = document.createElement('span');
-            span.id = 'cmx-countdown-' + Date.now();
-            span.textContent = response.expiresInMinutes + ' min';
-            terms.textContent = termsText;
-            terms.appendChild(span);
-            startCountdown(span, response.expiresInMinutes * 60, container);
-          } else {
-            terms.textContent = termsText;
-          }
-          container.appendChild(terms);
-        }
-
-      } else {
-        // show_hint or show_upsell
-        var line2hint = document.createElement('span');
-        line2hint.className = 'cmx-recovery-line2';
-        line2hint.textContent = response.line2;
-        container.appendChild(line2hint);
-
-        if (response.productSuggestion) {
-          var br3 = document.createElement('br');
-          container.appendChild(br3);
-          var link = document.createElement('a');
-          link.className = 'cmx-product-link';
-          link.href = response.productSuggestion.url;
-          var price = (response.productSuggestion.price / 100).toFixed(2);
-          link.textContent = response.productSuggestion.title + ' ($' + price + ')';
-          container.appendChild(link);
-        }
+      // Terms line
+      if (resp.discountLabel || resp.expiresInMinutes) {
+        var terms = document.createElement('span');
+        terms.className = 'cmx-recovery-terms';
+        var t = resp.discountLabel || '';
+        if (resp.expiresInMinutes) t += (t ? ' \u00b7 ' : '') + 'valid ' + resp.expiresInMinutes + ' min';
+        terms.textContent = t;
+        container.appendChild(terms);
       }
     }
 
@@ -181,35 +137,32 @@
       container.style.transition = 'opacity 300ms ease';
       container.style.opacity = '1';
     });
+
+    // Reconnect observer after DOM settles
+    setTimeout(function () {
+      if (_observer) _observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }, 500);
   }
 
-  // ── Auto-apply code to cart ───────────────────────────────────────────────
+  // ── Apply code ─────────────────────────────────────────────────────────────
 
   function applyCode(code, pill) {
     if (!code) return;
+    // Copy to clipboard
+    if (navigator.clipboard) navigator.clipboard.writeText(code);
 
-    // Fill the discount input and submit the form, or use the Shopify JS API
-    var input = findDiscountInput();
+    var input = findInput();
     if (input) {
       input.value = code;
-
-      // Try submitting via the discount form
       var form = input.closest('form');
       if (form) {
-        var submitBtn = form.querySelector('[type="submit"]');
-        if (submitBtn) {
-          pill.textContent = 'Applying\u2026';
-          pill.disabled = true;
-          submitBtn.click();
-          return;
-        }
+        var btn = form.querySelector('[type="submit"]');
+        if (btn) { pill.innerHTML = 'Applying\u2026'; pill.disabled = true; btn.click(); return; }
       }
     }
 
-    // Fallback: apply via /cart/update.js
-    pill.textContent = 'Applying\u2026';
-    pill.disabled = true;
-
+    // Fallback
+    pill.innerHTML = 'Applying\u2026'; pill.disabled = true;
     fetch('/cart/update.js', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -217,183 +170,93 @@
     })
       .then(function (r) { return r.json(); })
       .then(function (cart) {
-        var applied = (cart.cart_level_discount_applications || [])
-          .some(function (d) { return d.title === code; });
-        if (applied) {
-          pill.textContent = '\u2713 Applied';
-          pill.classList.add('cmx-code-pill--applied');
-        } else {
-          pill.textContent = code;
-          pill.disabled = false;
-        }
+        var ok = (cart.cart_level_discount_applications || []).some(function (d) { return d.title === code; });
+        if (ok) { pill.innerHTML = '\u2713 Applied'; pill.classList.add('cmx-code-pill--applied'); }
+        else { pill.innerHTML = code + ' ' + COPY_ICON; pill.disabled = false; }
       })
-      .catch(function () {
-        pill.textContent = code;
-        pill.disabled = false;
-      });
+      .catch(function () { pill.innerHTML = code + ' ' + COPY_ICON; pill.disabled = false; });
   }
 
-  // ── Countdown timer ───────────────────────────────────────────────────────
+  // ── Countdown ──────────────────────────────────────────────────────────────
 
-  function startCountdown(el, totalSeconds, container) {
-    var remaining = totalSeconds;
-
-    var interval = setInterval(function () {
-      remaining--;
-      if (remaining <= 0) {
-        clearInterval(interval);
-        if (container && container.parentNode) {
-          container.classList.add('cmx-recovery-expired');
-        }
-        el.textContent = '0 min';
-        return;
-      }
-      var mins = Math.floor(remaining / 60);
-      var secs = remaining % 60;
-      el.textContent = mins > 0
-        ? mins + ' min'
-        : secs + ' sec';
+  function startCountdown(el, secs, container) {
+    var r = secs;
+    var iv = setInterval(function () {
+      r--;
+      if (r <= 0) { clearInterval(iv); if (container) container.classList.add('cmx-recovery-expired'); el.textContent = '0 min'; return; }
+      el.textContent = r > 60 ? Math.floor(r / 60) + ' min' : r + ' sec';
     }, 1000);
   }
 
-  // ── Recovery API call ─────────────────────────────────────────────────────
+  // ── API call (deduplicated) ────────────────────────────────────────────────
 
-  function callRecoveryApi(detail) {
-    var payload = {
-      shopId: CONFIG.shopDomain,
-      sessionId: detail.sessionId,
-      failedCode: detail.code || '',
-      failureReason: mapFailureReason(detail.failureReason),
-      cartValue: detail.cartValue || 0,
-      cartItems: (detail.lineItems || []).map(function (item) {
-        return {
-          productTitle: item.productTitle || '',
-          collectionIds: item.collectionIds || [],
-          price: item.price || 0,
-          quantity: item.quantity || 1,
-        };
-      }),
-      customerName: getCustomerName(),
-      attemptsThisSession: detail.attemptsThisSession || 1,
-      device: /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-      source: getUtmSource(),
-    };
+  function callApi(detail) {
+    if (_inflight) return;
+    _inflight = true;
 
     fetch(CONFIG.recoveryUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        shopId: CONFIG.shopDomain,
+        sessionId: detail.sessionId,
+        failedCode: detail.code || '',
+        failureReason: mapReason(detail.failureReason),
+        cartValue: detail.cartValue || 0,
+        cartItems: (detail.lineItems || []).map(function (i) {
+          return { productTitle: i.productTitle || '', collectionIds: i.collectionIds || [], price: i.price || 0, quantity: i.quantity || 1 };
+        }),
+        customerName: null,
+        attemptsThisSession: detail.attemptsThisSession || 1,
+        device: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        source: getUtm(),
+      }),
     })
       .then(function (r) { return r.json(); })
-      .then(function (response) {
-        renderRecovery(response);
-      })
-      .catch(function (err) {
-        console.warn('[CouponMaxx Smart Recovery] API error:', err);
-      });
+      .then(render)
+      .catch(function (e) { console.warn('[CouponMaxx Recovery]', e); })
+      .finally(function () { setTimeout(function () { _inflight = false; }, 3000); });
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
-  function mapFailureReason(reason) {
-    var map = {
-      'unknown':             'invalid',
-      'invalid_code':        'invalid',
-      'expired':             'expired',
-      'minimum_not_met':     'min_not_met',
-      'usage_limit_reached': 'usage_limit',
-      'customer_usage_limit':'already_used',
-      'product_ineligible':  'wrong_collection',
-    };
-    return map[reason] || 'invalid';
+  function mapReason(r) {
+    return { unknown: 'invalid', invalid_code: 'invalid', expired: 'expired', minimum_not_met: 'min_not_met',
+      usage_limit_reached: 'usage_limit', customer_usage_limit: 'already_used', product_ineligible: 'wrong_collection' }[r] || 'invalid';
   }
 
-  function getCustomerName() {
-    // Shopify exposes customer info via window.ShopifyAnalytics or meta tags
-    if (window.ShopifyAnalytics && window.ShopifyAnalytics.meta &&
-        window.ShopifyAnalytics.meta.page && window.ShopifyAnalytics.meta.page.customerId) {
-      // We have a customer ID but not the name here — name comes from the event detail
-      return null;
-    }
-    return null;
-  }
-
-  function getUtmSource() {
-    try {
-      var stored = sessionStorage.getItem('_cmx_utm');
-      if (stored) return JSON.parse(stored).source || null;
-    } catch (e) {}
+  function getUtm() {
+    try { var s = sessionStorage.getItem('_cmx_utm'); if (s) return JSON.parse(s).source || null; } catch (e) {}
     return new URLSearchParams(window.location.search).get('utm_source');
   }
 
-  // ── MutationObserver fallback ─────────────────────────────────────────────
-  // If cart-monitor isn't installed (or fires before smart-recovery loads),
-  // we also watch the DOM for Shopify's native error message appearing and
-  // replace it ourselves.
+  // ── MutationObserver fallback ──────────────────────────────────────────────
 
-  var _lastSeenError = null;
-  var _lastInputValue = '';
+  function watchErrors() {
+    _observer = new MutationObserver(function () {
+      var el = findFirst(ERROR_SELECTORS);
+      if (!el || el.classList.contains('cmx-recovery-active')) return;
+      var t = el.textContent && el.textContent.trim();
+      if (!t) return;
+      var lo = t.toLowerCase();
+      if (lo.indexOf('discount') === -1 && lo.indexOf('coupon') === -1 && lo.indexOf('promo') === -1 && lo.indexOf('cannot be applied') === -1) return;
 
-  function watchForNativeErrors() {
-    var observer = new MutationObserver(function () {
-      var errorEl = findFirst(ERROR_SELECTORS);
-      if (!errorEl) return;
-
-      var text = errorEl.textContent && errorEl.textContent.trim();
-      if (!text || text === _lastSeenError) return;
-      if (text === '' || errorEl.classList.contains('cmx-recovery-active')) return;
-
-      // Only act on Shopify's generic coupon error strings
-      var isShopifyError =
-        text.toLowerCase().indexOf('valid discount') !== -1 ||
-        text.toLowerCase().indexOf('discount code') !== -1 ||
-        text.toLowerCase().indexOf('coupon') !== -1 ||
-        text.toLowerCase().indexOf('promo') !== -1;
-
-      if (!isShopifyError) return;
-
-      _lastSeenError = text;
-
-      // Read current input value
-      var input = findDiscountInput();
+      var input = findInput();
       var code = input ? input.value.trim() : _lastInputValue;
-
-      // Dispatch our own failure event so we don't have to duplicate API call logic
-      var sid = sessionStorage.getItem('_cmx_sid') ||
-        ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
-
-      callRecoveryApi({
-        code: code,
-        failureReason: 'unknown',
-        cartValue: 0,
-        lineItems: [],
-        sessionId: sid,
-        attemptsThisSession: 1,
-      });
+      var sid = sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
+      callApi({ code: code, failureReason: 'unknown', cartValue: 0, lineItems: [], sessionId: sid, attemptsThisSession: 1 });
     });
+    _observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-
-    // Track input value so fallback observer can read the last attempted code
     document.addEventListener('change', function (e) {
-      var input = findDiscountInput();
-      if (input && e.target === input) {
-        _lastInputValue = input.value.trim();
-      }
+      var input = findInput();
+      if (input && e.target === input) _lastInputValue = input.value.trim();
     }, true);
   }
 
-  // ── Listen for cart-monitor events ───────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────────────
 
-  window.addEventListener('cmx:coupon_failed', function (e) {
-    callRecoveryApi(e.detail);
-  });
+  window.addEventListener('cmx:coupon_failed', function (e) { callApi(e.detail); });
 
-  // Also start the DOM observer as a fallback
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', watchForNativeErrors);
-  } else {
-    watchForNativeErrors();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchErrors);
+  else watchErrors();
 
 })();

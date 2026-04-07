@@ -1,119 +1,92 @@
-/* CouponMaxx Smart Recovery — inline recovery message styles */
+/* CouponMaxx Smart Recovery — 3 display styles */
 
-/* Container — replaces/extends the native Shopify coupon error element */
+/* ── Shared base ─────────────────────────────────────────────────── */
 .cmx-recovery-active {
+  margin-top: 8px;
   font-size: 13px;
   line-height: 1.5;
-  color: #374151;
-  margin-top: 8px;
 }
 
-/* Line 1: failure explanation */
-.cmx-recovery-line1 {
-  display: block;
-  color: #B45309;
-  font-weight: 500;
-  font-size: 13px;
-}
+.cmx-recovery-text { display: inline; }
 
-/* Line 2: recovery message */
-.cmx-recovery-line2 {
-  display: inline;
-  color: #374151;
-  font-size: 13px;
-}
-
-/* Code pill — tap to auto-apply */
 .cmx-code-pill {
-  display: inline-block;
-  background: #F0F9FF;
-  border: 1px solid #0EA5E9;
-  color: #0EA5E9;
-  font-weight: 500;
-  font-size: 13px;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 3px 10px;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
   border-radius: 4px;
-  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'SF Mono', Menlo, monospace;
   letter-spacing: 0.5px;
-  font-family: monospace;
-  transition: background 150ms ease, color 150ms ease;
-  margin-left: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
   vertical-align: middle;
   white-space: nowrap;
 }
-
-.cmx-code-pill:hover {
-  background: #E0F2FE;
-}
-
-.cmx-code-pill:active {
-  background: #BAE6FD;
-}
-
+.cmx-code-pill:hover { background: #333; }
+.cmx-code-pill:active { background: #555; }
 .cmx-code-pill--applied {
-  background: #F0FDF4;
-  border-color: #22C55E;
-  color: #16A34A;
+  background: #16a34a;
   cursor: default;
 }
+.cmx-code-pill:disabled { opacity: 0.7; cursor: default; }
+.cmx-code-pill svg { width: 12px; height: 12px; flex-shrink: 0; }
 
-.cmx-code-pill:disabled {
-  opacity: 0.7;
-  cursor: default;
-}
-
-/* Line 3: discount terms + countdown */
 .cmx-recovery-terms {
   display: block;
-  font-size: 12px;
-  color: #9CA3AF;
-  margin-top: 3px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #888;
 }
 
-/* Expired state */
 .cmx-recovery-expired .cmx-code-pill {
   opacity: 0.4;
   pointer-events: none;
-  border-color: #D1D5DB;
-  color: #9CA3AF;
-  background: #F9FAFB;
+  background: #ccc;
 }
+.cmx-recovery-expired .cmx-recovery-terms { color: #c44; }
 
-.cmx-recovery-expired .cmx-recovery-terms {
-  color: #EF4444;
+/* ── Style: minimal (default B) ──────────────────────────────────── */
+.cmx-style-minimal {
+  color: #c44;
 }
-
-/* Product upsell link */
-.cmx-product-link {
-  display: inline-block;
-  color: #0EA5E9;
-  font-size: 13px;
-  text-decoration: underline;
-  margin-top: 2px;
+.cmx-style-minimal .cmx-code-pill {
+  background: #2a7;
 }
+.cmx-style-minimal .cmx-code-pill:hover { background: #1d8; }
 
-.cmx-product-link:hover {
-  color: #0284C7;
+/* ── Style: warm (A) ─────────────────────────────────────────────── */
+.cmx-style-warm {
+  padding: 10px 14px;
+  background: #fef9ef;
+  border: 1px solid #f0dda0;
+  border-radius: 8px;
+  color: #5c4813;
 }
+.cmx-style-warm .cmx-recovery-terms { color: #9a8453; }
 
-/* Mobile: full-width pill on small screens */
+/* ── Style: green (C) ────────────────────────────────────────────── */
+.cmx-style-green {
+  padding: 10px 14px;
+  background: #f0faf4;
+  border: 1px solid #b8e6c8;
+  border-radius: 8px;
+  color: #1a5c32;
+}
+.cmx-style-green .cmx-recovery-terms { color: #5a9a6e; }
+
+/* ── Mobile ──────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .cmx-code-pill {
-    display: block;
-    width: 100%;
-    text-align: center;
-    margin-left: 0;
-    margin-top: 6px;
-    padding: 8px 10px;
-    font-size: 14px;
+    display: inline-flex;
+    margin-left: 4px;
+    padding: 4px 10px;
+    font-size: 12px;
   }
-
-  .cmx-recovery-active {
-    max-height: 80px;
-    overflow: hidden;
-  }
-
-  .cmx-recovery-line2 {
-    display: block;
-  }
+  .cmx-recovery-active { font-size: 12px; }
 }

@@ -1,6 +1,5 @@
 {% comment %}
   CouponMaxx Cart Monitor + Smart Recovery
-  Injected automatically on all storefront pages via theme app extension.
 {% endcomment %}
 
 <link rel="stylesheet" href="{{ 'smart-recovery.css' | asset_url }}">
@@ -17,6 +16,7 @@
   src="{{ 'smart-recovery.js' | asset_url }}"
   data-shop="{{ shop.permanent_domain }}"
   data-recovery-url="{{ block.settings.app_url }}/api/couponmaxx/recovery/decide"
+  data-style="{{ block.settings.recovery_style }}"
   defer
 ></script>
 
@@ -31,6 +31,17 @@
       "label": "App URL",
       "default": "https://couponmaxx.vercel.app",
       "info": "Do not change unless instructed by support."
+    },
+    {
+      "type": "select",
+      "id": "recovery_style",
+      "label": "Recovery display style",
+      "default": "minimal",
+      "options": [
+        { "value": "minimal", "label": "Minimal (inline text)" },
+        { "value": "warm", "label": "Warm banner" },
+        { "value": "green", "label": "Green success" }
+      ]
     }
   ]
 }

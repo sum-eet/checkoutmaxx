@@ -36,8 +36,11 @@ type RuleConfig = {
   collections?: string;
 };
 
+type DisplayStyle = 'minimal' | 'warm' | 'green';
+
 type RecoverySettings = {
   enabled: boolean;
+  displayStyle: DisplayStyle;
   rules: {
     expired: RuleConfig;
     min_not_met: RuleConfig;
@@ -56,6 +59,7 @@ type RecoverySettings = {
 
 const DEFAULT_SETTINGS: RecoverySettings = {
   enabled: false,
+  displayStyle: 'minimal',
   rules: {
     expired:          { enabled: false, action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
     min_not_met:      { enabled: false, action: 'show_hint_and_suggest', collections: 'all' },
@@ -184,86 +188,76 @@ function RuleRow({
 }
 
 // ---------------------------------------------------------------------------
-// Recovery preview
+// Style previews (inline HTML)
 // ---------------------------------------------------------------------------
 
-function RecoveryPreview({ settings }: { settings: RecoverySettings }) {
-  const [scenario, setScenario] = useState<keyof RecoverySettings['rules']>('expired');
-  const rule = settings.rules[scenario];
-  const showsCode = ruleNeedsDiscount(rule.action);
-  const customerLabel = settings.useCustomerName ? 'SARAH' : 'SAVE';
+const STYLE_PREVIEWS: Record<DisplayStyle, { label: string; html: string }> = {
+  minimal: {
+    label: 'Minimal',
+    html: `<div style="font-size:13px;color:#c44;line-height:1.5">
+      <span>That code expired — try this one:</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 10px;background:#2a7;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;font-family:monospace;letter-spacing:0.5px">SAVE-7X92</span>
+      <span style="display:block;margin-top:4px;font-size:11px;color:#888">10% off · valid 15 min</span>
+    </div>`,
+  },
+  warm: {
+    label: 'Warm banner',
+    html: `<div style="padding:10px 14px;background:#fef9ef;border:1px solid #f0dda0;border-radius:8px;font-size:13px;color:#5c4813;line-height:1.5">
+      <span>That code expired — try this one:</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 10px;background:#1a1a1a;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;font-family:monospace;letter-spacing:0.5px">SAVE-7X92</span>
+      <span style="display:block;margin-top:4px;font-size:11px;color:#9a8453">10% off · valid 15 min</span>
+    </div>`,
+  },
+  green: {
+    label: 'Green success',
+    html: `<div style="padding:10px 14px;background:#f0faf4;border:1px solid #b8e6c8;border-radius:8px;font-size:13px;color:#1a5c32;line-height:1.5">
+      <span>That code expired — try this one:</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:3px 10px;background:#1a1a1a;color:#fff;border:none;border-radius:4px;font-size:13px;font-weight:600;font-family:monospace;letter-spacing:0.5px">SAVE-7X92</span>
+      <span style="display:block;margin-top:4px;font-size:11px;color:#5a9a6e">10% off · valid 15 min</span>
+    </div>`,
+  },
+};
 
+function StylePicker({
+  value,
+  onChange,
+}: {
+  value: DisplayStyle;
+  onChange: (v: DisplayStyle) => void;
+}) {
   return (
-    <Box background="bg-surface-secondary" padding="400" borderRadius="200">
-      <BlockStack gap="200">
-        <InlineStack gap="200" blockAlign="center">
-          <Text as="p" variant="bodyMd" fontWeight="semibold">Preview for:</Text>
-          <Select
-            label=""
-            labelHidden
-            options={Object.entries(FAILURE_LABELS).map(([k, v]) => ({ label: v, value: k }))}
-            value={scenario}
-            onChange={(v) => setScenario(v as keyof RecoverySettings['rules'])}
-          />
-        </InlineStack>
-        <Box
-          background="bg-surface"
-          padding="400"
-          borderRadius="200"
-          borderWidth="025"
-          borderColor="border"
-        >
-          {rule.action === 'show_nothing' ? (
-            <Text as="p" tone="subdued">
-              [Shopify default error — no recovery shown]
-            </Text>
-          ) : (
-            <BlockStack gap="100">
-              <Text as="p" tone="caution" fontWeight="medium">
-                {scenario === 'expired' && 'That code has expired.'}
-                {scenario === 'min_not_met' && "This code needs a higher cart total. You're at $34.00."}
-                {scenario === 'usage_limit' && 'That code has been fully redeemed.'}
-                {scenario === 'wrong_collection' && 'That code only works on certain products.'}
-                {scenario === 'invalid' && "We couldn't find that code. Check the spelling?"}
-                {scenario === 'already_used' && "You've already used this code."}
-              </Text>
-              {rule.action !== 'explanation_only' && (
-                <InlineStack gap="200" blockAlign="center">
-                  <Text as="p">
-                    {(rule.action === 'offer_fallback_code' || rule.action === 'offer_smaller_discount')
-                      ? "Here's one that works:"
-                      : rule.action === 'show_hint_and_suggest'
-                      ? 'Add a bit more to unlock this discount.'
-                      : rule.action === 'redirect_collection'
-                      ? 'Browse the qualifying products to use this discount.'
-                      : null}
-                  </Text>
-                  {showsCode && (
-                    <Box
-                      background="bg-fill-info-secondary"
-                      padding="100"
-                      paddingInline="300"
-                      borderRadius="100"
-                      borderWidth="025"
-                      borderColor="border-info"
-                    >
-                      <Text as="p" tone="magic" fontWeight="medium">
-                        {customerLabel}-7X92
-                      </Text>
-                    </Box>
-                  )}
-                </InlineStack>
-              )}
-              {showsCode && rule.discount && (
-                <Text as="p" tone="subdued" variant="bodySm">
-                  {rule.discount}% off · expires in {rule.expiryMinutes ?? 15} min
+    <BlockStack gap="300">
+      {(Object.keys(STYLE_PREVIEWS) as DisplayStyle[]).map((key) => {
+        const selected = key === value;
+        return (
+          <Box
+            key={key}
+            padding="300"
+            borderRadius="200"
+            borderWidth="025"
+            borderColor={selected ? 'border-info' : 'border'}
+            background={selected ? 'bg-surface-info' : 'bg-surface'}
+            cursor="pointer"
+          >
+            <div
+              onClick={() => onChange(key)}
+              style={{ cursor: 'pointer' }}
+            >
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodyMd" fontWeight={selected ? 'semibold' : 'regular'}>
+                  {STYLE_PREVIEWS[key].label}
+                  {key === 'minimal' ? ' (default)' : ''}
                 </Text>
-              )}
-            </BlockStack>
-          )}
-        </Box>
-      </BlockStack>
-    </Box>
+                {selected && <Text as="p" tone="info" variant="bodySm">Selected</Text>}
+              </InlineStack>
+              <Box paddingBlockStart="200">
+                <div dangerouslySetInnerHTML={{ __html: STYLE_PREVIEWS[key].html }} />
+              </Box>
+            </div>
+          </Box>
+        );
+      })}
+    </BlockStack>
   );
 }
 
@@ -495,15 +489,17 @@ export default function SmartRecoverySettings() {
           </BlockStack>
         </Card>
 
-        {/* ── Preview ───────────────────────────────────────────────────── */}
+        {/* ── Display Style ─────────────────────────────────────────────── */}
         <Card>
           <BlockStack gap="300">
-            <Text as="p" variant="headingMd">Preview</Text>
+            <Text as="p" variant="headingMd">Display Style</Text>
             <Text as="p" tone="subdued">
-              A mock of what the customer would see for each failure type with your
-              current settings.
+              How the recovery message looks on your cart page.
             </Text>
-            <RecoveryPreview settings={settings} />
+            <StylePicker
+              value={settings.displayStyle}
+              onChange={(v) => update('displayStyle', v)}
+            />
           </BlockStack>
         </Card>
 

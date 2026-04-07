@@ -66,6 +66,7 @@ type MerchantSettings = {
   useCustomerName: boolean;
   useCartContents: boolean;
   dailyCodeLimit: number;
+  displayStyle: 'minimal' | 'warm' | 'green';
 };
 
 const DEFAULT_SETTINGS: MerchantSettings = {
@@ -85,6 +86,7 @@ const DEFAULT_SETTINGS: MerchantSettings = {
   useCustomerName: true,
   useCartContents: true,
   dailyCodeLimit: 50,
+  displayStyle: 'minimal',
 };
 
 // ── Failure explanation copy ───────────────────────────────────────────────────
@@ -200,10 +202,7 @@ async function resolveFailureReason(
     // Code exists and looks valid — treat as invalid (conditions mismatch)
     return 'invalid';
   } catch (err) {
-    const msg = (err as Error).message;
-    console.error('[recovery/decide] Admin API lookup failed:', msg);
-    // Attach debug info so we can see it in the response
-    (resolveFailureReason as any)._lastError = msg;
+    console.error('[recovery/decide] Admin API lookup failed:', (err as Error).message);
     return 'invalid';
   }
 }
@@ -369,6 +368,7 @@ export async function POST(req: NextRequest) {
         useCustomerName:   settingsRow.useCustomerName ?? DEFAULT_SETTINGS.useCustomerName,
         useCartContents:   settingsRow.useCartContents ?? DEFAULT_SETTINGS.useCartContents,
         dailyCodeLimit:    settingsRow.dailyCodeLimit ?? DEFAULT_SETTINGS.dailyCodeLimit,
+        displayStyle:      settingsRow.displayStyle ?? DEFAULT_SETTINGS.displayStyle,
       }
     : DEFAULT_SETTINGS;
 
@@ -380,7 +380,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const line1 = explainFailure(resolvedReason, failedCode);
   const recoveryId = crypto.randomUUID();
 
   // Serial hunter protection
@@ -398,8 +397,7 @@ export async function POST(req: NextRequest) {
       device,
     });
     return NextResponse.json(
-      { action: 'show_nothing', line1, line2: null, code: null,
-        discount: null, expiresInMinutes: null, productSuggestion: null, recoveryId },
+      { action: 'show_nothing', recoveryId, _resolvedReason: resolvedReason },
       { headers: CORS_HEADERS },
     );
   }
@@ -423,13 +421,9 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({
       action: 'show_hint',
-      line1,
-      line2: null,
-      code: null,
-      discount: null,
-      expiresInMinutes: null,
-      productSuggestion: null,
       recoveryId,
+      displayStyle: settings.displayStyle,
+      _resolvedReason: resolvedReason,
     }, { headers: CORS_HEADERS });
   }
 
@@ -438,14 +432,6 @@ export async function POST(req: NextRequest) {
   if (cartValue >= settings.highValueThreshold && rule.discount !== undefined) {
     effectiveDiscount = Math.min(effectiveDiscount + settings.highValueBoost, 50);
   }
-
-  const displayName = settings.useCustomerName && customerName
-    ? customerName.split(/\s+/)[0]
-    : null;
-
-  const firstItemTitle = settings.useCartContents && cartItems.length > 0
-    ? cartItems[0].productTitle
-    : null;
 
   // ── Handle each action ───────────────────────────────────────────────────────
 
@@ -457,8 +443,6 @@ export async function POST(req: NextRequest) {
     const limited = await isRateLimited(shop.id, sessionId, settings.dailyCodeLimit);
 
     let recoveryCode: string | null = null;
-    let _debugCodeError: string | null = null;
-    let _debugRateLimited = limited;
     if (!limited) {
       try {
         recoveryCode = await generateShopifyDiscountCode(
@@ -470,20 +454,13 @@ export async function POST(req: NextRequest) {
           expiryMinutes,
         );
       } catch (err) {
-        _debugCodeError = (err as Error).message;
-        console.error('[recovery/decide] Code generation failed:', _debugCodeError);
+        console.error('[recovery/decide] Code generation failed:', (err as Error).message);
       }
     }
 
     const discountLabel = discountType === 'percentage'
       ? `${effectiveDiscount}% off`
       : `$${(effectiveDiscount / 100).toFixed(2)} off`;
-
-    const line2 = recoveryCode
-      ? `Here\u2019s one that works:`
-      : (displayName
-          ? `Sorry ${displayName}, that code isn\u2019t working right now.`
-          : `That code isn\u2019t working right now.`);
 
     const recoveryAction = recoveryCode ? 'show_code' : 'show_hint';
 
@@ -505,21 +482,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       action: recoveryAction,
-      line1,
-      line2,
       code: recoveryCode,
       discount: { type: discountType, value: effectiveDiscount },
       discountLabel,
       expiresInMinutes: expiryMinutes,
-      productSuggestion: null,
       recoveryId,
-      _debug: {
-        resolvedReason,
-        clientReason: failureReason,
-        lookupError: (resolveFailureReason as any)._lastError ?? null,
-        codeGenError: _debugCodeError,
-        rateLimited: _debugRateLimited,
-      },
+      displayStyle: settings.displayStyle,
+      _resolvedReason: resolvedReason,
     }, { headers: CORS_HEADERS });
   }
 
@@ -543,14 +512,10 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({
-      action: 'show_upsell',
-      line1: `This code needs a higher cart total. You\u2019re at $${cartDollars}.`,
-      line2,
-      code: null,
-      discount: null,
-      expiresInMinutes: null,
-      productSuggestion: null,
+      action: 'show_hint',
       recoveryId,
+      displayStyle: settings.displayStyle,
+      _resolvedReason: resolvedReason,
     }, { headers: CORS_HEADERS });
   }
 
@@ -570,13 +535,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       action: 'show_hint',
-      line1: 'That code only works on certain products.',
-      line2: 'Browse the qualifying products to use this discount.',
-      code: null,
-      discount: null,
-      expiresInMinutes: null,
-      productSuggestion: null,
       recoveryId,
+      displayStyle: settings.displayStyle,
+      _resolvedReason: resolvedReason,
     }, { headers: CORS_HEADERS });
   }
 
@@ -598,12 +559,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     action: finalAction,
-    line1: finalAction === 'show_nothing' ? null : line1,
-    line2: null,
-    code: null,
-    discount: null,
-    expiresInMinutes: null,
-    productSuggestion: null,
     recoveryId,
+    displayStyle: settings.displayStyle,
+    _resolvedReason: resolvedReason,
   }, { headers: CORS_HEADERS });
 }
