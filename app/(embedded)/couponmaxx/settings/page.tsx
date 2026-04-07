@@ -237,7 +237,6 @@ function StylePicker({
             borderWidth="025"
             borderColor={selected ? 'border-info' : 'border'}
             background={selected ? 'bg-surface-info' : 'bg-surface'}
-            cursor="pointer"
           >
             <div
               onClick={() => onChange(key)}
@@ -248,7 +247,7 @@ function StylePicker({
                   {STYLE_PREVIEWS[key].label}
                   {key === 'minimal' ? ' (default)' : ''}
                 </Text>
-                {selected && <Text as="p" tone="info" variant="bodySm">Selected</Text>}
+                {selected && <Text as="p" tone="magic" variant="bodySm">Selected</Text>}
               </InlineStack>
               <Box paddingBlockStart="200">
                 <div dangerouslySetInnerHTML={{ __html: STYLE_PREVIEWS[key].html }} />

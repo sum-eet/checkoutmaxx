@@ -493,11 +493,6 @@ export async function POST(req: NextRequest) {
   }
 
   if (rule.action === 'show_hint_and_suggest') {
-    const cartDollars = (cartValue / 100).toFixed(2);
-    const line2 = firstItemTitle
-      ? `Add a bit more to unlock this discount \u2014 like another ${firstItemTitle}.`
-      : `Add more to your cart to unlock this discount.`;
-
     await supabase.from('RecoveryEvent').insert({
       id: recoveryId,
       shopId: shop.id,
