@@ -33,13 +33,6 @@
     '.discount-field ~ p.error', '.discount__message--error', '[data-discount-error]',
   ];
 
-  // Shopify discount tags — if any exist, a discount is already active
-  var DISCOUNT_TAG_SELECTORS = [
-    '.tag--discount', '.cart-discount-tag', '[data-discount-tag]',
-    '.cart__discount', '[class*="discount"][class*="tag"]',
-    '.cart-discount__content',
-  ];
-
   var INPUT_SELECTORS = [
     '#CartDiscountCode-CartDrawer', '#CartDiscountCode',
     '[name="discount"]', '[data-discount-input]', '[id*="DiscountCode"]',
@@ -54,10 +47,6 @@
   function findErrorContainer() {
     // Only return Shopify's existing error element — NEVER create new ones
     return findFirst(ERROR_SELECTORS);
-  }
-
-  function hasActiveDiscount() {
-    return !!findFirst(DISCOUNT_TAG_SELECTORS);
   }
 
   // ── Clean up any stale recovery messages ───────────────────────────────────
@@ -133,9 +122,6 @@
 
     var code = (detail.code || '').toUpperCase();
     if (_recoveryCodes[code]) return;
-
-    // Don't offer recovery if customer already has a working discount
-    if (hasActiveDiscount()) return;
 
     _inflight = true;
 
