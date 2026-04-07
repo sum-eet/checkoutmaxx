@@ -120,56 +120,54 @@ async function resolveFailureReason(
 
     const client = new shopify.clients.Graphql({ session });
 
-    const response = await client.query({
-      data: {
-        query: `query lookupDiscount($code: String!) {
-          codeDiscountNodeByCode(code: $code) {
-            codeDiscount {
-              ... on DiscountCodeBasic {
-                status
-                endsAt
-                usageLimit
-                asyncUsageCount
-                appliesOncePerCustomer
-                minimumRequirement {
-                  ... on DiscountMinimumSubtotal {
-                    greaterThanOrEqualToSubtotal { amount }
-                  }
-                  ... on DiscountMinimumQuantity {
-                    greaterThanOrEqualToQuantity
-                  }
-                }
-                customerGets {
-                  items {
-                    ... on AllDiscountItems { allItems }
-                    ... on DiscountProducts { __typename }
-                    ... on DiscountCollections { __typename }
-                  }
-                }
+    const LOOKUP_QUERY = `query lookupDiscount($code: String!) {
+      codeDiscountNodeByCode(code: $code) {
+        codeDiscount {
+          ... on DiscountCodeBasic {
+            status
+            endsAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+            minimumRequirement {
+              ... on DiscountMinimumSubtotal {
+                greaterThanOrEqualToSubtotal { amount }
               }
-              ... on DiscountCodeBxgy {
-                status
-                endsAt
-                usageLimit
-                asyncUsageCount
-                appliesOncePerCustomer
+              ... on DiscountMinimumQuantity {
+                greaterThanOrEqualToQuantity
               }
-              ... on DiscountCodeFreeShipping {
-                status
-                endsAt
-                usageLimit
-                asyncUsageCount
-                appliesOncePerCustomer
+            }
+            customerGets {
+              items {
+                ... on AllDiscountItems { allItems }
+                ... on DiscountProducts { __typename }
+                ... on DiscountCollections { __typename }
               }
             }
           }
-        }`,
-        variables: { code },
-      },
+          ... on DiscountCodeBxgy {
+            status
+            endsAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+          }
+          ... on DiscountCodeFreeShipping {
+            status
+            endsAt
+            usageLimit
+            asyncUsageCount
+            appliesOncePerCustomer
+          }
+        }
+      }
+    }`;
+
+    const response = await client.request(LOOKUP_QUERY, {
+      variables: { code },
     });
 
-    const body = response.body as any;
-    const discount = body?.data?.codeDiscountNodeByCode?.codeDiscount;
+    const discount = (response.data as any)?.codeDiscountNodeByCode?.codeDiscount;
 
     // Code doesn't exist at all
     if (!discount) return 'invalid';
@@ -251,44 +249,36 @@ async function generateShopifyDiscountCode(
 
   const endsAt = new Date(Date.now() + expiryMinutes * 60 * 1000).toISOString();
 
+  const CREATE_MUTATION = `mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+      codeDiscountNode { id }
+      userErrors { field message }
+    }
+  }`;
+
   // NOTE: requires write_discounts scope on the Shopify app
-  const response = await client.query({
-    data: {
-      query: `mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-          codeDiscountNode { id }
-          userErrors { field message }
-        }
-      }`,
-      variables: {
-        basicCodeDiscount: {
-          title: code,
-          code,
-          startsAt: new Date().toISOString(),
-          endsAt,
-          usageLimit: 1,
-          customerSelection: { all: true },
-          customerGets: {
-            value: discountType === 'percentage'
-              ? { percentage: discountValue / 100 }
-              : { discountAmount: { amount: discountValue / 100, appliesOnEachItem: false } },
-            items: { all: true },
-          },
+  const response = await client.request(CREATE_MUTATION, {
+    variables: {
+      basicCodeDiscount: {
+        title: code,
+        code,
+        startsAt: new Date().toISOString(),
+        endsAt,
+        usageLimit: 1,
+        customerSelection: { all: true },
+        customerGets: {
+          value: discountType === 'percentage'
+            ? { percentage: discountValue / 100 }
+            : { discountAmount: { amount: discountValue / 100, appliesOnEachItem: false } },
+          items: { all: true },
         },
       },
     },
   });
 
-  const body = response.body as unknown as {
-    data?: {
-      discountCodeBasicCreate?: {
-        codeDiscountNode?: { id: string };
-        userErrors?: { message: string }[];
-      };
-    };
-  };
-
-  const errors = body?.data?.discountCodeBasicCreate?.userErrors;
+  const errors = (response.data as any)?.discountCodeBasicCreate?.userErrors as
+    | { field: string; message: string }[]
+    | undefined;
   if (errors && errors.length > 0) {
     console.error('[recovery/decide] Shopify discount error:', errors);
     return null;
