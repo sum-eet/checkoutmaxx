@@ -1,6 +1,7 @@
 /**
  * CouponMaxx Smart Recovery — storefront script
- * One short line + code pill with copy. No modals, no pop-ups.
+ * One line: "That code didn't work? try CODE valid for 15 mins only"
+ * Pill copies to clipboard. No auto-apply. No modals.
  */
 (function () {
   'use strict';
@@ -19,10 +20,8 @@
   var _lastGoodResponse = null;
   var _observer = null;
   var _lastInputValue = '';
-
-  var COPY_ICON = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 4v-2a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2h-2v2a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm2 0h4a2 2 0 012 2v4h-1V6a1 1 0 00-1-1H6V4zm-2 2a1 1 0 00-1 1v8a1 1 0 001 1h6a1 1 0 001-1V6a1 1 0 00-1-1H4z"/></svg>';
-
-  // ── Selectors ──────────────────────────────────────────────────────────────
+  // Track recovery codes so we don't re-trigger on them
+  var _recoveryCodes = {};
 
   var ERROR_SELECTORS = [
     '[data-cart-discount-errors]', '.cart-discount__error',
@@ -61,36 +60,17 @@
     return c;
   }
 
-  // ── Short failure text ─────────────────────────────────────────────────────
-
-  function failureText(reason, hasCode) {
-    if (hasCode) {
-      switch (reason) {
-        case 'expired': return "That code expired \u2014 try this one:";
-        case 'min_not_met': return "Cart minimum not met \u2014 here\u2019s a code:";
-        case 'usage_limit': return "That code\u2019s used up \u2014 try this:";
-        case 'already_used': return "Already used \u2014 here\u2019s a fresh one:";
-        default: return "That code didn\u2019t work \u2014 try this:";
-      }
-    }
-    switch (reason) {
-      case 'expired': return "That code has expired.";
-      case 'min_not_met': return "Add more to your cart to use this code.";
-      case 'usage_limit': return "That code has been fully redeemed.";
-      case 'wrong_collection': return "That code only works on certain products.";
-      case 'already_used': return "You\u2019ve already used this code.";
-      default: return "That code didn\u2019t work.";
-    }
-  }
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render — one line only ─────────────────────────────────────────────────
 
   function render(resp) {
     if (resp.action === 'show_nothing' || !resp.action) return;
 
     // Keep best response
     if (!resp.code && _lastGoodResponse && _lastGoodResponse.code) resp = _lastGoodResponse;
-    if (resp.code) _lastGoodResponse = resp;
+    if (resp.code) {
+      _lastGoodResponse = resp;
+      _recoveryCodes[resp.code.toUpperCase()] = true;
+    }
 
     var style = resp.displayStyle || CONFIG.style;
     var container = findOrCreateContainer();
@@ -98,37 +78,41 @@
 
     if (_observer) _observer.disconnect();
 
-    var reason = resp._resolvedReason || 'invalid';
-    var hasCode = resp.action === 'show_code' && resp.code;
-    var text = failureText(reason, hasCode);
-
     container.innerHTML = '';
     container.className = 'cmx-recovery-active cmx-style-' + style;
 
-    // Text
-    var span = document.createElement('span');
-    span.className = 'cmx-recovery-text';
-    span.textContent = text;
-    container.appendChild(span);
+    if (resp.action === 'show_code' && resp.code) {
+      // "That code didn't work? try CODE valid for 15 mins only"
+      var text1 = document.createTextNode("That code didn\u2019t work? try ");
+      container.appendChild(text1);
 
-    // Code pill
-    if (hasCode) {
       var pill = document.createElement('button');
       pill.type = 'button';
       pill.className = 'cmx-code-pill';
-      pill.innerHTML = resp.code + ' ' + COPY_ICON;
-      pill.addEventListener('click', function () { applyCode(resp.code, pill); });
+      pill.textContent = resp.code;
+      pill.addEventListener('click', function () {
+        if (navigator.clipboard) navigator.clipboard.writeText(resp.code);
+        pill.textContent = 'Copied!';
+        setTimeout(function () { pill.textContent = resp.code; }, 2000);
+      });
       container.appendChild(pill);
 
-      // Terms line
-      if (resp.discountLabel || resp.expiresInMinutes) {
-        var terms = document.createElement('span');
-        terms.className = 'cmx-recovery-terms';
-        var t = resp.discountLabel || '';
-        if (resp.expiresInMinutes) t += (t ? ' \u00b7 ' : '') + 'valid ' + resp.expiresInMinutes + ' min';
-        terms.textContent = t;
-        container.appendChild(terms);
+      if (resp.expiresInMinutes) {
+        var text2 = document.createTextNode(' valid for ' + resp.expiresInMinutes + ' mins only');
+        container.appendChild(text2);
       }
+    } else {
+      // Hint only — one line
+      var reason = resp._resolvedReason || 'invalid';
+      var hintText = {
+        expired: "That code has expired.",
+        min_not_met: "Add more to your cart to use this code.",
+        usage_limit: "That code has been fully redeemed.",
+        wrong_collection: "That code only works on certain products.",
+        already_used: "You\u2019ve already used this code.",
+        invalid: "That code didn\u2019t work.",
+      }[reason] || "That code didn\u2019t work.";
+      container.textContent = hintText;
     }
 
     // Fade in
@@ -144,54 +128,15 @@
     }, 500);
   }
 
-  // ── Apply code ─────────────────────────────────────────────────────────────
-
-  function applyCode(code, pill) {
-    if (!code) return;
-    // Copy to clipboard
-    if (navigator.clipboard) navigator.clipboard.writeText(code);
-
-    var input = findInput();
-    if (input) {
-      input.value = code;
-      var form = input.closest('form');
-      if (form) {
-        var btn = form.querySelector('[type="submit"]');
-        if (btn) { pill.innerHTML = 'Applying\u2026'; pill.disabled = true; btn.click(); return; }
-      }
-    }
-
-    // Fallback
-    pill.innerHTML = 'Applying\u2026'; pill.disabled = true;
-    fetch('/cart/update.js', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ discount: code }),
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (cart) {
-        var ok = (cart.cart_level_discount_applications || []).some(function (d) { return d.title === code; });
-        if (ok) { pill.innerHTML = '\u2713 Applied'; pill.classList.add('cmx-code-pill--applied'); }
-        else { pill.innerHTML = code + ' ' + COPY_ICON; pill.disabled = false; }
-      })
-      .catch(function () { pill.innerHTML = code + ' ' + COPY_ICON; pill.disabled = false; });
-  }
-
-  // ── Countdown ──────────────────────────────────────────────────────────────
-
-  function startCountdown(el, secs, container) {
-    var r = secs;
-    var iv = setInterval(function () {
-      r--;
-      if (r <= 0) { clearInterval(iv); if (container) container.classList.add('cmx-recovery-expired'); el.textContent = '0 min'; return; }
-      el.textContent = r > 60 ? Math.floor(r / 60) + ' min' : r + ' sec';
-    }, 1000);
-  }
-
   // ── API call (deduplicated) ────────────────────────────────────────────────
 
   function callApi(detail) {
     if (_inflight) return;
+
+    // Don't re-trigger on recovery codes we generated
+    var code = (detail.code || '').toUpperCase();
+    if (_recoveryCodes[code]) return;
+
     _inflight = true;
 
     fetch(CONFIG.recoveryUrl, {
@@ -241,6 +186,10 @@
 
       var input = findInput();
       var code = input ? input.value.trim() : _lastInputValue;
+
+      // Don't re-trigger on our own recovery codes
+      if (_recoveryCodes[code.toUpperCase()]) return;
+
       var sid = sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
       callApi({ code: code, failureReason: 'unknown', cartValue: 0, lineItems: [], sessionId: sid, attemptsThisSession: 1 });
     });

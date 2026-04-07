@@ -256,30 +256,43 @@ async function generateShopifyDiscountCode(
   }`;
 
   // NOTE: requires write_discounts scope on the Shopify app
-  const response = await client.request(CREATE_MUTATION, {
-    variables: {
-      basicCodeDiscount: {
-        title: code,
-        code,
-        startsAt: new Date().toISOString(),
-        endsAt,
-        usageLimit: 1,
-        customerSelection: { all: true },
-        customerGets: {
-          value: discountType === 'percentage'
-            ? { percentage: discountValue / 100 }
-            : { discountAmount: { amount: discountValue / 100, appliesOnEachItem: false } },
-          items: { all: true },
+  let response: any;
+  try {
+    response = await client.request(CREATE_MUTATION, {
+      variables: {
+        basicCodeDiscount: {
+          title: code,
+          code,
+          startsAt: new Date().toISOString(),
+          endsAt,
+          usageLimit: 1,
+          customerSelection: { all: true },
+          customerGets: {
+            value: discountType === 'percentage'
+              ? { percentage: discountValue / 100 }
+              : { discountAmount: { amount: discountValue / 100, appliesOnEachItem: false } },
+            items: { all: true },
+          },
         },
       },
-    },
-  });
+    });
+  } catch (err: any) {
+    // GraphQL-level errors (missing scope, auth failure) throw here
+    console.error('[recovery/decide] Shopify API error creating discount:', err.message);
+    return null;
+  }
 
-  const errors = (response.data as any)?.discountCodeBasicCreate?.userErrors as
-    | { field: string; message: string }[]
-    | undefined;
-  if (errors && errors.length > 0) {
-    console.error('[recovery/decide] Shopify discount error:', errors);
+  const result = (response.data as any)?.discountCodeBasicCreate;
+
+  const userErrors = result?.userErrors as { field: string; message: string }[] | undefined;
+  if (userErrors && userErrors.length > 0) {
+    console.error('[recovery/decide] Shopify discount userErrors:', userErrors);
+    return null;
+  }
+
+  // Verify the discount was actually created
+  if (!result?.codeDiscountNode?.id) {
+    console.error('[recovery/decide] Discount created but no ID returned — likely scope issue');
     return null;
   }
 

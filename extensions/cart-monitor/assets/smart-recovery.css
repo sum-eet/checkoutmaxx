@@ -1,66 +1,35 @@
-/* CouponMaxx Smart Recovery — 3 display styles */
+/* CouponMaxx Smart Recovery */
 
-/* ── Shared base ─────────────────────────────────────────────────── */
 .cmx-recovery-active {
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.5;
 }
 
-.cmx-recovery-text { display: inline; }
-
 .cmx-code-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 6px;
-  padding: 3px 10px;
+  display: inline-block;
+  margin: 0 4px;
+  padding: 2px 8px;
   background: #1a1a1a;
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
   font-size: 13px;
   font-weight: 600;
   font-family: 'SF Mono', Menlo, monospace;
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: background 0.15s;
-  vertical-align: middle;
-  white-space: nowrap;
+  vertical-align: baseline;
 }
-.cmx-code-pill:hover { background: #333; }
-.cmx-code-pill:active { background: #555; }
-.cmx-code-pill--applied {
-  background: #16a34a;
-  cursor: default;
-}
-.cmx-code-pill:disabled { opacity: 0.7; cursor: default; }
-.cmx-code-pill svg { width: 12px; height: 12px; flex-shrink: 0; }
+.cmx-code-pill:hover { background: #444; }
 
-.cmx-recovery-terms {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: #888;
-}
-
-.cmx-recovery-expired .cmx-code-pill {
-  opacity: 0.4;
-  pointer-events: none;
-  background: #ccc;
-}
-.cmx-recovery-expired .cmx-recovery-terms { color: #c44; }
-
-/* ── Style: minimal (default B) ──────────────────────────────────── */
-.cmx-style-minimal {
-  color: #c44;
-}
-.cmx-style-minimal .cmx-code-pill {
-  background: #2a7;
-}
+/* Minimal (default) */
+.cmx-style-minimal { color: #c44; }
+.cmx-style-minimal .cmx-code-pill { background: #2a7; }
 .cmx-style-minimal .cmx-code-pill:hover { background: #1d8; }
 
-/* ── Style: warm (A) ─────────────────────────────────────────────── */
+/* Warm */
 .cmx-style-warm {
   padding: 10px 14px;
   background: #fef9ef;
@@ -68,25 +37,12 @@
   border-radius: 8px;
   color: #5c4813;
 }
-.cmx-style-warm .cmx-recovery-terms { color: #9a8453; }
 
-/* ── Style: green (C) ────────────────────────────────────────────── */
+/* Green */
 .cmx-style-green {
   padding: 10px 14px;
   background: #f0faf4;
   border: 1px solid #b8e6c8;
   border-radius: 8px;
   color: #1a5c32;
-}
-.cmx-style-green .cmx-recovery-terms { color: #5a9a6e; }
-
-/* ── Mobile ──────────────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .cmx-code-pill {
-    display: inline-flex;
-    margin-left: 4px;
-    padding: 4px 10px;
-    font-size: 12px;
-  }
-  .cmx-recovery-active { font-size: 12px; }
 }
