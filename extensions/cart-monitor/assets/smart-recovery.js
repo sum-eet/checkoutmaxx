@@ -1,10 +1,13 @@
 /**
  * CouponMaxx Smart Recovery — storefront script
- * One line: "That code didn't work? try CODE valid for 15 mins only"
- * Pill copies to clipboard. No auto-apply. No modals.
+ * Rules: NEVER create DOM elements. Only write into Shopify's existing error container.
  */
 (function () {
   'use strict';
+
+  // Prevent duplicate execution if script loads twice
+  if (window._cmxRecoveryLoaded) return;
+  window._cmxRecoveryLoaded = true;
 
   var script = document.currentScript || document.querySelector('script[data-recovery-url]');
 
@@ -13,16 +16,14 @@
     recoveryUrl: script && script.dataset.recoveryUrl
       ? script.dataset.recoveryUrl
       : 'https://couponmaxx.vercel.app/api/couponmaxx/recovery/decide',
-    style: (script && script.dataset.style) || 'minimal',
   };
 
   var _inflight = false;
-  var _lastGoodResponse = null;
   var _observer = null;
   var _lastInputValue = '';
-  // Track recovery codes so we don't re-trigger on them
   var _recoveryCodes = {};
 
+  // Shopify error elements — we ONLY write into these, never create new ones
   var ERROR_SELECTORS = [
     '[data-cart-discount-errors]', '.cart-discount__error',
     '#CartDiscountCode-CartDrawer ~ .field__message--error',
@@ -32,14 +33,16 @@
     '.discount-field ~ p.error', '.discount__message--error', '[data-discount-error]',
   ];
 
+  // Shopify discount tags — if any exist, a discount is already active
+  var DISCOUNT_TAG_SELECTORS = [
+    '.tag--discount', '.cart-discount-tag', '[data-discount-tag]',
+    '.cart__discount', '[class*="discount"][class*="tag"]',
+    '.cart-discount__content',
+  ];
+
   var INPUT_SELECTORS = [
     '#CartDiscountCode-CartDrawer', '#CartDiscountCode',
     '[name="discount"]', '[data-discount-input]', '[id*="DiscountCode"]',
-  ];
-
-  var FORM_SELECTORS = [
-    'form[data-cart-discount-form]', 'form[action*="discount"]',
-    '#cart-discount-form', '.cart-discount form',
   ];
 
   function findFirst(s) {
@@ -48,41 +51,46 @@
   }
   function findInput() { return findFirst(INPUT_SELECTORS); }
 
-  function findOrCreateContainer() {
-    var el = findFirst(ERROR_SELECTORS);
-    if (el) return el;
-    var anchor = findInput() || findFirst(FORM_SELECTORS);
-    if (!anchor) return null;
-    var c = document.createElement('p');
-    c.className = 'cmx-recovery-message';
-    c.id = 'cmx-recovery-container';
-    (anchor.closest('form') || anchor.parentElement).appendChild(c);
-    return c;
+  function findErrorContainer() {
+    // Only return Shopify's existing error element — NEVER create new ones
+    return findFirst(ERROR_SELECTORS);
   }
 
-  // ── Render — one line only ─────────────────────────────────────────────────
+  function hasActiveDiscount() {
+    return !!findFirst(DISCOUNT_TAG_SELECTORS);
+  }
+
+  // ── Clean up any stale recovery messages ───────────────────────────────────
+
+  function cleanupOldMessages() {
+    var old = document.querySelectorAll('.cmx-recovery-active');
+    for (var i = 0; i < old.length; i++) {
+      old[i].classList.remove('cmx-recovery-active');
+      old[i].innerHTML = '';
+    }
+  }
+
+  // ── Render — into existing Shopify error element only ──────────────────────
 
   function render(resp) {
     if (resp.action === 'show_nothing' || !resp.action) return;
 
-    // Keep best response
-    if (!resp.code && _lastGoodResponse && _lastGoodResponse.code) resp = _lastGoodResponse;
     if (resp.code) {
-      _lastGoodResponse = resp;
       _recoveryCodes[resp.code.toUpperCase()] = true;
     }
 
-    var style = resp.displayStyle || CONFIG.style;
-    var container = findOrCreateContainer();
+    var container = findErrorContainer();
     if (!container) return;
 
     if (_observer) _observer.disconnect();
 
-    container.innerHTML = '';
-    container.className = 'cmx-recovery-active cmx-style-' + style;
+    // Clean up any duplicates first
+    cleanupOldMessages();
+
+    container.classList.add('cmx-recovery-active');
 
     if (resp.action === 'show_code' && resp.code) {
-      // "That code didn't work? try CODE valid for 15 mins only"
+      container.textContent = '';
       var text1 = document.createTextNode("That code didn\u2019t work? try ");
       container.appendChild(text1);
 
@@ -98,29 +106,19 @@
       container.appendChild(pill);
 
       if (resp.expiresInMinutes) {
-        var text2 = document.createTextNode(' valid for ' + resp.expiresInMinutes + ' mins only');
-        container.appendChild(text2);
+        container.appendChild(document.createTextNode(' valid for ' + resp.expiresInMinutes + ' mins only'));
       }
     } else {
-      // Hint only — one line
       var reason = resp._resolvedReason || 'invalid';
-      var hintText = {
+      container.textContent = ({
         expired: "That code has expired.",
         min_not_met: "Add more to your cart to use this code.",
         usage_limit: "That code has been fully redeemed.",
         wrong_collection: "That code only works on certain products.",
         already_used: "You\u2019ve already used this code.",
         invalid: "That code didn\u2019t work.",
-      }[reason] || "That code didn\u2019t work.";
-      container.textContent = hintText;
+      })[reason] || "That code didn\u2019t work.";
     }
-
-    // Fade in
-    container.style.opacity = '0';
-    requestAnimationFrame(function () {
-      container.style.transition = 'opacity 300ms ease';
-      container.style.opacity = '1';
-    });
 
     // Reconnect observer after DOM settles
     setTimeout(function () {
@@ -128,14 +126,16 @@
     }, 500);
   }
 
-  // ── API call (deduplicated) ────────────────────────────────────────────────
+  // ── API call ───────────────────────────────────────────────────────────────
 
   function callApi(detail) {
     if (_inflight) return;
 
-    // Don't re-trigger on recovery codes we generated
     var code = (detail.code || '').toUpperCase();
     if (_recoveryCodes[code]) return;
+
+    // Don't offer recovery if customer already has a working discount
+    if (hasActiveDiscount()) return;
 
     _inflight = true;
 
@@ -186,8 +186,6 @@
 
       var input = findInput();
       var code = input ? input.value.trim() : _lastInputValue;
-
-      // Don't re-trigger on our own recovery codes
       if (_recoveryCodes[code.toUpperCase()]) return;
 
       var sid = sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
