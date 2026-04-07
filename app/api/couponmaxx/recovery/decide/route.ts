@@ -202,8 +202,10 @@ async function resolveFailureReason(
     // Code exists and looks valid — treat as invalid (conditions mismatch)
     return 'invalid';
   } catch (err) {
-    console.error('[recovery/decide] Admin API lookup failed:', (err as Error).message);
-    // Fall back to client-supplied reason on error
+    const msg = (err as Error).message;
+    console.error('[recovery/decide] Admin API lookup failed:', msg);
+    // Attach debug info so we can see it in the response
+    (resolveFailureReason as any)._lastError = msg;
     return 'invalid';
   }
 }
@@ -465,6 +467,8 @@ export async function POST(req: NextRequest) {
     const limited = await isRateLimited(shop.id, sessionId, settings.dailyCodeLimit);
 
     let recoveryCode: string | null = null;
+    let _debugCodeError: string | null = null;
+    let _debugRateLimited = limited;
     if (!limited) {
       try {
         recoveryCode = await generateShopifyDiscountCode(
@@ -476,7 +480,8 @@ export async function POST(req: NextRequest) {
           expiryMinutes,
         );
       } catch (err) {
-        console.error('[recovery/decide] Code generation failed:', (err as Error).message);
+        _debugCodeError = (err as Error).message;
+        console.error('[recovery/decide] Code generation failed:', _debugCodeError);
       }
     }
 
@@ -518,6 +523,13 @@ export async function POST(req: NextRequest) {
       expiresInMinutes: expiryMinutes,
       productSuggestion: null,
       recoveryId,
+      _debug: {
+        resolvedReason,
+        clientReason: failureReason,
+        lookupError: (resolveFailureReason as any)._lastError ?? null,
+        codeGenError: _debugCodeError,
+        rateLimited: _debugRateLimited,
+      },
     }, { headers: CORS_HEADERS });
   }
 
