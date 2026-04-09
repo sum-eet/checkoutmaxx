@@ -3,6 +3,9 @@ import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
 import { logIngest } from '@/lib/ingest-log';
 
+// Cache shop lookups — only cache successful results.
+// Null results are NOT cached so that a newly created Shop
+// is picked up without waiting for a cold start.
 const shopCache = new Map<string, string>();
 
 async function resolveShopId(shopDomain: string): Promise<string | null> {
@@ -12,8 +15,12 @@ async function resolveShopId(shopDomain: string): Promise<string | null> {
     .select('id')
     .eq('shopDomain', shopDomain)
     .single();
-  if (data?.id) shopCache.set(shopDomain, data.id);
-  return data?.id ?? null;
+  if (data?.id) {
+    shopCache.set(shopDomain, data.id);
+    return data.id;
+  }
+  // Do NOT cache null — shop may be created shortly after
+  return null;
 }
 
 const CORS_HEADERS = {
@@ -66,7 +73,18 @@ async function processEvent(text: string) {
     if (SKIP_EVENTS.has(eventType)) return;
 
     const shopId = await resolveShopId(shopDomain);
-    if (!shopId) return;
+    if (!shopId) {
+      logIngest({
+        endpoint: 'cart',
+        shopDomain,
+        eventType,
+        success: false,
+        latencyMs: Date.now() - start,
+        errorCode: null,
+        errorMessage: 'shop not found',
+      });
+      return;
+    }
 
     const rawLineItems = Array.isArray(payload.lineItems)
       ? payload.lineItems

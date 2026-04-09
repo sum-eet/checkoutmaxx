@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { Session } from "@shopify/shopify-api";
 import { sessionStorage } from "@/lib/shopify";
 import prisma from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { registerAppPixel, deregisterAppPixel } from "@/lib/pixel-registration";
 import { registerWebhooks } from "@/lib/shopify";
 
@@ -98,6 +99,8 @@ export async function GET(req: NextRequest) {
   console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
 
   // ── STEP 4: UPSERT SHOP ROW ──
+  // Try Prisma first, fall back to direct Supabase insert if Prisma fails.
+  // If BOTH fail, return 500 — do not redirect to a broken dashboard.
   let shopRecord: { id: string; pixelId: string | null } | null = null;
   try {
     const existing = await prisma.shop.findUnique({
@@ -123,9 +126,38 @@ export async function GET(req: NextRequest) {
     });
 
     shopRecord = { id: result.id, pixelId: existing?.pixelId ?? null };
-    console.log(`[AUTH] STEP 4 SHOP UPSERTED (${Date.now() - t0}ms):`, JSON.stringify(result));
-  } catch (err: any) {
-    console.error("[AUTH] STEP 4 SHOP UPSERT FAILED:", err.message, err.stack);
+    console.log(`[AUTH] STEP 4 SHOP UPSERTED via Prisma (${Date.now() - t0}ms):`, JSON.stringify(result));
+  } catch (prismaErr: any) {
+    console.error("[AUTH] STEP 4 Prisma upsert failed, trying Supabase fallback:", prismaErr.message);
+
+    // Supabase fallback — upsert by shopDomain
+    try {
+      const newId = crypto.randomUUID();
+      const { data: sbResult, error: sbError } = await supabase
+        .from("Shop")
+        .upsert(
+          {
+            id: newId,
+            shopDomain: shop,
+            accessToken,
+            isActive: true,
+            installedAt: new Date().toISOString(),
+          },
+          { onConflict: "shopDomain" }
+        )
+        .select("id, pixelId")
+        .single();
+
+      if (sbError) throw sbError;
+      shopRecord = { id: sbResult.id, pixelId: sbResult.pixelId ?? null };
+      console.log(`[AUTH] STEP 4 SHOP UPSERTED via Supabase fallback (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
+    } catch (sbErr: any) {
+      console.error("[AUTH] STEP 4 BOTH Prisma AND Supabase failed:", sbErr.message);
+      return new Response(
+        `Shop record creation failed. Please try reinstalling the app.\nPrisma: ${prismaErr.message}\nSupabase: ${sbErr.message}`,
+        { status: 500 }
+      );
+    }
   }
 
   // ── STEP 5: REDIRECT ──
