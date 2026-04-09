@@ -6,22 +6,15 @@ import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
 import { Session } from "@shopify/shopify-api";
 
-const activeShopCache = new Map<string, string>();
-
 /**
  * Ensure a Shop record exists with a valid access token.
- * Uses Shopify SDK's tokenExchange — the official way to get access tokens
- * for embedded apps. Works for fresh installs AND reinstalls identically.
+ * No in-memory cache — always hits DB to avoid stale data after uninstall/reinstall.
  */
 export async function ensureShop(
   req: Request
 ): Promise<{ shopId: string; shopDomain: string } | null> {
   const shopDomain = getShopFromRequest(req);
   if (!shopDomain) return null;
-
-  // Fast path: cache hit
-  const cached = activeShopCache.get(shopDomain);
-  if (cached) return { shopId: cached, shopDomain };
 
   // Check DB for active shop with real token
   const { data: existing } = await supabase
@@ -32,7 +25,6 @@ export async function ensureShop(
     .maybeSingle();
 
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
-    activeShopCache.set(shopDomain, existing.id);
     return { shopId: existing.id, shopDomain };
   }
 
@@ -41,12 +33,8 @@ export async function ensureShop(
 
   const sessionToken = getSessionTokenFromRequest(req);
   if (!sessionToken) {
-    console.log("[ensureShop] No session token in request — can't exchange");
-    // If shop exists with pending token, still return it so data can flow
-    if (existing) {
-      activeShopCache.set(shopDomain, existing.id);
-      return { shopId: existing.id, shopDomain };
-    }
+    console.log("[ensureShop] No session token in request");
+    if (existing) return { shopId: existing.id, shopDomain };
     return null;
   }
 
@@ -61,7 +49,6 @@ export async function ensureShop(
     accessToken = session.accessToken ?? null;
     console.log("[ensureShop] Token exchange SUCCESS for", shopDomain);
 
-    // Store session for Admin API calls
     try {
       const { sessionStorage } = await import("./shopify");
       await sessionStorage.storeSession(session);
@@ -72,7 +59,7 @@ export async function ensureShop(
     console.error("[ensureShop] Token exchange failed:", err.message);
   }
 
-  // If shop exists, update its access token
+  // If shop exists (with pending token), update it
   if (existing) {
     if (accessToken) {
       await supabase
@@ -80,15 +67,12 @@ export async function ensureShop(
         .update({ accessToken, updatedAt: new Date().toISOString() })
         .eq("id", existing.id);
       console.log("[ensureShop] Updated access token for", shopDomain);
-
-      // Register pixel + webhooks in background
       registerBackgroundWork(shopDomain, accessToken, existing.id);
     }
-    activeShopCache.set(shopDomain, existing.id);
     return { shopId: existing.id, shopDomain };
   }
 
-  // No shop exists — create one
+  // No active shop — create new one
   const newId = crypto.randomUUID();
   const { error: insertError } = await supabase.from("Shop").insert({
     id: newId,
@@ -100,7 +84,6 @@ export async function ensureShop(
   });
 
   if (insertError) {
-    // Race condition — another request created it. Fetch it.
     if (insertError.code === "23505") {
       const { data: raceShop } = await supabase
         .from("Shop")
@@ -108,17 +91,13 @@ export async function ensureShop(
         .eq("shopDomain", shopDomain)
         .eq("isActive", true)
         .maybeSingle();
-      if (raceShop) {
-        activeShopCache.set(shopDomain, raceShop.id);
-        return { shopId: raceShop.id, shopDomain };
-      }
+      if (raceShop) return { shopId: raceShop.id, shopDomain };
     }
     console.error("[ensureShop] Insert failed:", insertError.message);
     return null;
   }
 
   console.log("[ensureShop] Shop created:", newId, "hasRealToken:", !!accessToken);
-  activeShopCache.set(shopDomain, newId);
 
   if (accessToken) {
     registerBackgroundWork(shopDomain, accessToken, newId);
@@ -127,12 +106,7 @@ export async function ensureShop(
   return { shopId: newId, shopDomain };
 }
 
-export function clearShopCache(shopDomain: string) {
-  activeShopCache.delete(shopDomain);
-}
-
 function registerBackgroundWork(shopDomain: string, accessToken: string, shopId: string) {
-  // Fire and forget
   (async () => {
     try {
       const pixelId = await registerAppPixel(shopDomain, accessToken);
