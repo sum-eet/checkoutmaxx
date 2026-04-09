@@ -1,4 +1,6 @@
 import { supabase } from "./supabase";
+import { shopify } from "./shopify";
+import { RequestedTokenType } from "@shopify/shopify-api";
 import { getShopFromRequest, getSessionTokenFromRequest } from "./verify-session-token";
 import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
@@ -6,86 +8,88 @@ import { Session } from "@shopify/shopify-api";
 
 const activeShopCache = new Map<string, string>();
 
-async function findActiveShop(shopDomain: string): Promise<string | null> {
-  // Try up to 3 times with 100ms delay — handles connection pool lag
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const { data } = await supabase
-      .from("Shop")
-      .select("id")
-      .eq("shopDomain", shopDomain)
-      .eq("isActive", true)
-      .maybeSingle();
-    if (data?.id) {
-      console.log("[findActiveShop]", shopDomain, "found on attempt", attempt + 1);
-      return data.id;
-    }
-    if (attempt < 2) {
-      await new Promise(r => setTimeout(r, 150));
-    }
-  }
-  console.log("[findActiveShop]", shopDomain, "not found after 3 attempts");
-  return null;
-}
-
+/**
+ * Ensure a Shop record exists with a valid access token.
+ * Uses Shopify SDK's tokenExchange — the official way to get access tokens
+ * for embedded apps. Works for fresh installs AND reinstalls identically.
+ */
 export async function ensureShop(
   req: Request
 ): Promise<{ shopId: string; shopDomain: string } | null> {
-  console.log("[ensureShop] ====== START ======");
-
   const shopDomain = getShopFromRequest(req);
-  console.log("[ensureShop] shopDomain from request:", shopDomain);
-  if (!shopDomain) {
-    console.error("[ensureShop] FAIL: no shopDomain in request");
-    return null;
-  }
+  if (!shopDomain) return null;
 
-  // Fast path: in-memory cache
+  // Fast path: cache hit
   const cached = activeShopCache.get(shopDomain);
-  if (cached) {
-    console.log("[ensureShop] HIT cache:", shopDomain, "→", cached);
-    return { shopId: cached, shopDomain };
+  if (cached) return { shopId: cached, shopDomain };
+
+  // Check DB for active shop with real token
+  const { data: existing } = await supabase
+    .from("Shop")
+    .select("id, accessToken")
+    .eq("shopDomain", shopDomain)
+    .eq("isActive", true)
+    .maybeSingle();
+
+  if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
+    activeShopCache.set(shopDomain, existing.id);
+    return { shopId: existing.id, shopDomain };
   }
 
-  // Check Supabase for active shop — retry once if first attempt returns null
-  const found = await findActiveShop(shopDomain);
-  if (found) {
-    activeShopCache.set(shopDomain, found);
-    console.log("[ensureShop] FOUND existing shop:", found);
-    return { shopId: found, shopDomain };
-  }
-
-  // Shop doesn't exist — need to provision via token exchange
-  console.log("[ensureShop] No active shop found. Starting token exchange provisioning...");
+  // Need a real access token — use Shopify SDK token exchange
+  console.log("[ensureShop] Need access token for", shopDomain);
 
   const sessionToken = getSessionTokenFromRequest(req);
-  console.log("[ensureShop] Session token present:", !!sessionToken, "length:", sessionToken?.length ?? 0);
-  if (sessionToken) {
-    // Decode JWT payload (no verification, just to log what we're sending)
-    try {
-      const parts = sessionToken.split(".");
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-      console.log("[ensureShop] JWT payload: iss:", payload.iss, "dest:", payload.dest, "exp:", payload.exp, "now:", Math.floor(Date.now() / 1000), "expired:", payload.exp < Math.floor(Date.now() / 1000));
-    } catch {}
-  }
   if (!sessionToken) {
-    const url = new URL(req.url);
-    const authHeader = req.headers.get("authorization");
-    const idToken = url.searchParams.get("id_token");
-    console.error("[ensureShop] FAIL: no session token. URL params:", url.searchParams.toString().slice(0, 200));
-    console.error("[ensureShop] auth header present:", !!authHeader, "id_token param present:", !!idToken);
+    console.log("[ensureShop] No session token in request — can't exchange");
+    // If shop exists with pending token, still return it so data can flow
+    if (existing) {
+      activeShopCache.set(shopDomain, existing.id);
+      return { shopId: existing.id, shopDomain };
+    }
     return null;
   }
 
-  // Try token exchange for access token (best effort — not required for data flow)
-  console.log("[ensureShop] Attempting token exchange for", shopDomain, "...");
-  const accessToken = await exchangeToken(shopDomain, sessionToken);
-  console.log("[ensureShop] Token exchange result:", accessToken ? "SUCCESS" : "FAILED (will create Shop without access token)");
+  // Exchange session token for offline access token via Shopify SDK
+  let accessToken: string | null = null;
+  try {
+    const { session } = await shopify.auth.tokenExchange({
+      shop: shopDomain,
+      sessionToken,
+      requestedTokenType: RequestedTokenType.OfflineAccessToken,
+    });
+    accessToken = session.accessToken ?? null;
+    console.log("[ensureShop] Token exchange SUCCESS for", shopDomain);
 
-  // Create Shop record — with or without access token.
-  // Data flow (cart events → DB → dashboard) works without it.
-  // Access token is only needed for Admin API calls (pixel, discounts).
+    // Store session for Admin API calls
+    try {
+      const { sessionStorage } = await import("./shopify");
+      await sessionStorage.storeSession(session);
+    } catch (err: any) {
+      console.error("[ensureShop] Session store failed (non-fatal):", err.message);
+    }
+  } catch (err: any) {
+    console.error("[ensureShop] Token exchange failed:", err.message);
+  }
+
+  // If shop exists, update its access token
+  if (existing) {
+    if (accessToken) {
+      await supabase
+        .from("Shop")
+        .update({ accessToken, updatedAt: new Date().toISOString() })
+        .eq("id", existing.id);
+      console.log("[ensureShop] Updated access token for", shopDomain);
+
+      // Register pixel + webhooks in background
+      registerBackgroundWork(shopDomain, accessToken, existing.id);
+    }
+    activeShopCache.set(shopDomain, existing.id);
+    return { shopId: existing.id, shopDomain };
+  }
+
+  // No shop exists — create one
   const newId = crypto.randomUUID();
-  console.log("[ensureShop] Creating Shop record:", newId, "for", shopDomain, "hasAccessToken:", !!accessToken);
   const { error: insertError } = await supabase.from("Shop").insert({
     id: newId,
     shopDomain,
@@ -96,50 +100,30 @@ export async function ensureShop(
   });
 
   if (insertError) {
-    // Duplicate key = record already exists. Find it.
-    console.log("[ensureShop] Insert returned:", insertError.code, insertError.message);
-    const retryId = await findActiveShop(shopDomain);
-    if (retryId) {
-      activeShopCache.set(shopDomain, retryId);
-      console.log("[ensureShop] Found existing shop on retry:", retryId);
-      return { shopId: retryId, shopDomain };
+    // Race condition — another request created it. Fetch it.
+    if (insertError.code === "23505") {
+      const { data: raceShop } = await supabase
+        .from("Shop")
+        .select("id")
+        .eq("shopDomain", shopDomain)
+        .eq("isActive", true)
+        .maybeSingle();
+      if (raceShop) {
+        activeShopCache.set(shopDomain, raceShop.id);
+        return { shopId: raceShop.id, shopDomain };
+      }
     }
-    console.error("[ensureShop] FAIL: insert error AND retry lookup failed");
+    console.error("[ensureShop] Insert failed:", insertError.message);
     return null;
   }
 
-  console.log("[ensureShop] SUCCESS: Shop created:", newId);
+  console.log("[ensureShop] Shop created:", newId, "hasRealToken:", !!accessToken);
   activeShopCache.set(shopDomain, newId);
 
-  // Store session for Admin API calls (only if we have a real access token)
   if (accessToken) {
-    try {
-      const { PrismaSessionStorage } = await import("./session-storage");
-      const storage = new PrismaSessionStorage();
-      const session = new Session({
-        id: `offline_${shopDomain}`,
-        shop: shopDomain,
-        state: "installed",
-        isOnline: false,
-      });
-      session.accessToken = accessToken;
-      await storage.storeSession(session);
-      console.log("[ensureShop] Session stored for", shopDomain);
-    } catch (err: any) {
-      console.error("[ensureShop] Session store failed (non-fatal):", err.message);
-    }
+    registerBackgroundWork(shopDomain, accessToken, newId);
   }
 
-  // Background: register pixel + webhooks (only if we have a real access token)
-  if (accessToken) {
-    registerBackgroundWork(shopDomain, accessToken, newId).catch((err) =>
-      console.error("[ensureShop] Background work failed:", err.message)
-    );
-  } else {
-    console.log("[ensureShop] Skipping pixel/webhook registration — no access token yet. Will be done when OAuth completes.");
-  }
-
-  console.log("[ensureShop] ====== DONE ======");
   return { shopId: newId, shopDomain };
 }
 
@@ -147,98 +131,31 @@ export function clearShopCache(shopDomain: string) {
   activeShopCache.delete(shopDomain);
 }
 
-async function exchangeToken(
-  shopDomain: string,
-  sessionToken: string
-): Promise<string | null> {
-  const clientId = process.env.SHOPIFY_API_KEY;
-  const clientSecret = process.env.SHOPIFY_API_SECRET;
-  console.log("[exchangeToken] clientId present:", !!clientId, "clientSecret present:", !!clientSecret);
-  if (!clientId || !clientSecret) {
-    console.error("[exchangeToken] FAIL: missing env vars");
-    return null;
-  }
-
-  const endpoint = `https://${shopDomain}/admin/oauth/access_token`;
-  console.log("[exchangeToken] POST", endpoint);
-
-  try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-        subject_token: sessionToken,
-        subject_token_type: "urn:ietf:params:oauth:token-type:id-token",
-        requested_token_type:
-          "urn:shopify:params:oauth:token-type:offline-access-token",
-      }).toString(),
-    });
-
-    console.log("[exchangeToken] Response status:", res.status);
-    const rawText = await res.text();
-    console.log("[exchangeToken] Raw response (first 1000 chars):", rawText.slice(0, 1000));
-    console.log("[exchangeToken] Raw response (1000-2000):", rawText.slice(1000, 2000));
-
-    let body: any;
+function registerBackgroundWork(shopDomain: string, accessToken: string, shopId: string) {
+  // Fire and forget
+  (async () => {
     try {
-      body = JSON.parse(rawText);
-    } catch {
-      console.error("[exchangeToken] FAIL: response is not JSON. Status:", res.status);
-      return null;
+      const pixelId = await registerAppPixel(shopDomain, accessToken);
+      if (pixelId) {
+        await supabase.from("Shop").update({ pixelId }).eq("id", shopId);
+        console.log("[ensureShop:bg] Pixel registered:", pixelId);
+      }
+    } catch (err: any) {
+      console.error("[ensureShop:bg] Pixel registration failed:", err.message);
     }
 
-    console.log("[exchangeToken] Response body keys:", Object.keys(body).join(", "));
-
-    if (!res.ok || !body.access_token) {
-      console.error("[exchangeToken] FAIL: status", res.status, "body:", JSON.stringify(body).slice(0, 500));
-      return null;
+    try {
+      const session = new Session({
+        id: `offline_${shopDomain}`,
+        shop: shopDomain,
+        state: "installed",
+        isOnline: false,
+      });
+      session.accessToken = accessToken;
+      await registerWebhooks(session);
+      console.log("[ensureShop:bg] Webhooks registered");
+    } catch (err: any) {
+      console.error("[ensureShop:bg] Webhook registration failed:", err.message);
     }
-
-    console.log("[exchangeToken] SUCCESS: scope:", body.scope);
-    return body.access_token;
-  } catch (err: any) {
-    console.error("[exchangeToken] FAIL: exception:", err.message);
-    return null;
-  }
-}
-
-async function registerBackgroundWork(
-  shopDomain: string,
-  accessToken: string,
-  shopId: string
-) {
-  console.log("[ensureShop:bg] Starting background work for", shopDomain);
-
-  try {
-    console.log("[ensureShop:bg] Registering pixel...");
-    const pixelId = await registerAppPixel(shopDomain, accessToken);
-    if (pixelId) {
-      await supabase.from("Shop").update({ pixelId }).eq("id", shopId);
-      console.log("[ensureShop:bg] Pixel registered:", pixelId);
-    } else {
-      console.warn("[ensureShop:bg] registerAppPixel returned no pixelId");
-    }
-  } catch (err: any) {
-    console.error("[ensureShop:bg] Pixel registration failed:", err.message);
-  }
-
-  try {
-    console.log("[ensureShop:bg] Registering webhooks...");
-    const session = new Session({
-      id: `offline_${shopDomain}`,
-      shop: shopDomain,
-      state: "installed",
-      isOnline: false,
-    });
-    session.accessToken = accessToken;
-    await registerWebhooks(session);
-    console.log("[ensureShop:bg] Webhooks registered");
-  } catch (err: any) {
-    console.error("[ensureShop:bg] Webhook registration failed:", err.message);
-  }
-
-  console.log("[ensureShop:bg] Background work complete for", shopDomain);
+  })().catch(err => console.error("[ensureShop:bg] Error:", err.message));
 }
