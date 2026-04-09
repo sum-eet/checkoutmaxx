@@ -24,8 +24,11 @@ export async function GET(req: NextRequest) {
   // ensureShop auto-creates the Shop record via token exchange if missing
   const shopResult = await ensureShop(req);
   const shopDomain = shopResult?.shopDomain ?? getShopFromRequest(req);
-  console.log('[analytics] GET shop=%s start=%s end=%s', shopDomain, p.get('start'), p.get('end'));
-  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  console.log('[analytics] GET shop=%s shopId=%s start=%s end=%s', shopDomain, shopResult?.shopId ?? 'NULL', p.get('start'), p.get('end'));
+  if (!shopResult) {
+    console.error('[analytics] ensureShop returned null for', shopDomain);
+    return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  }
   const shopId = shopResult.shopId;
 
   const rawEnd = new Date(p.get('end') ?? new Date().toISOString());
