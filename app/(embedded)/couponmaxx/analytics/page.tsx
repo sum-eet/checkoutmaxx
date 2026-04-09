@@ -100,8 +100,23 @@ type CompareOption = '' | 'previous_period' | 'previous_year';
 // Fetcher
 // ---------------------------------------------------------------------------
 
+// Authenticated fetcher — forwards App Bridge id_token so API routes
+// can do token exchange and auto-provision the Shop on first load.
 async function fetcher(url: string) {
-  const res = await fetch(url);
+  // Append id_token from page URL if available
+  let enrichedUrl = url;
+  if (typeof window !== "undefined") {
+    const pageParams = new URLSearchParams(window.location.search);
+    const idToken = pageParams.get("id_token");
+    if (idToken) {
+      const parsed = new URL(url, window.location.origin);
+      if (!parsed.searchParams.has("id_token")) {
+        parsed.searchParams.set("id_token", idToken);
+        enrichedUrl = parsed.pathname + "?" + parsed.searchParams.toString();
+      }
+    }
+  }
+  const res = await fetch(enrichedUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
