@@ -155,7 +155,8 @@ async function exchangeToken(
 
     console.log("[exchangeToken] Response status:", res.status);
     const rawText = await res.text();
-    console.log("[exchangeToken] Raw response (first 500 chars):", rawText.slice(0, 500));
+    console.log("[exchangeToken] Raw response (first 1000 chars):", rawText.slice(0, 1000));
+    console.log("[exchangeToken] Raw response (1000-2000):", rawText.slice(1000, 2000));
 
     let body: any;
     try {
