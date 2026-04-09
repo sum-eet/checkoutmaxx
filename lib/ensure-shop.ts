@@ -84,6 +84,20 @@ export async function ensureShop(
   });
 
   if (insertError) {
+    // Duplicate key = another request already created it (race condition). Just fetch it.
+    if (insertError.code === "23505") {
+      console.log("[ensureShop] Race condition — Shop already exists, fetching...");
+      const { data: raceShop } = await supabase
+        .from("Shop")
+        .select("id")
+        .eq("shopDomain", shopDomain)
+        .eq("isActive", true)
+        .maybeSingle();
+      if (raceShop) {
+        activeShopCache.set(shopDomain, raceShop.id);
+        return { shopId: raceShop.id, shopDomain };
+      }
+    }
     console.error("[ensureShop] FAIL: Shop insert error:", insertError.message, insertError.code, insertError.details);
     return null;
   }
