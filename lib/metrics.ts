@@ -64,7 +64,8 @@ export async function getShopByDomain(shopDomain: string) {
     .from("Shop")
     .select("*")
     .eq("shopDomain", shopDomain)
-    .single();
+    .eq("isActive", true)
+    .maybeSingle();
   return data;
 }
 

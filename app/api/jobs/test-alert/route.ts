@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   const shopDomain = req.nextUrl.searchParams.get("shop");
   if (!shopDomain) return NextResponse.json({ error: "Missing shop" }, { status: 400 });
 
-  const shop = await prisma.shop.findUnique({ where: { shopDomain } });
+  const shop = await prisma.shop.findFirst({ where: { shopDomain, isActive: true } });
   if (!shop) return NextResponse.json({ error: "Shop not found" }, { status: 404 });
 
   const results: Record<string, string> = {};

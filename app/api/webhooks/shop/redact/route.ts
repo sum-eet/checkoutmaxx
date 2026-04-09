@@ -21,15 +21,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing shop_domain" }, { status: 400 });
     }
 
-    const shop = await prisma.shop.findUnique({ where: { shopDomain } });
-    if (shop) {
-      // Delete in dependency order
+    // GDPR redact: delete ALL records for this domain (all installs)
+    const shops = await prisma.shop.findMany({ where: { shopDomain } });
+    for (const shop of shops) {
       await prisma.checkoutEvent.deleteMany({ where: { shopId: shop.id } });
       await prisma.cartEvent.deleteMany({ where: { shopId: shop.id } });
       await prisma.alertLog.deleteMany({ where: { shopId: shop.id } });
       await prisma.baseline.deleteMany({ where: { shopId: shop.id } });
       await prisma.shop.delete({ where: { id: shop.id } });
-      console.log(`[redact] shop/redact completed for ${shopDomain}`);
+    }
+    if (shops.length > 0) {
+      console.log(`[redact] shop/redact completed for ${shopDomain} (${shops.length} records)`);
     }
 
     return NextResponse.json({ received: true }, { status: 200 });

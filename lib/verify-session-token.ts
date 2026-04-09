@@ -54,3 +54,22 @@ export function getShopFromRequest(req: Request): string | null {
   // 3. Fallback to shop query param
   return url.searchParams.get("shop");
 }
+
+/**
+ * Extract the raw session token JWT from the request.
+ * Returns null if no valid token found.
+ * Used by ensureShop() for token exchange.
+ */
+export function getSessionTokenFromRequest(req: Request): string | null {
+  const auth = req.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const token = auth.slice(7);
+    if (verifySessionToken(token)) return token;
+  }
+
+  const url = new URL(req.url);
+  const idToken = url.searchParams.get("id_token");
+  if (idToken && verifySessionToken(idToken)) return idToken;
+
+  return null;
+}

@@ -14,7 +14,8 @@ async function resolveShopId(shopDomain: string): Promise<string | null> {
     .from('Shop')
     .select('id')
     .eq('shopDomain', shopDomain)
-    .single();
+    .eq('isActive', true)
+    .maybeSingle();
   if (data?.id) {
     shopCache.set(shopDomain, data.id);
     return data.id;

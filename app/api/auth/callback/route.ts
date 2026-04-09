@@ -98,63 +98,55 @@ export async function GET(req: NextRequest) {
   }
   console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
 
-  // ── STEP 4: UPSERT SHOP ROW ──
-  // Try Prisma first, fall back to direct Supabase insert if Prisma fails.
-  // If BOTH fail, return 500 — do not redirect to a broken dashboard.
+  // ── STEP 4: CREATE NEW SHOP ROW ──
+  // Every install gets a fresh cuid. Old installs stay as archived records.
+  // Deactivate any existing active shop for this domain first.
   let shopRecord: { id: string; pixelId: string | null } | null = null;
-  try {
-    const existing = await prisma.shop.findUnique({
-      where: { shopDomain: shop },
-      select: { id: true, pixelId: true },
-    });
 
-    const result = await prisma.shop.upsert({
-      where: { shopDomain: shop },
-      update: {
-        accessToken,
-        isActive: true,
-        installedAt: new Date(),
-        pixelId: null,
-      },
-      create: {
+  // Deactivate old shop record if exists (soft-delete)
+  await supabase
+    .from("Shop")
+    .update({ isActive: false })
+    .eq("shopDomain", shop)
+    .eq("isActive", true);
+
+  // Create new Shop record via Supabase (primary) with Prisma fallback
+  const newShopId = crypto.randomUUID();
+  try {
+    const { data: sbResult, error: sbError } = await supabase
+      .from("Shop")
+      .insert({
+        id: newShopId,
         shopDomain: shop,
         accessToken,
         isActive: true,
-        installedAt: new Date(),
-      },
-      select: { id: true, pixelId: true, isActive: true, shopDomain: true },
-    });
+        installedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .select("id, pixelId")
+      .single();
 
-    shopRecord = { id: result.id, pixelId: existing?.pixelId ?? null };
-    console.log(`[AUTH] STEP 4 SHOP UPSERTED via Prisma (${Date.now() - t0}ms):`, JSON.stringify(result));
-  } catch (prismaErr: any) {
-    console.error("[AUTH] STEP 4 Prisma upsert failed, trying Supabase fallback:", prismaErr.message);
-
-    // Supabase fallback — upsert by shopDomain
+    if (sbError) throw sbError;
+    shopRecord = { id: sbResult.id, pixelId: null };
+    console.log(`[AUTH] STEP 4 SHOP CREATED via Supabase (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
+  } catch (sbErr: any) {
+    console.error("[AUTH] STEP 4 Supabase insert failed, trying Prisma:", sbErr.message);
     try {
-      const newId = crypto.randomUUID();
-      const { data: sbResult, error: sbError } = await supabase
-        .from("Shop")
-        .upsert(
-          {
-            id: newId,
-            shopDomain: shop,
-            accessToken,
-            isActive: true,
-            installedAt: new Date().toISOString(),
-          },
-          { onConflict: "shopDomain" }
-        )
-        .select("id, pixelId")
-        .single();
-
-      if (sbError) throw sbError;
-      shopRecord = { id: sbResult.id, pixelId: sbResult.pixelId ?? null };
-      console.log(`[AUTH] STEP 4 SHOP UPSERTED via Supabase fallback (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
-    } catch (sbErr: any) {
-      console.error("[AUTH] STEP 4 BOTH Prisma AND Supabase failed:", sbErr.message);
+      const result = await prisma.shop.create({
+        data: {
+          shopDomain: shop,
+          accessToken,
+          isActive: true,
+          installedAt: new Date(),
+        },
+        select: { id: true },
+      });
+      shopRecord = { id: result.id, pixelId: null };
+      console.log(`[AUTH] STEP 4 SHOP CREATED via Prisma fallback (${Date.now() - t0}ms):`, result.id);
+    } catch (prismaErr: any) {
+      console.error("[AUTH] STEP 4 BOTH Supabase AND Prisma failed:", prismaErr.message);
       return new Response(
-        `Shop record creation failed. Please try reinstalling the app.\nPrisma: ${prismaErr.message}\nSupabase: ${sbErr.message}`,
+        `Shop record creation failed. Please try reinstalling the app.\nSupabase: ${sbErr.message}\nPrisma: ${prismaErr.message}`,
         { status: 500 }
       );
     }
@@ -180,11 +172,11 @@ export async function GET(req: NextRequest) {
 
     try {
       const newPixelId = await registerAppPixel(shop, accessToken);
-      if (newPixelId) {
-        await prisma.shop.update({
-          where: { shopDomain: shop },
-          data: { pixelId: newPixelId },
-        });
+      if (newPixelId && shopRecord) {
+        await supabase
+          .from("Shop")
+          .update({ pixelId: newPixelId })
+          .eq("id", shopRecord.id);
         console.log(`[AUTH] BG: pixel registered (${Date.now() - bgStart}ms):`, newPixelId);
       }
     } catch (err: any) {

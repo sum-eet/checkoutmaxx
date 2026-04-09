@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { shopify, sessionStorage } from "@/lib/shopify";
 import { getActiveSubscription } from "@/lib/billing";
-import prisma from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop");
@@ -17,20 +17,22 @@ export async function GET(req: NextRequest) {
   const sub = await getActiveSubscription(shop, session.accessToken);
 
   if (sub?.status === "ACTIVE") {
-    await prisma.shop.update({
-      where: { shopDomain: shop },
-      data: {
+    await supabase
+      .from("Shop")
+      .update({
         subscriptionStatus: "ACTIVE",
         billingPlan: "pro",
-        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      })
+      .eq("shopDomain", shop)
+      .eq("isActive", true);
     return NextResponse.redirect(new URL(`/dashboard/converted?shop=${shop}`, req.url));
   } else {
-    await prisma.shop.update({
-      where: { shopDomain: shop },
-      data: { subscriptionStatus: "DECLINED", billingPlan: "free" },
-    });
+    await supabase
+      .from("Shop")
+      .update({ subscriptionStatus: "DECLINED", billingPlan: "free" })
+      .eq("shopDomain", shop)
+      .eq("isActive", true);
     return NextResponse.redirect(
       new URL(`/dashboard/converted?billing=declined&shop=${shop}`, req.url)
     );

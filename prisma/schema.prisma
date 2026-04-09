@@ -29,7 +29,7 @@ model Session {
 
 model Shop {
   id         String  @id @default(cuid())
-  shopDomain String  @unique
+  shopDomain String
   accessToken String
   pixelId    String? // Shopify pixel ID once registered
   isActive   Boolean  @default(true)
@@ -72,6 +72,8 @@ model Shop {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([shopDomain])
 }
 
 model CheckoutEvent {

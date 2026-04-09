@@ -229,7 +229,8 @@ async function processEvent({
     .from("Shop")
     .select("id")
     .eq("shopDomain", shopDomain)
-    .single();
+    .eq("isActive", true)
+    .maybeSingle();
 
   if (shopError || !shop) {
     logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found or db error" });
