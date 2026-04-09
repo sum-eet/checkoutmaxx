@@ -6,6 +6,27 @@ import { Session } from "@shopify/shopify-api";
 
 const activeShopCache = new Map<string, string>();
 
+async function findActiveShop(shopDomain: string): Promise<string | null> {
+  // Try up to 3 times with 100ms delay — handles connection pool lag
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data } = await supabase
+      .from("Shop")
+      .select("id")
+      .eq("shopDomain", shopDomain)
+      .eq("isActive", true)
+      .maybeSingle();
+    if (data?.id) {
+      console.log("[findActiveShop]", shopDomain, "found on attempt", attempt + 1);
+      return data.id;
+    }
+    if (attempt < 2) {
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+  console.log("[findActiveShop]", shopDomain, "not found after 3 attempts");
+  return null;
+}
+
 export async function ensureShop(
   req: Request
 ): Promise<{ shopId: string; shopDomain: string } | null> {
@@ -25,21 +46,12 @@ export async function ensureShop(
     return { shopId: cached, shopDomain };
   }
 
-  // Check Supabase for active shop
-  console.log("[ensureShop] Checking Supabase for active shop:", shopDomain);
-  const { data: existing, error: lookupError } = await supabase
-    .from("Shop")
-    .select("id")
-    .eq("shopDomain", shopDomain)
-    .eq("isActive", true)
-    .maybeSingle();
-
-  console.log("[ensureShop] Supabase lookup result:", JSON.stringify(existing), "error:", lookupError?.message ?? "none");
-
-  if (existing) {
-    activeShopCache.set(shopDomain, existing.id);
-    console.log("[ensureShop] FOUND existing shop:", existing.id);
-    return { shopId: existing.id, shopDomain };
+  // Check Supabase for active shop — retry once if first attempt returns null
+  const found = await findActiveShop(shopDomain);
+  if (found) {
+    activeShopCache.set(shopDomain, found);
+    console.log("[ensureShop] FOUND existing shop:", found);
+    return { shopId: found, shopDomain };
   }
 
   // Shop doesn't exist — need to provision via token exchange
@@ -84,21 +96,15 @@ export async function ensureShop(
   });
 
   if (insertError) {
-    // Duplicate key = another request already created it (race condition). Just fetch it.
-    if (insertError.code === "23505") {
-      console.log("[ensureShop] Race condition — Shop already exists, fetching...");
-      const { data: raceShop } = await supabase
-        .from("Shop")
-        .select("id")
-        .eq("shopDomain", shopDomain)
-        .eq("isActive", true)
-        .maybeSingle();
-      if (raceShop) {
-        activeShopCache.set(shopDomain, raceShop.id);
-        return { shopId: raceShop.id, shopDomain };
-      }
+    // Duplicate key = record already exists. Find it.
+    console.log("[ensureShop] Insert returned:", insertError.code, insertError.message);
+    const retryId = await findActiveShop(shopDomain);
+    if (retryId) {
+      activeShopCache.set(shopDomain, retryId);
+      console.log("[ensureShop] Found existing shop on retry:", retryId);
+      return { shopId: retryId, shopDomain };
     }
-    console.error("[ensureShop] FAIL: Shop insert error:", insertError.message, insertError.code, insertError.details);
+    console.error("[ensureShop] FAIL: insert error AND retry lookup failed");
     return null;
   }
 
