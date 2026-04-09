@@ -64,22 +64,20 @@ export async function ensureShop(
     return null;
   }
 
-  // Exchange JWT for offline access token
-  console.log("[ensureShop] Exchanging token for", shopDomain, "...");
+  // Try token exchange for access token (best effort — not required for data flow)
+  console.log("[ensureShop] Attempting token exchange for", shopDomain, "...");
   const accessToken = await exchangeToken(shopDomain, sessionToken);
-  console.log("[ensureShop] Token exchange result: got access token:", !!accessToken);
-  if (!accessToken) {
-    console.error("[ensureShop] FAIL: token exchange returned null");
-    return null;
-  }
+  console.log("[ensureShop] Token exchange result:", accessToken ? "SUCCESS" : "FAILED (will create Shop without access token)");
 
-  // Create new Shop record
+  // Create Shop record — with or without access token.
+  // Data flow (cart events → DB → dashboard) works without it.
+  // Access token is only needed for Admin API calls (pixel, discounts).
   const newId = crypto.randomUUID();
-  console.log("[ensureShop] Creating Shop record:", newId, "for", shopDomain);
+  console.log("[ensureShop] Creating Shop record:", newId, "for", shopDomain, "hasAccessToken:", !!accessToken);
   const { error: insertError } = await supabase.from("Shop").insert({
     id: newId,
     shopDomain,
-    accessToken,
+    accessToken: accessToken || "pending_oauth",
     isActive: true,
     installedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -93,27 +91,33 @@ export async function ensureShop(
   console.log("[ensureShop] SUCCESS: Shop created:", newId);
   activeShopCache.set(shopDomain, newId);
 
-  // Store session for Admin API calls
-  try {
-    const { PrismaSessionStorage } = await import("./session-storage");
-    const storage = new PrismaSessionStorage();
-    const session = new Session({
-      id: `offline_${shopDomain}`,
-      shop: shopDomain,
-      state: "installed",
-      isOnline: false,
-    });
-    session.accessToken = accessToken;
-    await storage.storeSession(session);
-    console.log("[ensureShop] Session stored for", shopDomain);
-  } catch (err: any) {
-    console.error("[ensureShop] Session store failed (non-fatal):", err.message);
+  // Store session for Admin API calls (only if we have a real access token)
+  if (accessToken) {
+    try {
+      const { PrismaSessionStorage } = await import("./session-storage");
+      const storage = new PrismaSessionStorage();
+      const session = new Session({
+        id: `offline_${shopDomain}`,
+        shop: shopDomain,
+        state: "installed",
+        isOnline: false,
+      });
+      session.accessToken = accessToken;
+      await storage.storeSession(session);
+      console.log("[ensureShop] Session stored for", shopDomain);
+    } catch (err: any) {
+      console.error("[ensureShop] Session store failed (non-fatal):", err.message);
+    }
   }
 
-  // Background: register pixel + webhooks
-  registerBackgroundWork(shopDomain, accessToken, newId).catch((err) =>
-    console.error("[ensureShop] Background work failed:", err.message)
-  );
+  // Background: register pixel + webhooks (only if we have a real access token)
+  if (accessToken) {
+    registerBackgroundWork(shopDomain, accessToken, newId).catch((err) =>
+      console.error("[ensureShop] Background work failed:", err.message)
+    );
+  } else {
+    console.log("[ensureShop] Skipping pixel/webhook registration — no access token yet. Will be done when OAuth completes.");
+  }
 
   console.log("[ensureShop] ====== DONE ======");
   return { shopId: newId, shopDomain };

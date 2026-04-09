@@ -98,37 +98,54 @@ export async function GET(req: NextRequest) {
   }
   console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
 
-  // ── STEP 4: CREATE NEW SHOP ROW ──
-  // Every install gets a fresh cuid. Old installs stay as archived records.
-  // Deactivate any existing active shop for this domain first.
+  // ── STEP 4: CREATE OR UPDATE SHOP ROW ──
+  // If ensureShop already created a pending record, update it with the real access token.
+  // Otherwise deactivate old + create new.
   let shopRecord: { id: string; pixelId: string | null } | null = null;
 
-  // Deactivate old shop record if exists (soft-delete)
-  await supabase
+  // Check if ensureShop already created a pending record
+  const { data: pendingShop } = await supabase
     .from("Shop")
-    .update({ isActive: false })
+    .select("id, pixelId")
     .eq("shopDomain", shop)
-    .eq("isActive", true);
+    .eq("isActive", true)
+    .maybeSingle();
 
-  // Create new Shop record via Supabase (primary) with Prisma fallback
-  const newShopId = crypto.randomUUID();
-  try {
-    const { data: sbResult, error: sbError } = await supabase
+  if (pendingShop) {
+    // Update existing record with real access token
+    await supabase
       .from("Shop")
-      .insert({
-        id: newShopId,
-        shopDomain: shop,
-        accessToken,
-        isActive: true,
-        installedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-      .select("id, pixelId")
-      .single();
+      .update({ accessToken, updatedAt: new Date().toISOString() })
+      .eq("id", pendingShop.id);
+    shopRecord = { id: pendingShop.id, pixelId: pendingShop.pixelId };
+    console.log(`[AUTH] STEP 4 SHOP UPDATED existing record (${Date.now() - t0}ms):`, pendingShop.id);
+  } else {
+    // Deactivate old shop records (soft-delete)
+    await supabase
+      .from("Shop")
+      .update({ isActive: false })
+      .eq("shopDomain", shop)
+      .eq("isActive", true);
 
-    if (sbError) throw sbError;
-    shopRecord = { id: sbResult.id, pixelId: null };
-    console.log(`[AUTH] STEP 4 SHOP CREATED via Supabase (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
+    // Create new Shop record
+    const newShopId = crypto.randomUUID();
+    try {
+      const { data: sbResult, error: sbError } = await supabase
+        .from("Shop")
+        .insert({
+          id: newShopId,
+          shopDomain: shop,
+          accessToken,
+          isActive: true,
+          installedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .select("id, pixelId")
+        .single();
+
+      if (sbError) throw sbError;
+      shopRecord = { id: sbResult.id, pixelId: null };
+      console.log(`[AUTH] STEP 4 SHOP CREATED via Supabase (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
   } catch (sbErr: any) {
     console.error("[AUTH] STEP 4 Supabase insert failed, trying Prisma:", sbErr.message);
     try {
@@ -150,7 +167,8 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-  }
+    }
+  } // end else (no pending shop)
 
   // ── STEP 5: REDIRECT ──
   const shopHandle = shop.replace(".myshopify.com", "");
