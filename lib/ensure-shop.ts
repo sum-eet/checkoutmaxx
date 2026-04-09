@@ -47,8 +47,15 @@ export async function ensureShop(
 
   const sessionToken = getSessionTokenFromRequest(req);
   console.log("[ensureShop] Session token present:", !!sessionToken, "length:", sessionToken?.length ?? 0);
+  if (sessionToken) {
+    // Decode JWT payload (no verification, just to log what we're sending)
+    try {
+      const parts = sessionToken.split(".");
+      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+      console.log("[ensureShop] JWT payload: iss:", payload.iss, "dest:", payload.dest, "exp:", payload.exp, "now:", Math.floor(Date.now() / 1000), "expired:", payload.exp < Math.floor(Date.now() / 1000));
+    } catch {}
+  }
   if (!sessionToken) {
-    // Log all request details to understand why no token
     const url = new URL(req.url);
     const authHeader = req.headers.get("authorization");
     const idToken = url.searchParams.get("id_token");
@@ -147,7 +154,17 @@ async function exchangeToken(
     });
 
     console.log("[exchangeToken] Response status:", res.status);
-    const body = await res.json();
+    const rawText = await res.text();
+    console.log("[exchangeToken] Raw response (first 500 chars):", rawText.slice(0, 500));
+
+    let body: any;
+    try {
+      body = JSON.parse(rawText);
+    } catch {
+      console.error("[exchangeToken] FAIL: response is not JSON. Status:", res.status);
+      return null;
+    }
+
     console.log("[exchangeToken] Response body keys:", Object.keys(body).join(", "));
 
     if (!res.ok || !body.access_token) {
