@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-export default function RootPage({
+export default async function RootPage({
   searchParams,
 }: {
   searchParams: { shop?: string; host?: string; [key: string]: string | undefined };
@@ -10,14 +11,24 @@ export default function RootPage({
     if (v) params.set(k, v);
   }
   const qs = params.toString();
+  const shop = searchParams.shop;
 
-  // Fresh install: shop present but no host = not embedded yet → kick off OAuth.
-  // This is a fallback — ensureShop() in API routes also provisions the shop
-  // via token exchange, so the app works even if this redirect is bypassed.
-  if (searchParams.shop && !searchParams.host) {
-    redirect(`/api/auth/begin?${qs}`);
+  // If we have a shop domain, check if it needs OAuth
+  if (shop) {
+    const { data: existing } = await supabase
+      .from("Shop")
+      .select("accessToken")
+      .eq("shopDomain", shop)
+      .eq("isActive", true)
+      .maybeSingle();
+
+    // No shop record OR pending token → need OAuth
+    if (!existing || existing.accessToken === "pending_oauth") {
+      console.log("[root] Redirecting to OAuth — shop:", shop, "exists:", !!existing);
+      redirect(`/api/auth/begin?${qs}`);
+    }
   }
 
-  // Already authenticated (has host) → go to app
+  // Shop has real token (or no shop param) → go to dashboard
   redirect(`/couponmaxx/analytics${qs ? `?${qs}` : ""}`);
 }

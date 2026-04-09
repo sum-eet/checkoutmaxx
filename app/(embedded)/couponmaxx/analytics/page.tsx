@@ -167,6 +167,24 @@ function AppStatusBanner() {
 export default function AnalyticsPage() {
   const shop = useShop();
 
+  // Check if OAuth is needed — redirect once if access token is pending
+  useEffect(() => {
+    if (!shop) return;
+    const params = new URLSearchParams(window.location.search);
+    const idToken = params.get('id_token') || '';
+    fetch(`/api/shop-status?shop=${encodeURIComponent(shop)}${idToken ? `&id_token=${encodeURIComponent(idToken)}` : ''}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.needsAuth && data.authUrl) {
+          console.log('[CouponMaxx] Redirecting to OAuth for access token...');
+          // Redirect the TOP window (break out of Shopify admin iframe)
+          const target = window.top || window;
+          target.location.href = data.authUrl;
+        }
+      })
+      .catch(() => {}); // non-fatal
+  }, [shop]);
+
   // Date range — default last 7 days
   const [dateRange, setDateRange] = useState<DateRange>(() => {
     const end = new Date();
