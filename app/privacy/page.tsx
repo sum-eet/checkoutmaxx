@@ -12,15 +12,15 @@ export default function PrivacyPage() {
     >
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Privacy Policy</h1>
       <p style={{ color: "#6b7280", marginBottom: 32 }}>
-        Last updated: March 2025
+        Last updated: April 2026
       </p>
 
       <section style={{ marginBottom: 32 }}>
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>1. Who We Are</h2>
         <p>
-          CouponMaxx ("we", "us", "our") is a Shopify app that helps merchants monitor
-          their checkout funnel, detect conversion drops, and receive alerts about
-          checkout errors.
+          CouponMaxx ("we", "us", "our") is a Shopify app that helps merchants track
+          coupon and discount code performance, monitor cart activity, detect
+          conversion drops, and receive alerts about checkout issues.
         </p>
       </section>
 
@@ -108,8 +108,8 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>7. Contact</h2>
         <p>
           For privacy questions or data requests, contact us at:{" "}
-          <a href="mailto:privacy@checkoutmaxx.app" style={{ color: "#2563eb" }}>
-            privacy@checkoutmaxx.app
+          <a href="mailto:sk200435@gmail.com" style={{ color: "#2563eb" }}>
+            sk200435@gmail.com
           </a>
         </p>
       </section>
