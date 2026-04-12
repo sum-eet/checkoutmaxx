@@ -3,9 +3,11 @@ import { mockRequest } from "../helpers";
 
 import { supabase } from "@/lib/supabase";
 import { getShopFromRequest } from "@/lib/verify-session-token";
+import { ensureShop } from "@/lib/ensure-shop";
 
 const mockSupabase = vi.mocked(supabase);
 const mockGetShop = vi.mocked(getShopFromRequest);
+const mockEnsureShop = vi.mocked(ensureShop);
 
 describe("GET /api/couponmaxx/notifications", () => {
   let GET: typeof import("@/app/api/couponmaxx/notifications/route").GET;
@@ -17,30 +19,14 @@ describe("GET /api/couponmaxx/notifications", () => {
   });
 
   it("returns 400 when shop is missing", async () => {
-    mockGetShop.mockReturnValue(null as any);
+    mockEnsureShop.mockResolvedValueOnce(null);
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/notifications");
     const res = await GET(req);
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when shop not found", async () => {
-    mockSupabase.from.mockReturnValue({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    } as any);
-
-    const req = mockRequest("https://test.vercel.app/api/couponmaxx/notifications?shop=unknown.myshopify.com");
-    const res = await GET(req);
-    expect(res.status).toBe(404);
-  });
-
   it("returns valid response with empty alerts", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const alertChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -48,10 +34,7 @@ describe("GET /api/couponmaxx/notifications", () => {
       limit: vi.fn().mockResolvedValue({ data: [], error: null }),
     };
 
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "Shop") return shopChain as any;
-      return alertChain as any;
-    });
+    mockSupabase.from.mockReturnValue(alertChain as any);
 
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/notifications?shop=test-shop.myshopify.com");
     const res = await GET(req);
@@ -65,11 +48,7 @@ describe("GET /api/couponmaxx/notifications", () => {
   });
 
   it("returns alerts with correct severity counts", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const alertChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -84,27 +63,20 @@ describe("GET /api/couponmaxx/notifications", () => {
       }),
     };
 
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "Shop") return shopChain as any;
-      return alertChain as any;
-    });
+    mockSupabase.from.mockReturnValue(alertChain as any);
 
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/notifications?shop=test-shop.myshopify.com");
     const res = await GET(req);
     const body = await res.json();
 
     expect(body.alerts).toHaveLength(3);
-    expect(body.summary.unreadCount).toBe(1); // a1 unread+not dismissed
-    expect(body.summary.criticalCount).toBe(1); // a1 critical+not dismissed
-    expect(body.summary.warningCount).toBe(1); // a2 warning+not dismissed
+    expect(body.summary.unreadCount).toBe(1);
+    expect(body.summary.criticalCount).toBe(1);
+    expect(body.summary.warningCount).toBe(1);
   });
 
   it("falls back when isRead/isDismissed columns missing", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
 
     // First query fails (missing columns), fallback succeeds
     let queryCount = 0;
@@ -124,17 +96,13 @@ describe("GET /api/couponmaxx/notifications", () => {
       }),
     };
 
-    mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "Shop") return shopChain as any;
-      return alertChain as any;
-    });
+    mockSupabase.from.mockReturnValue(alertChain as any);
 
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/notifications?shop=test-shop.myshopify.com");
     const res = await GET(req);
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    // Without isRead/isDismissed, all default to false
     expect(body.alerts[0].isRead).toBe(false);
     expect(body.alerts[0].isDismissed).toBe(false);
   });

@@ -3,9 +3,11 @@ import { mockRequest } from "../helpers";
 
 import { supabase } from "@/lib/supabase";
 import { getShopFromRequest } from "@/lib/verify-session-token";
+import { ensureShop } from "@/lib/ensure-shop";
 
 const mockSupabase = vi.mocked(supabase);
 const mockGetShop = vi.mocked(getShopFromRequest);
+const mockEnsureShop = vi.mocked(ensureShop);
 
 describe("/api/couponmaxx/recovery/settings", () => {
   let GET: typeof import("@/app/api/couponmaxx/recovery/settings/route").GET;
@@ -19,28 +21,21 @@ describe("/api/couponmaxx/recovery/settings", () => {
 
   describe("GET", () => {
     it("returns 400 when shop missing", async () => {
-      mockGetShop.mockReturnValue(null as any);
+      mockEnsureShop.mockResolvedValueOnce(null);
       const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/settings");
       const res = await GET(req);
       expect(res.status).toBe(400);
     });
 
     it("returns null settings when no row exists", async () => {
-      const shopChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-      };
+      mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
       const settingsChain = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({ data: null, error: null }),
       };
 
-      mockSupabase.from.mockImplementation((table: string) => {
-        if (table === "Shop") return shopChain as any;
-        return settingsChain as any;
-      });
+      mockSupabase.from.mockReturnValue(settingsChain as any);
 
       const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/settings?shop=test-shop.myshopify.com");
       const res = await GET(req);
@@ -50,11 +45,7 @@ describe("/api/couponmaxx/recovery/settings", () => {
     });
 
     it("returns settings with defaults applied", async () => {
-      const shopChain = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-      };
+      mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
       const settingsChain = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -64,17 +55,14 @@ describe("/api/couponmaxx/recovery/settings", () => {
         }),
       };
 
-      mockSupabase.from.mockImplementation((table: string) => {
-        if (table === "Shop") return shopChain as any;
-        return settingsChain as any;
-      });
+      mockSupabase.from.mockReturnValue(settingsChain as any);
 
       const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/settings?shop=test-shop.myshopify.com");
       const res = await GET(req);
       const body = await res.json();
       expect(body.settings.enabled).toBe(true);
-      expect(body.settings.hunterThreshold).toBe(3); // default
-      expect(body.settings.rules).toBeDefined(); // defaults applied
+      expect(body.settings.hunterThreshold).toBe(3);
+      expect(body.settings.rules).toBeDefined();
     });
   });
 

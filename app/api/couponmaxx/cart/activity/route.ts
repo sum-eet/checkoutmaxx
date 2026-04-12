@@ -2,17 +2,16 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getShopFromRequest } from '@/lib/verify-session-token';
+import { ensureShop } from '@/lib/ensure-shop';
 
 function subMs(d: Date, ms: number) { return new Date(d.getTime() - ms); }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = getShopFromRequest(req);
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-
-  const { data: shop } = await supabase
-    .from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const shopResult = await ensureShop(req);
+  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shop = { id: shopResult.shopId };
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
   const shopId = shop.id;
 

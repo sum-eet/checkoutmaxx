@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getShopFromRequest } from "@/lib/verify-session-token";
+import { ensureShop } from "@/lib/ensure-shop";
 
 type TimelineEvent = {
   source: 'cart' | 'checkout';
@@ -38,12 +39,10 @@ const CHECKOUT_LABELS: Record<string, string> = {
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = getShopFromRequest(req);
   const sessionId = p.get('sessionId');
-  if (!shopDomain || !sessionId) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
-
-  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const shopResult = await ensureShop(req);
+  if (!shopResult || !sessionId) return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+  const shop = { id: shopResult.shopId };
 
   const [{ data: cartEvs }, { data: checkoutEvs }] = await Promise.all([
     supabase.from('CartEvent')

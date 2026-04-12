@@ -84,6 +84,11 @@ vi.mock("@/lib/shopify", () => ({
   registerWebhooks: vi.fn(),
 }));
 
+// Mock ensure-shop — returns a valid shop by default
+vi.mock("@/lib/ensure-shop", () => ({
+  ensureShop: vi.fn().mockResolvedValue({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" }),
+}));
+
 // Mock session-utils
 vi.mock("@/lib/session-utils", () => ({
   buildSessionsFromEvents: vi.fn().mockReturnValue([]),

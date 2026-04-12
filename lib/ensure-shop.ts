@@ -72,8 +72,16 @@ export async function ensureShop(
     return { shopId: existing.id, shopDomain };
   }
 
-  // No active shop — create new one
+  // No active shop — deactivate any old records, then create fresh
+  // This handles reinstalls where the uninstall webhook may not have fired yet
+  await supabase
+    .from("Shop")
+    .update({ isActive: false, pixelId: null })
+    .eq("shopDomain", shopDomain)
+    .eq("isActive", true);
+
   const newId = crypto.randomUUID();
+  console.log("[ensureShop] Creating fresh Shop row:", newId, "for", shopDomain, "hasToken:", !!accessToken);
   const { error: insertError } = await supabase.from("Shop").insert({
     id: newId,
     shopDomain,

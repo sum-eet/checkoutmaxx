@@ -3,9 +3,11 @@ import { mockRequest } from "../helpers";
 
 import { supabase } from "@/lib/supabase";
 import { getShopFromRequest } from "@/lib/verify-session-token";
+import { ensureShop } from "@/lib/ensure-shop";
 
 const mockSupabase = vi.mocked(supabase);
 const mockGetShop = vi.mocked(getShopFromRequest);
+const mockEnsureShop = vi.mocked(ensureShop);
 
 describe("GET /api/couponmaxx/recovery/stats", () => {
   let GET: typeof import("@/app/api/couponmaxx/recovery/stats/route").GET;
@@ -17,18 +19,14 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
   });
 
   it("returns 400 when shop missing", async () => {
-    mockGetShop.mockReturnValue(null as any);
+    mockEnsureShop.mockResolvedValueOnce(null);
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats");
     const res = await GET(req);
     expect(res.status).toBe(400);
   });
 
   it("returns empty stats when no recovery events", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const eventChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -42,7 +40,6 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
     };
 
     mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "Shop") return shopChain as any;
       if (table === "RecoveryEvent") return eventChain as any;
       if (table === "MerchantRecoverySettings") return settingsChain as any;
       return eventChain as any;
@@ -63,11 +60,7 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
   });
 
   it("computes stats correctly from recovery events", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const eventChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -89,7 +82,6 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
     };
 
     mockSupabase.from.mockImplementation((table: string) => {
-      if (table === "Shop") return shopChain as any;
       if (table === "RecoveryEvent") return eventChain as any;
       return settingsChain as any;
     });

@@ -4,9 +4,11 @@ import { mockRequest } from "../helpers";
 // Access mocked modules
 import { supabase } from "@/lib/supabase";
 import { getShopFromRequest } from "@/lib/verify-session-token";
+import { ensureShop } from "@/lib/ensure-shop";
 
 const mockSupabase = vi.mocked(supabase);
 const mockGetShop = vi.mocked(getShopFromRequest);
+const mockEnsureShop = vi.mocked(ensureShop);
 
 describe("GET /api/couponmaxx/sessions", () => {
   let GET: typeof import("@/app/api/couponmaxx/sessions/route").GET;
@@ -18,34 +20,14 @@ describe("GET /api/couponmaxx/sessions", () => {
   });
 
   it("returns 400 when shop is missing", async () => {
-    mockGetShop.mockReturnValue(null as any);
+    mockEnsureShop.mockResolvedValueOnce(null);
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/sessions");
     const res = await GET(req);
     expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toBe("Missing shop");
-  });
-
-  it("returns 404 when shop not found in DB", async () => {
-    mockSupabase.from.mockReturnValue({
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-    } as any);
-
-    const req = mockRequest("https://test.vercel.app/api/couponmaxx/sessions?shop=unknown.myshopify.com");
-    const res = await GET(req);
-    expect(res.status).toBe(404);
   });
 
   it("returns valid response shape with empty data", async () => {
-    // Mock shop lookup
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
-    mockSupabase.from.mockReturnValue(shopChain as any);
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
 
     // Mock RPC calls
     mockSupabase.rpc.mockResolvedValue({
@@ -80,12 +62,7 @@ describe("GET /api/couponmaxx/sessions", () => {
   });
 
   it("defaults to page 1 with 25 per page", async () => {
-    const shopChain = {
-      select: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: { id: "shop-1" }, error: null }),
-    };
-    mockSupabase.from.mockReturnValue(shopChain as any);
+    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     mockSupabase.rpc
       .mockResolvedValueOnce({ data: [{ carts_opened: 0, with_products: 0, with_coupon: 0, reached_checkout: 0, checkout_with_coupon: 0, checkout_without_coupon: 0 }], error: null } as any)
       .mockResolvedValueOnce({ data: [], error: null } as any);

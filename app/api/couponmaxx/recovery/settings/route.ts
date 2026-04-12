@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getShopFromRequest } from '@/lib/verify-session-token';
+import { ensureShop } from '@/lib/ensure-shop';
 
 const DEFAULT_RULES = {
   expired:          { enabled: false, action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
@@ -14,12 +15,9 @@ const DEFAULT_RULES = {
 };
 
 export async function GET(req: NextRequest) {
-  const shopDomain = getShopFromRequest(req);
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-
-  const { data: shop } = await supabase
-    .from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const shopResult = await ensureShop(req);
+  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shop = { id: shopResult.shopId };
 
   const { data } = await supabase
     .from('MerchantRecoverySettings').select('*').eq('shopId', shop.id).single();

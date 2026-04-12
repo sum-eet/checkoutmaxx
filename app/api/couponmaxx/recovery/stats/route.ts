@@ -3,18 +3,16 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getShopFromRequest } from '@/lib/verify-session-token';
+import { ensureShop } from '@/lib/ensure-shop';
 
 export async function GET(req: NextRequest) {
-  const shopDomain = getShopFromRequest(req);
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shopResult = await ensureShop(req);
+  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shop = { id: shopResult.shopId };
 
   const p = req.nextUrl.searchParams;
   const from = p.get('from') ?? new Date(Date.now() - 7 * 86400000).toISOString();
   const to   = p.get('to')   ?? new Date().toISOString();
-
-  const { data: shop } = await supabase
-    .from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   // Fetch all recovery events in range
   const { data: events, error } = await supabase
