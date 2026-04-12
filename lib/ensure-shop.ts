@@ -102,16 +102,13 @@ export async function ensureShop(
     return { shopId: existing.id, shopDomain };
   }
 
-  // No active shop — deactivate any old records, then create fresh
-  // This handles reinstalls where the uninstall webhook may not have fired yet
-  await supabase
-    .from("Shop")
-    .update({ isActive: false, pixelId: null })
-    .eq("shopDomain", shopDomain)
-    .eq("isActive", true);
-
+  // No active shop — create one. Use the partial unique index
+  // (Shop_shopDomain_active_unique) to prevent duplicates from concurrent requests.
+  // Do NOT deactivate existing records here — that causes race conditions where
+  // concurrent requests deactivate each other's records. The auth callback handles
+  // deactivation on reinstall.
   const newId = crypto.randomUUID();
-  console.log("[ensureShop] Creating fresh Shop row:", newId, "for", shopDomain, "hasToken:", !!accessToken);
+  console.log("[ensureShop] Creating Shop row:", newId, "for", shopDomain, "hasToken:", !!accessToken);
   const { error: insertError } = await supabase.from("Shop").insert({
     id: newId,
     shopDomain,
@@ -122,17 +119,23 @@ export async function ensureShop(
   });
 
   if (insertError) {
-    console.error("[ensureShop] INSERT FAILED: code=%s message=%s", insertError.code, insertError.message);
+    // 23505 = unique constraint violation — another request already created the record
     if (insertError.code === "23505") {
-      const { data: raceShop } = await supabase
+      console.log("[ensureShop] Record already exists (concurrent request won). Looking it up...");
+      const { data: allShops2 } = await supabase
         .from("Shop")
-        .select("id")
-        .eq("shopDomain", shopDomain)
-        .eq("isActive", true)
-        .maybeSingle();
-      console.log("[ensureShop] Race condition recovery: raceShop=%s", raceShop?.id ?? "NULL");
-      if (raceShop) return { shopId: raceShop.id, shopDomain };
+        .select("id, accessToken, isActive")
+        .eq("shopDomain", shopDomain);
+      const winner = (allShops2 ?? []).find(s => s.isActive === true)
+        ?? (allShops2 ?? [])[0];
+      if (winner) {
+        if (accessToken && winner.accessToken === "pending_oauth") {
+          await supabase.from("Shop").update({ accessToken }).eq("id", winner.id);
+        }
+        return { shopId: winner.id, shopDomain };
+      }
     }
+    console.error("[ensureShop] INSERT FAILED: code=%s message=%s", insertError.code, insertError.message);
     return null;
   }
 
