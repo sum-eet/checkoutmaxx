@@ -6,12 +6,12 @@ import { supabase } from "@/lib/supabase";
 
 export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop");
-  if (!shop) return NextResponse.redirect(new URL("/dashboard/converted", req.url));
+  if (!shop) return NextResponse.redirect(new URL("/couponmaxx/analytics", req.url));
 
   const sessionId = shopify.session.getOfflineId(shop);
   const session = await sessionStorage.loadSession(sessionId);
   if (!session?.accessToken) {
-    return NextResponse.redirect(new URL(`/dashboard/converted?shop=${shop}`, req.url));
+    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
   }
 
   const sub = await getActiveSubscription(shop, session.accessToken);
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       })
       .eq("shopDomain", shop)
       .eq("isActive", true);
-    return NextResponse.redirect(new URL(`/dashboard/converted?shop=${shop}`, req.url));
+    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
   } else {
     await supabase
       .from("Shop")
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       .eq("shopDomain", shop)
       .eq("isActive", true);
     return NextResponse.redirect(
-      new URL(`/dashboard/converted?billing=declined&shop=${shop}`, req.url)
+      new URL(`/couponmaxx/analytics?billing=declined&shop=${shop}`, req.url)
     );
   }
 }

@@ -98,54 +98,53 @@ export async function GET(req: NextRequest) {
   }
   console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
 
-  // ── STEP 4: CREATE OR UPDATE SHOP ROW ──
-  // If ensureShop already created a pending record, update it with the real access token.
-  // Otherwise deactivate old + create new.
+  // ── STEP 4: ALWAYS CREATE FRESH SHOP ROW ──
+  // On every OAuth completion (install or reinstall), deactivate ALL existing
+  // records for this domain and create a brand new Shop with a fresh UUID.
+  // This guarantees a clean slate — no old data bleeds into the new install.
   let shopRecord: { id: string; pixelId: string | null } | null = null;
 
-  // Check if ensureShop already created a pending record
-  const { data: pendingShop } = await supabase
+  // Save old pixelId so we can deregister it in background
+  const { data: oldShop } = await supabase
     .from("Shop")
     .select("id, pixelId")
     .eq("shopDomain", shop)
     .eq("isActive", true)
     .maybeSingle();
 
-  if (pendingShop) {
-    // Update existing record with real access token
-    await supabase
-      .from("Shop")
-      .update({ accessToken, updatedAt: new Date().toISOString() })
-      .eq("id", pendingShop.id);
-    shopRecord = { id: pendingShop.id, pixelId: pendingShop.pixelId };
-    console.log(`[AUTH] STEP 4 SHOP UPDATED existing record (${Date.now() - t0}ms):`, pendingShop.id);
-  } else {
-    // Deactivate old shop records (soft-delete)
-    await supabase
-      .from("Shop")
-      .update({ isActive: false })
-      .eq("shopDomain", shop)
-      .eq("isActive", true);
+  const oldPixelId = oldShop?.pixelId ?? null;
 
-    // Create new Shop record
-    const newShopId = crypto.randomUUID();
-    try {
-      const { data: sbResult, error: sbError } = await supabase
-        .from("Shop")
-        .insert({
-          id: newShopId,
-          shopDomain: shop,
-          accessToken,
-          isActive: true,
-          installedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        .select("id, pixelId")
-        .single();
+  // Deactivate ALL existing records for this domain (handles both uninstall
+  // webhook fired and webhook delayed cases)
+  await supabase
+    .from("Shop")
+    .update({ isActive: false, pixelId: null })
+    .eq("shopDomain", shop)
+    .eq("isActive", true);
 
-      if (sbError) throw sbError;
-      shopRecord = { id: sbResult.id, pixelId: null };
-      console.log(`[AUTH] STEP 4 SHOP CREATED via Supabase (${Date.now() - t0}ms):`, JSON.stringify(sbResult));
+  if (oldShop) {
+    console.log(`[AUTH] STEP 4 DEACTIVATED old shop record:`, oldShop.id);
+  }
+
+  // Create new Shop record with fresh UUID
+  const newShopId = crypto.randomUUID();
+  try {
+    const { data: sbResult, error: sbError } = await supabase
+      .from("Shop")
+      .insert({
+        id: newShopId,
+        shopDomain: shop,
+        accessToken,
+        isActive: true,
+        installedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+      .select("id, pixelId")
+      .single();
+
+    if (sbError) throw sbError;
+    shopRecord = { id: sbResult.id, pixelId: null };
+    console.log(`[AUTH] STEP 4 SHOP CREATED fresh (${Date.now() - t0}ms): ${sbResult.id} (old: ${oldShop?.id ?? 'none'})`);
   } catch (sbErr: any) {
     console.error("[AUTH] STEP 4 Supabase insert failed, trying Prisma:", sbErr.message);
     try {
@@ -167,8 +166,7 @@ export async function GET(req: NextRequest) {
         { status: 500 }
       );
     }
-    }
-  } // end else (no pending shop)
+  }
 
   // ── STEP 5: REDIRECT ──
   const shopHandle = shop.replace(".myshopify.com", "");

@@ -7,7 +7,7 @@ export const shopify = shopifyApi({
   // At runtime on Vercel these will always be set.
   apiKey: process.env.SHOPIFY_API_KEY || "build-placeholder",
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "build-placeholder",
-  scopes: ["read_orders", "read_checkouts", "write_pixels", "read_analytics"],
+  scopes: ["read_orders", "read_checkouts", "write_pixels", "read_customer_events", "read_analytics", "write_discounts"],
   hostName: (process.env.SHOPIFY_APP_URL || "localhost:3000").replace(/^https?:\/\//, ""),
   apiVersion: ApiVersion.January25,
   isEmbeddedApp: true,
