@@ -13,8 +13,20 @@ import { Session } from "@shopify/shopify-api";
 export async function ensureShop(
   req: Request
 ): Promise<{ shopId: string; shopDomain: string } | null> {
+  const url = new URL(req.url);
+  console.log("[ensureShop] START url=%s", url.pathname + url.search);
+  console.log("[ensureShop] headers: auth=%s, id_token=%s, shop=%s",
+    req.headers.get("authorization")?.slice(0, 20) ?? "NONE",
+    url.searchParams.get("id_token")?.slice(0, 20) ?? "NONE",
+    url.searchParams.get("shop") ?? "NONE"
+  );
+
   const shopDomain = getShopFromRequest(req);
-  if (!shopDomain) return null;
+  console.log("[ensureShop] shopDomain=%s", shopDomain ?? "NULL");
+  if (!shopDomain) {
+    console.error("[ensureShop] BAIL: no shopDomain from request");
+    return null;
+  }
 
   // Check DB for active shop with real token
   const { data: existing } = await supabase
