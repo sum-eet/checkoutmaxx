@@ -36,7 +36,8 @@ export async function ensureShop(
     .select("id, accessToken, isActive")
     .eq("shopDomain", shopDomain);
 
-  const activeShops = (allShops ?? []).filter(s => s.isActive === true);
+  // Filter active shops — handle both boolean true and string "true" from PostgREST
+  const activeShops = (allShops ?? []).filter(s => s.isActive === true || s.isActive === "true" as any);
   const existing = activeShops[0] ?? null;
 
   console.log("[ensureShop] DB lookup: total=%d active=%d existing=%s",
@@ -126,8 +127,7 @@ export async function ensureShop(
         .from("Shop")
         .select("id, accessToken, isActive")
         .eq("shopDomain", shopDomain);
-      const winner = (allShops2 ?? []).find(s => s.isActive === true)
-        ?? (allShops2 ?? [])[0];
+      const winner = (allShops2 ?? []).find(s => s.isActive === true || s.isActive === "true" as any);
       if (winner) {
         if (accessToken && winner.accessToken === "pending_oauth") {
           await supabase.from("Shop").update({ accessToken }).eq("id", winner.id);

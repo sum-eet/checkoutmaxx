@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   console.log('[analytics] GET shop=%s shopId=%s start=%s end=%s', shopDomain, shopResult?.shopId ?? 'NULL', p.get('start'), p.get('end'));
   if (!shopResult) {
     console.error('[analytics] ensureShop returned null for', shopDomain);
-    return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing shop' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
   }
   const shopId = shopResult.shopId;
 
@@ -295,6 +295,8 @@ export async function GET(req: NextRequest) {
     avgCart: riskSessionCount > 0 ? Math.round(revenueAtRiskTotal / riskSessionCount * 100) / 100 : 0,
   };
 
+  const headers = { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'Pragma': 'no-cache' };
+
   return NextResponse.json({
     couponSuccessRate: {
       average: avgSuccessRate,
@@ -331,5 +333,5 @@ export async function GET(req: NextRequest) {
       daily:              funnelDaily,
     },
     revenueAtRisk,
-  });
+  }, { headers });
 }
