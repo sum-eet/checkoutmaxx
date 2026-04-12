@@ -29,23 +29,30 @@ export async function ensureShop(
   }
 
   // Check DB for active shop with real token
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("Shop")
     .select("id, accessToken")
     .eq("shopDomain", shopDomain)
     .eq("isActive", true)
     .maybeSingle();
 
+  console.log("[ensureShop] DB lookup: existing=%s, error=%s",
+    existing ? `${existing.id} (token=${existing.accessToken?.slice(0, 10)}...)` : "NULL",
+    existingError ? existingError.message : "none"
+  );
+
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
+    console.log("[ensureShop] RETURNING existing active shop:", existing.id);
     return { shopId: existing.id, shopDomain };
   }
 
   // Need a real access token — use Shopify SDK token exchange
-  console.log("[ensureShop] Need access token for", shopDomain);
+  console.log("[ensureShop] No active shop with real token. Attempting token exchange...");
 
   const sessionToken = getSessionTokenFromRequest(req);
+  console.log("[ensureShop] sessionToken=%s", sessionToken ? `${sessionToken.slice(0, 30)}...` : "NULL");
   if (!sessionToken) {
-    console.log("[ensureShop] No session token in request");
+    console.log("[ensureShop] BAIL: no session token. existing=%s", existing ? existing.id : "NULL");
     if (existing) return { shopId: existing.id, shopDomain };
     return null;
   }
@@ -68,8 +75,13 @@ export async function ensureShop(
       console.error("[ensureShop] Session store failed (non-fatal):", err.message);
     }
   } catch (err: any) {
-    console.error("[ensureShop] Token exchange failed:", err.message);
+    console.error("[ensureShop] Token exchange FAILED:", err.message, err.stack?.slice(0, 200));
   }
+
+  console.log("[ensureShop] After token exchange: accessToken=%s, existing=%s",
+    accessToken ? `${accessToken.slice(0, 10)}...` : "NULL",
+    existing ? existing.id : "NULL"
+  );
 
   // If shop exists (with pending token), update it
   if (existing) {
@@ -104,6 +116,7 @@ export async function ensureShop(
   });
 
   if (insertError) {
+    console.error("[ensureShop] INSERT FAILED: code=%s message=%s", insertError.code, insertError.message);
     if (insertError.code === "23505") {
       const { data: raceShop } = await supabase
         .from("Shop")
@@ -111,13 +124,13 @@ export async function ensureShop(
         .eq("shopDomain", shopDomain)
         .eq("isActive", true)
         .maybeSingle();
+      console.log("[ensureShop] Race condition recovery: raceShop=%s", raceShop?.id ?? "NULL");
       if (raceShop) return { shopId: raceShop.id, shopDomain };
     }
-    console.error("[ensureShop] Insert failed:", insertError.message);
     return null;
   }
 
-  console.log("[ensureShop] Shop created:", newId, "hasRealToken:", !!accessToken);
+  console.log("[ensureShop] SUCCESS: Shop created with id=%s, hasRealToken=%s", newId, !!accessToken);
 
   if (accessToken) {
     registerBackgroundWork(shopDomain, accessToken, newId);
