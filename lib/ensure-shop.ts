@@ -29,22 +29,28 @@ export async function ensureShop(
   }
 
   // Check DB for active shop with real token
-  const { data: existing, error: existingError } = await supabase
+  // Fetch ALL records for this domain and filter in JS — Supabase .eq("isActive", true)
+  // was unreliable (returning inactive records in production).
+  const { data: allShops } = await supabase
     .from("Shop")
-    .select("id, accessToken")
-    .eq("shopDomain", shopDomain)
-    .eq("isActive", true)
-    .maybeSingle();
+    .select("id, accessToken, isActive")
+    .eq("shopDomain", shopDomain);
 
-  console.log("[ensureShop] DB lookup: existing=%s, error=%s",
-    existing ? `${existing.id} (token=${existing.accessToken?.slice(0, 10)}...)` : "NULL",
-    existingError ? existingError.message : "none"
+  const activeShops = (allShops ?? []).filter(s => s.isActive === true);
+  const existing = activeShops[0] ?? null;
+
+  console.log("[ensureShop] DB lookup: total=%d active=%d existing=%s",
+    allShops?.length ?? 0,
+    activeShops.length,
+    existing ? `${existing.id} (isActive=${existing.isActive})` : "NULL"
   );
 
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
     console.log("[ensureShop] RETURNING existing active shop:", existing.id);
     return { shopId: existing.id, shopDomain };
   }
+
+  console.log("[ensureShop] No active shop with real token. Proceeding to token exchange.");
 
   // Need a real access token — use Shopify SDK token exchange
   console.log("[ensureShop] No active shop with real token. Attempting token exchange...");
