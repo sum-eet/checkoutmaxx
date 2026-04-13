@@ -30,6 +30,7 @@ export async function registerWebhooks(session: Session) {
   // registered via the REST API — they must be set in the Shopify Partner Dashboard.
   const topics = [
     { topic: "app/uninstalled", address: `${base}/api/webhooks/app-uninstalled` },
+    { topic: "app_subscriptions/update", address: `${base}/api/webhooks/app-subscriptions-update` },
   ];
 
   for (const { topic, address } of topics) {

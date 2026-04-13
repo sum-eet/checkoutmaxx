@@ -61,26 +61,19 @@ function resolveShop(): string | null {
 }
 
 export function useShop(): string {
-  const [shop, setShop] = useState(() => {
-    // Synchronous resolve on first render — avoids flash of loading state
-    if (typeof window === "undefined") return _shop || "";
-    const resolved = resolveShop();
-    if (resolved) {
-      _shop = resolved;
-      try { localStorage.setItem("cm_shop", resolved); } catch {}
-    }
-    return resolved || "";
-  });
+  // Always init to _shop (empty string on SSR and on first CSR render before hydration).
+  // Resolving synchronously in useState causes React #418 — server returns "" (window undefined)
+  // but client returns the real shop domain, creating a hydration mismatch.
+  const [shop, setShop] = useState<string>(_shop);
 
   useEffect(() => {
-    // If already resolved, ensure caches are updated
+    // After hydration, resolve shop domain and update state + caches
     if (shop) {
       _shop = shop;
       try { localStorage.setItem("cm_shop", shop); } catch {}
       return;
     }
 
-    // If not resolved, try again (App Bridge may have initialized since first render)
     const result = resolveShop();
     if (result) {
       _shop = result;
@@ -89,7 +82,7 @@ export function useShop(): string {
       return;
     }
 
-    // Poll as absolute last resort (should rarely fire with the above layers)
+    // Poll as last resort — App Bridge may not have initialized yet
     let attempts = 0;
     const interval = setInterval(() => {
       attempts++;
