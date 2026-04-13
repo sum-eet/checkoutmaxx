@@ -28,23 +28,22 @@ export async function ensureShop(
     return null;
   }
 
-  // Check DB for active shop with real token
-  // Fetch ALL records for this domain and filter in JS — Supabase .eq("isActive", true)
-  // was unreliable (returning inactive records in production).
-  const { data: allShops } = await supabase
+  // Check DB for active shop with real token.
+  // Use .eq("isActive", true) directly — same pattern as resolveShopId() in cart/ingest.
+  // ORDER BY installedAt DESC so the most recent install wins on ties.
+  const { data: existing, error: selectError } = await supabase
     .from("Shop")
-    .select("id, accessToken, isActive")
-    .eq("shopDomain", shopDomain);
+    .select("id, accessToken")
+    .eq("shopDomain", shopDomain)
+    .eq("isActive", true)
+    .order("installedAt", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  // Filter active shops — handle both boolean true and string "true" from PostgREST
-  const activeShops = (allShops ?? []).filter(s => s.isActive === true || s.isActive === "true" as any);
-  const existing = activeShops[0] ?? null;
-
-  console.log("[ensureShop] DB lookup: total=%d active=%d existing=%s",
-    allShops?.length ?? 0,
-    activeShops.length,
-    existing ? `${existing.id} (isActive=${existing.isActive})` : "NULL"
-  );
+  if (selectError) {
+    console.error("[ensureShop] SELECT failed:", selectError.code, selectError.message, selectError.details);
+  }
+  console.log("[ensureShop] DB lookup: existing=%s", existing ? existing.id : "NULL");
 
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
     console.log("[ensureShop] RETURNING existing active shop:", existing.id);
@@ -93,10 +92,13 @@ export async function ensureShop(
   // If shop exists (with pending token), update it
   if (existing) {
     if (accessToken) {
-      await supabase
+      const { error: updateErr } = await supabase
         .from("Shop")
         .update({ accessToken, updatedAt: new Date().toISOString() })
         .eq("id", existing.id);
+      if (updateErr) {
+        console.error("[ensureShop] token update failed:", updateErr.code, updateErr.message);
+      }
       console.log("[ensureShop] Updated access token for", shopDomain);
       registerBackgroundWork(shopDomain, accessToken, existing.id);
     }
@@ -123,16 +125,22 @@ export async function ensureShop(
     // 23505 = unique constraint violation — another request already created the record
     if (insertError.code === "23505") {
       console.log("[ensureShop] Record already exists (concurrent request won). Looking it up...");
-      const { data: allShops2 } = await supabase
+      const { data: conflictShop, error: conflictErr } = await supabase
         .from("Shop")
-        .select("id, accessToken, isActive")
-        .eq("shopDomain", shopDomain);
-      const winner = (allShops2 ?? []).find(s => s.isActive === true || s.isActive === "true" as any);
-      if (winner) {
-        if (accessToken && winner.accessToken === "pending_oauth") {
-          await supabase.from("Shop").update({ accessToken }).eq("id", winner.id);
+        .select("id, accessToken")
+        .eq("shopDomain", shopDomain)
+        .eq("isActive", true)
+        .order("installedAt", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (conflictErr) {
+        console.error("[ensureShop] conflict lookup failed:", conflictErr.code, conflictErr.message);
+      }
+      if (conflictShop?.id) {
+        if (accessToken && conflictShop.accessToken === "pending_oauth") {
+          await supabase.from("Shop").update({ accessToken }).eq("id", conflictShop.id);
         }
-        return { shopId: winner.id, shopDomain };
+        return { shopId: conflictShop.id, shopDomain };
       }
     }
     console.error("[ensureShop] INSERT FAILED: code=%s message=%s", insertError.code, insertError.message);
