@@ -104,23 +104,26 @@ export async function GET(req: NextRequest) {
   // This guarantees a clean slate — no old data bleeds into the new install.
   let shopRecord: { id: string; pixelId: string | null } | null = null;
 
-  // Save old pixelId so we can deregister it in background
-  const { data: oldShop } = await supabase
+  // Save old pixelId so we can deregister it in background.
+  // Fetch all rows and filter in JS — Supabase .eq("isActive", true) is unreliable
+  // (known PostgREST boolean coercion issue documented in ensure-shop.ts).
+  const { data: allOldShops } = await supabase
     .from("Shop")
-    .select("id, pixelId")
-    .eq("shopDomain", shop)
-    .eq("isActive", true)
-    .maybeSingle();
+    .select("id, pixelId, isActive")
+    .eq("shopDomain", shop);
+  const oldShop = (allOldShops ?? []).find(
+    s => s.isActive === true || s.isActive === "true" as any
+  ) ?? null;
 
   const oldPixelId = oldShop?.pixelId ?? null;
 
-  // Deactivate ALL existing records for this domain (handles both uninstall
-  // webhook fired and webhook delayed cases)
+  // Deactivate ALL existing records for this domain — no isActive filter so we
+  // catch rows that may have a stringified boolean or corrupted state.
+  // Handles both: uninstall webhook already fired, and webhook delayed/missed cases.
   await supabase
     .from("Shop")
     .update({ isActive: false, pixelId: null })
-    .eq("shopDomain", shop)
-    .eq("isActive", true);
+    .eq("shopDomain", shop);
 
   if (oldShop) {
     console.log(`[AUTH] STEP 4 DEACTIVATED old shop record:`, oldShop.id);

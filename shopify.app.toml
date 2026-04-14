@@ -3,6 +3,10 @@ client_id = "ef34a3eb07ec4333b42d63385823433b"
 application_url = "https://couponmaxx.vercel.app"
 embedded = true
 
+[app_info]
+privacy_policy_url = "https://couponmaxx.vercel.app/privacy"
+terms_of_service_url = "https://couponmaxx.vercel.app/terms"
+
 [access_scopes]
 scopes = "read_orders,read_checkouts,write_pixels,read_customer_events,read_analytics,write_discounts"
 
@@ -12,7 +16,7 @@ redirect_urls = [
 ]
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2025-07"
 
 [webhooks.privacy_compliance]
 customer_data_request_url = "https://couponmaxx.vercel.app/api/webhooks/customers/data-request"
@@ -25,3 +29,7 @@ embedded = false
 [[extensions]]
 type = "web_pixel"
 handle = "checkout-monitor"
+
+[[extensions]]
+type = "theme"
+handle = "cart-monitor"

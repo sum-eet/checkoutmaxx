@@ -12,11 +12,16 @@ const nextConfig = {
           { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
         ],
       },
-      // Allow Shopify to frame the app
+      // Allow Shopify admin to frame the app (frame-ancestors) + legacy X-Frame-Options
       {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options", value: "ALLOWALL" },
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors https://*.shopify.com https://admin.shopify.com https://*.myshopify.com;",
+          },
         ],
       },
     ];

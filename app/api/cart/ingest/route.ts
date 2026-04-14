@@ -3,21 +3,34 @@ import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
 import { logIngest } from '@/lib/ingest-log';
 
-// Cache shop lookups — only cache successful results.
-// Null results are NOT cached so that a newly created Shop
-// is picked up without waiting for a cold start.
-const shopCache = new Map<string, string>();
+// Rate limiting: 500 requests per minute per shop domain
+const RATE_LIMIT = 500;
+const RATE_WINDOW_MS = 60_000;
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+// Cache shop lookups with a 60s TTL.
+// After reinstall, a warm function instance would otherwise serve the old shopId
+// indefinitely. TTL bounds the window to at most 60s of stale routing.
+// Null results are NOT cached so a newly created Shop is picked up immediately.
+const CACHE_TTL_MS = 60_000;
+const shopCache = new Map<string, { id: string; cachedAt: number }>();
 
 async function resolveShopId(shopDomain: string): Promise<string | null> {
-  if (shopCache.has(shopDomain)) return shopCache.get(shopDomain)!;
+  const cached = shopCache.get(shopDomain);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.id;
+  }
+  shopCache.delete(shopDomain);
   const { data } = await supabase
     .from('Shop')
     .select('id')
     .eq('shopDomain', shopDomain)
     .eq('isActive', true)
+    .order('installedAt', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (data?.id) {
-    shopCache.set(shopDomain, data.id);
+    shopCache.set(shopDomain, { id: data.id, cachedAt: Date.now() });
     return data.id;
   }
   // Do NOT cache null — shop may be created shortly after
@@ -46,6 +59,20 @@ export async function POST(req: NextRequest) {
     text = await req.text();
   } catch {
     return NextResponse.json({ ok: false }, { headers: CORS_HEADERS });
+  }
+
+  // Rate limit by shop domain (extracted cheaply from raw body before full parse)
+  const shopDomainMatch = text.match(/"shopDomain"\s*:\s*"([^"]+)"/);
+  const rateLimitKey = shopDomainMatch?.[1] ?? req.headers.get("x-forwarded-for") ?? "unknown";
+  const now = Date.now();
+  const entry = rateLimitMap.get(rateLimitKey);
+  if (entry && now < entry.resetAt) {
+    if (entry.count >= RATE_LIMIT) {
+      return NextResponse.json({ ok: false }, { status: 429, headers: CORS_HEADERS });
+    }
+    entry.count++;
+  } else {
+    rateLimitMap.set(rateLimitKey, { count: 1, resetAt: now + RATE_WINDOW_MS });
   }
 
   // Respond immediately — sendBeacon doesn't care about response body

@@ -9,7 +9,7 @@ export const shopify = shopifyApi({
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "build-placeholder",
   scopes: ["read_orders", "read_checkouts", "write_pixels", "read_customer_events", "read_analytics", "write_discounts"],
   hostName: (process.env.SHOPIFY_APP_URL || "localhost:3000").replace(/^https?:\/\//, ""),
-  apiVersion: ApiVersion.January25,
+  apiVersion: ApiVersion.April25,
   isEmbeddedApp: true,
   logger: {
     level: process.env.NODE_ENV === "development" ? LogSeverity.Debug : LogSeverity.Error,
@@ -18,32 +18,47 @@ export const shopify = shopifyApi({
 
 export const sessionStorage = new PrismaSessionStorage();
 
+const WEBHOOK_SUBSCRIPTION_CREATE = `
+  mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
+    webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
+      webhookSubscription { id }
+      userErrors { field message }
+    }
+  }
+`;
+
 /**
- * Register the APP_UNINSTALLED webhook.
+ * Register app webhooks via GraphQL Admin API.
  * Called after OAuth completes — fire and forget.
+ * GDPR topics (customers/data_request, customers/redact, shop/redact) cannot be
+ * registered programmatically — they must be set in shopify.app.toml.
  */
 export async function registerWebhooks(session: Session) {
-  const client = new shopify.clients.Rest({ session });
+  const client = new shopify.clients.Graphql({ session });
   const base = process.env.SHOPIFY_APP_URL;
 
-  // GDPR topics (customers/data_request, customers/redact, shop/redact) cannot be
-  // registered via the REST API — they must be set in the Shopify Partner Dashboard.
-  const topics = [
-    { topic: "app/uninstalled", address: `${base}/api/webhooks/app-uninstalled` },
-    { topic: "app_subscriptions/update", address: `${base}/api/webhooks/app-subscriptions-update` },
+  const webhooks = [
+    { topic: "APP_UNINSTALLED", address: `${base}/api/webhooks/app-uninstalled` },
+    { topic: "APP_SUBSCRIPTIONS_UPDATE", address: `${base}/api/webhooks/app-subscriptions-update` },
   ];
 
-  for (const { topic, address } of topics) {
+  for (const { topic, address } of webhooks) {
     try {
-      await client.post({
-        path: "webhooks",
-        data: { webhook: { topic, address, format: "json" } },
+      const response = await client.request(WEBHOOK_SUBSCRIPTION_CREATE, {
+        variables: {
+          topic,
+          webhookSubscription: { callbackUrl: address, format: "JSON" },
+        },
       });
-    } catch (err: any) {
-      const msg = JSON.stringify(err?.response?.body || err?.message || "");
-      if (!msg.includes("already been taken")) {
-        console.error(`[registerWebhooks] Failed ${topic}:`, msg);
+      const errors = (response.data as any)?.webhookSubscriptionCreate?.userErrors ?? [];
+      const alreadyExists = errors.some((e: any) =>
+        e.message?.toLowerCase().includes("already been taken")
+      );
+      if (errors.length && !alreadyExists) {
+        console.error(`[registerWebhooks] Failed ${topic}:`, errors);
       }
+    } catch (err: any) {
+      console.error(`[registerWebhooks] Error registering ${topic}:`, err?.message);
     }
   }
 }

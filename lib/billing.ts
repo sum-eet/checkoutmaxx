@@ -27,15 +27,15 @@ export async function createSubscription(
   const session = makeSession(shop, accessToken);
   const client = new shopify.clients.Graphql({ session });
 
-  const response = await client.query({
-    data: {
-      query: `mutation appSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
-        appSubscriptionCreate(name: $name, lineItems: $lineItems, returnUrl: $returnUrl, test: $test) {
-          appSubscription { id }
-          confirmationUrl
-          userErrors { field message }
-        }
-      }`,
+  const response = await client.request(
+    `mutation appSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean) {
+      appSubscriptionCreate(name: $name, lineItems: $lineItems, returnUrl: $returnUrl, test: $test) {
+        appSubscription { id }
+        confirmationUrl
+        userErrors { field message }
+      }
+    }`,
+    {
       variables: {
         name: PRO_PLAN.name,
         returnUrl,
@@ -54,12 +54,11 @@ export async function createSubscription(
           },
         ],
       },
-    },
-  });
+    }
+  );
 
-  type CreateResponse = { data: { appSubscriptionCreate: { appSubscription: { id: string }; confirmationUrl: string; userErrors: { field: string; message: string }[] } } };
-  const body = response.body as unknown as CreateResponse;
-  const data = body.data.appSubscriptionCreate;
+  const data = (response.data as any)?.appSubscriptionCreate;
+  if (!data) throw new Error("No response from appSubscriptionCreate");
   if (data.userErrors?.length) throw new Error(data.userErrors[0].message);
   return data.confirmationUrl;
 }
@@ -71,14 +70,10 @@ export async function getActiveSubscription(
   const session = makeSession(shop, accessToken);
   const client = new shopify.clients.Graphql({ session });
 
-  const response = await client.query({
-    data: {
-      query: `{ currentAppInstallation { activeSubscriptions { id status } } }`,
-    },
-  });
+  const response = await client.request(
+    `{ currentAppInstallation { activeSubscriptions { id status } } }`
+  );
 
-  type SubsResponse = { data: { currentAppInstallation: { activeSubscriptions: { id: string; status: string }[] } } };
-  const body = response.body as unknown as SubsResponse;
-  const subs = body.data.currentAppInstallation.activeSubscriptions;
-  return subs?.[0] ?? null;
+  const subs = (response.data as any)?.currentAppInstallation?.activeSubscriptions ?? [];
+  return subs[0] ?? null;
 }
