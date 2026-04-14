@@ -15,7 +15,7 @@
     shopDomain: script && script.dataset.shop ? script.dataset.shop : window.location.hostname,
     recoveryUrl: script && script.dataset.recoveryUrl
       ? script.dataset.recoveryUrl
-      : 'https://couponmaxx.vercel.app/api/couponmaxx/recovery/decide',
+      : 'https://couponmaxx.vercel.app/api/couponmaxx/cx',
   };
 
   var _inflight = false;
@@ -143,9 +143,12 @@
         source: getUtm(),
       }),
     })
-      .then(function (r) { return r.json(); })
-      .then(render)
-      .catch(function (e) { console.warn('[CouponMaxx Recovery]', e); })
+      .then(function (r) {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then(function (data) { if (data) render(data); })
+      .catch(function () { /* recovery endpoint not available — silent */ })
       .finally(function () { setTimeout(function () { _inflight = false; }, 3000); });
   }
 
