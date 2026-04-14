@@ -1,6 +1,5 @@
 /**
  * CouponMaxx Smart Recovery — storefront script
- * Rules: NEVER create DOM elements. Only write into Shopify's existing error container.
  */
 (function () {
   'use strict';
@@ -23,14 +22,21 @@
   var _lastInputValue = '';
   var _recoveryCodes = {};
 
-  // Shopify error elements — we ONLY write into these, never create new ones
+  // Known error element selectors across common Shopify themes.
+  // Dawn uses id="${inputId}-error" pattern; others use class-based selectors.
   var ERROR_SELECTORS = [
-    '[data-cart-discount-errors]', '.cart-discount__error',
+    '#CartDiscountCode-error',
+    '#CartDiscountCode-CartDrawer-error',
+    '[data-cart-discount-errors]',
+    '.cart-discount__error',
     '#CartDiscountCode-CartDrawer ~ .field__message--error',
     '#CartDiscountCode ~ .field__message--error',
     '[id*="DiscountCode"] + .field__message--error',
     '[id*="discount"] + .field__message--error',
-    '.discount-field ~ p.error', '.discount__message--error', '[data-discount-error]',
+    '.discount-field ~ p.error',
+    '.discount__message--error',
+    '[data-discount-error]',
+    'input[name="discount"] ~ p[role="alert"]',
   ];
 
   var INPUT_SELECTORS = [
@@ -45,8 +51,26 @@
   function findInput() { return findFirst(INPUT_SELECTORS); }
 
   function findErrorContainer() {
-    // Only return Shopify's existing error element — NEVER create new ones
-    return findFirst(ERROR_SELECTORS);
+    // 1. Try known selectors first
+    var found = findFirst(ERROR_SELECTORS);
+    if (found) return found;
+
+    // 2. DOM traversal fallback — walk up from the discount input and search
+    //    nearby subtrees for an error/alert element. Handles themes where the
+    //    error <p> is a sibling of a wrapping <div> rather than the input itself.
+    var input = findInput();
+    if (!input) return null;
+
+    var node = input;
+    for (var depth = 0; depth < 3; depth++) {
+      var parent = node.parentNode;
+      if (!parent) break;
+      var sibling = parent.querySelector('.field__message--error, [role="alert"], .cart-discount__error');
+      if (sibling && sibling !== input) return sibling;
+      node = parent;
+    }
+
+    return null;
   }
 
   // ── Clean up any stale recovery messages ───────────────────────────────────
@@ -56,10 +80,14 @@
     for (var i = 0; i < old.length; i++) {
       old[i].classList.remove('cmx-recovery-active');
       old[i].innerHTML = '';
+      // If we created this element as a fallback, remove it entirely
+      if (old[i].id === 'cmx-recovery-msg' && old[i].parentNode) {
+        old[i].parentNode.removeChild(old[i]);
+      }
     }
   }
 
-  // ── Render — into existing Shopify error element only ──────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   function render(resp) {
     if (resp.action === 'show_nothing' || !resp.action) return;
@@ -69,14 +97,39 @@
     }
 
     var container = findErrorContainer();
-    if (!container) return;
+
+    // Last-resort fallback: create a <p> adjacent to the discount form.
+    // Uses the theme's own CSS class so it inherits styling automatically.
+    if (!container) {
+      var input = findInput();
+      if (!input) return;
+      var fallback = document.createElement('p');
+      fallback.className = 'field__message--error';
+      fallback.id = 'cmx-recovery-msg';
+      fallback.setAttribute('role', 'alert');
+      fallback.setAttribute('aria-live', 'polite');
+      var anchor = input.closest('form') || input.parentNode;
+      if (anchor && anchor.parentNode) {
+        anchor.parentNode.insertBefore(fallback, anchor.nextSibling);
+      } else {
+        input.parentNode.insertBefore(fallback, input.nextSibling);
+      }
+      container = fallback;
+    }
 
     if (_observer) _observer.disconnect();
 
-    // Clean up any duplicates first
     cleanupOldMessages();
 
     container.classList.add('cmx-recovery-active');
+
+    // Force the container visible — themes hide it when empty via CSS or attributes
+    container.removeAttribute('hidden');
+    container.removeAttribute('aria-hidden');
+    container.setAttribute('aria-live', 'polite');
+    if (window.getComputedStyle(container).display === 'none') {
+      container.style.display = 'block';
+    }
 
     if (resp.action === 'show_code' && resp.code) {
       container.textContent = '';
@@ -166,7 +219,7 @@
 
   function watchErrors() {
     _observer = new MutationObserver(function () {
-      var el = findFirst(ERROR_SELECTORS);
+      var el = findErrorContainer();
       if (!el || el.classList.contains('cmx-recovery-active')) return;
       var t = el.textContent && el.textContent.trim();
       if (!t) return;
