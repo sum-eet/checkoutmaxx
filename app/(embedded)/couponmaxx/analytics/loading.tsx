@@ -1,4 +1,5 @@
-import { Page, SkeletonPage, SkeletonBodyText, SkeletonDisplayText, Card, BlockStack, InlineGrid } from "@shopify/polaris";
+"use client";
+import { SkeletonPage, SkeletonBodyText, SkeletonDisplayText, Card, BlockStack, InlineGrid } from "@shopify/polaris";
 
 export default function AnalyticsLoading() {
   return (

@@ -1,3 +1,4 @@
+"use client";
 import { SkeletonPage, SkeletonBodyText, SkeletonDisplayText, Card, BlockStack } from "@shopify/polaris";
 
 export default function SessionsLoading() {
