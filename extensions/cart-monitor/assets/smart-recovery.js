@@ -134,6 +134,14 @@
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+  // We ALWAYS inject our own element appended directly to <body>.
+  // Never write into Shopify's cart section elements — morph.js will
+  // immediately overwrite anything we put there on the next cart re-render.
+
+  function removeExistingBanner() {
+    var old = document.getElementById('cmx-recovery-banner');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+  }
 
   function render(resp) {
     console.log('[CMX Recovery] render called, resp:', resp);
@@ -146,104 +154,68 @@
       _recoveryCodes[resp.code.toUpperCase()] = true;
     }
 
-    var container = findErrorContainer();
-
-    // Last-resort fallback: inject a recovery message element near the discount area.
-    if (!container) {
-      console.log('[CMX Recovery] render: no container found, injecting fallback element');
-      var input = findInput();
-      var fallback = document.createElement('p');
-      fallback.className = 'field__message--error cmx-recovery-injected';
-      fallback.id = 'cmx-recovery-msg';
-      fallback.setAttribute('role', 'alert');
-      fallback.setAttribute('aria-live', 'polite');
-
-      var inserted = false;
-
-      if (input) {
-        // 1. Try: after the discount form element
-        var discountForm = input.closest('form');
-        if (discountForm && discountForm.parentNode) {
-          discountForm.parentNode.insertBefore(fallback, discountForm.nextSibling);
-          inserted = true;
-          console.log('[CMX Recovery] render: injected after discount form');
-        }
-        // 2. Try: after the input's immediate parent
-        if (!inserted && input.parentNode && input.parentNode.parentNode) {
-          input.parentNode.parentNode.insertBefore(fallback, input.parentNode.nextSibling);
-          inserted = true;
-          console.log('[CMX Recovery] render: injected after input parent');
-        }
-        // 3. Try: directly after the input
-        if (!inserted && input.parentNode) {
-          input.parentNode.insertBefore(fallback, input.nextSibling);
-          inserted = true;
-          console.log('[CMX Recovery] render: injected after input');
-        }
-      }
-
-      // 4. Try: before the checkout button (visible on all themes)
-      if (!inserted) {
-        var checkoutBtn = document.querySelector('[name="checkout"], .cart__ctas, .cart-checkout-button, [data-cart-checkout]');
-        if (checkoutBtn && checkoutBtn.parentNode) {
-          checkoutBtn.parentNode.insertBefore(fallback, checkoutBtn);
-          inserted = true;
-          console.log('[CMX Recovery] render: injected before checkout button');
-        }
-      }
-
-      // 5. Last resort: sticky banner pinned to bottom of viewport
-      if (!inserted) {
-        console.log('[CMX Recovery] render: using sticky banner fallback');
-        fallback.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#fff;border:1px solid #c44;border-radius:8px;padding:10px 16px;font-size:13px;color:#c44;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:90vw;';
-        document.body.appendChild(fallback);
-        inserted = true;
-      }
-
-      if (!inserted) {
-        console.log('[CMX Recovery] render: FAILED to insert fallback element');
-        return;
-      }
-      container = fallback;
-    }
-
     if (_observer) _observer.disconnect();
+    removeExistingBanner();
 
-    cleanupOldMessages();
+    // Build our own banner appended to <body> — Shopify's morph.js never
+    // touches direct body children that it didn't put there.
+    var banner = document.createElement('div');
+    banner.id = 'cmx-recovery-banner';
+    banner.setAttribute('role', 'alert');
+    banner.setAttribute('aria-live', 'polite');
+    banner.style.cssText = [
+      'position:fixed',
+      'bottom:24px',
+      'left:50%',
+      'transform:translateX(-50%)',
+      'z-index:2147483647',
+      'background:#fff3cd',
+      'border:1.5px solid #e6a817',
+      'border-radius:10px',
+      'padding:12px 20px',
+      'font-size:14px',
+      'color:#7a4f00',
+      'box-shadow:0 4px 16px rgba(0,0,0,0.18)',
+      'max-width:92vw',
+      'text-align:center',
+      'cursor:default',
+    ].join(';');
 
-    container.classList.add('cmx-recovery-active');
-
-    // Force the container visible — themes hide it when empty via CSS or attributes
-    container.removeAttribute('hidden');
-    container.removeAttribute('aria-hidden');
-    container.setAttribute('aria-live', 'polite');
-    if (window.getComputedStyle(container).display === 'none') {
-      container.style.display = 'block';
-    }
+    // Close button
+    var close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '\u00d7';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.style.cssText = 'float:right;margin-left:12px;background:none;border:none;font-size:18px;cursor:pointer;color:#7a4f00;line-height:1;padding:0;';
+    close.addEventListener('click', removeExistingBanner);
+    banner.appendChild(close);
 
     if (resp.action === 'show_code' && resp.code) {
-      container.textContent = '';
-      var text1 = document.createTextNode("That code didn\u2019t work? try ");
-      container.appendChild(text1);
+      var msg = document.createElement('span');
+      msg.textContent = "That code didn\u2019t work \u2014 try ";
+      banner.appendChild(msg);
 
       var pill = document.createElement('button');
       pill.type = 'button';
       pill.className = 'cmx-code-pill';
       pill.textContent = resp.code;
+      pill.style.cssText = 'background:#e6a817;color:#fff;border:none;border-radius:5px;padding:3px 10px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.05em;margin:0 4px;';
       pill.addEventListener('click', function () {
         if (navigator.clipboard) navigator.clipboard.writeText(resp.code);
         pill.textContent = 'Copied!';
         setTimeout(function () { pill.textContent = resp.code; }, 2000);
       });
-      container.appendChild(pill);
+      banner.appendChild(pill);
 
       if (resp.expiresInMinutes) {
-        container.appendChild(document.createTextNode(' valid for ' + resp.expiresInMinutes + ' mins only'));
+        var exp = document.createElement('span');
+        exp.textContent = ' \u2014 valid for ' + resp.expiresInMinutes + ' mins';
+        banner.appendChild(exp);
       }
       console.log('[CMX Recovery] render: showed recovery code', resp.code);
     } else {
       var reason = resp._resolvedReason || 'invalid';
-      container.textContent = ({
+      var text = ({
         expired: "That code has expired.",
         min_not_met: "Add more to your cart to use this code.",
         usage_limit: "That code has been fully redeemed.",
@@ -251,8 +223,17 @@
         already_used: "You\u2019ve already used this code.",
         invalid: "That code didn\u2019t work.",
       })[reason] || "That code didn\u2019t work.";
+      var msgEl = document.createElement('span');
+      msgEl.textContent = text;
+      banner.appendChild(msgEl);
       console.log('[CMX Recovery] render: showed explanation for reason', reason);
     }
+
+    document.body.appendChild(banner);
+    console.log('[CMX Recovery] render: banner injected into body');
+
+    // Auto-dismiss after 12 seconds
+    setTimeout(removeExistingBanner, 12000);
 
     // Reconnect observer after DOM settles
     setTimeout(function () {
