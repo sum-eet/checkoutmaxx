@@ -736,6 +736,37 @@
         }
         storeSessionInCart();
       }
+
+      // Catch HTML form-based coupon application (page reload case).
+      // When a merchant's theme uses a native <form> POST instead of fetch/XHR,
+      // our interceptors never fire. On page load, check the cart JSON directly
+      // for any discount codes that were applied but are not applicable.
+      if (cart && Array.isArray(cart.discount_codes)) {
+        cart.discount_codes.forEach(function(dc) {
+          if (dc.applicable === false && dc.code) {
+            _couponFailureCount++;
+            console.log('[CheckoutMaxx] Page-load invalid discount detected:', dc.code);
+            window.dispatchEvent(new CustomEvent('cmx:coupon_failed', {
+              detail: {
+                code: dc.code,
+                failureReason: 'unknown',
+                cartValue: cart.total_price || 0,
+                lineItems: (cart.items || []).map(function(i) {
+                  return {
+                    productId: i.product_id,
+                    variantId: i.variant_id,
+                    productTitle: i.product_title,
+                    price: i.price,
+                    quantity: i.quantity,
+                  };
+                }),
+                sessionId: getSessionId(),
+                attemptsThisSession: _couponFailureCount,
+              },
+            }));
+          }
+        });
+      }
     })
     .catch(function() {});
 

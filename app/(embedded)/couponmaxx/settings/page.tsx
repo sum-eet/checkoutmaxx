@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import useSWR from 'swr';
 import {
+  Badge,
   Banner,
   BlockStack,
   Box,
@@ -11,6 +12,7 @@ import {
   Divider,
   FormLayout,
   InlineStack,
+  Link,
   Page,
   Select,
   Text,
@@ -99,6 +101,167 @@ const FAILURE_LABELS: Record<string, string> = {
   invalid:          'Unknown / invalid code',
   already_used:     'Already used by customer',
 };
+
+// ---------------------------------------------------------------------------
+// Health check types + component
+// ---------------------------------------------------------------------------
+
+type HealthData = {
+  shopDomain: string;
+  theme: { name: string; compatibility: 'full' | 'partial' | 'unknown' };
+  lastCartEvent: string | null;
+  lastCouponFailed: string | null;
+  lastRecoveryOffered: string | null;
+  recoveryEnabled: boolean;
+  invalidRuleEnabled: boolean;
+};
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return 'Never';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function isRecent(iso: string | null, thresholdMs = 24 * 60 * 60 * 1000): boolean {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() < thresholdMs;
+}
+
+function RecoveryStatusCard({ shop }: { shop: string }) {
+  const { data, isLoading } = useSWR<HealthData>(
+    shop ? `/api/couponmaxx/health?shop=${shop}` : null,
+    (url: string) => fetch(url).then((r) => r.json()),
+    { refreshInterval: 30000, revalidateOnFocus: true }
+  );
+
+  if (isLoading || !data) {
+    return (
+      <Card>
+        <Text as="p" tone="subdued">Checking recovery status…</Text>
+      </Card>
+    );
+  }
+
+  const cartActive = isRecent(data.lastCartEvent);
+  const neverActive = !data.lastCartEvent;
+  const compatLabel = data.theme.compatibility === 'full'
+    ? 'Fully Compatible'
+    : data.theme.compatibility === 'partial'
+    ? 'Partial Support — test to verify'
+    : 'Custom Theme — test to verify';
+  const compatTone = data.theme.compatibility === 'full' ? 'success' : 'warning';
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="p" variant="headingMd">Smart Recovery Status</Text>
+          <Button
+            size="slim"
+            url={`https://${data.shopDomain}/cart`}
+            target="_blank"
+          >
+            Open storefront cart
+          </Button>
+        </InlineStack>
+
+        {neverActive && (
+          <Banner tone="warning">
+            <p>
+              <strong>Extension may not be active.</strong> Go to{' '}
+              <Link url={`https://${data.shopDomain}/admin/themes/current/editor`} target="_blank">
+                Shopify Admin → Online Store → Themes → Customize
+              </Link>{' '}
+              → App Embeds and enable CouponMaxx.
+            </p>
+          </Banner>
+        )}
+
+        {!data.invalidRuleEnabled && data.recoveryEnabled && (
+          <Banner tone="critical">
+            <p>
+              <strong>Invalid code recovery is disabled.</strong> Customers entering fake or expired
+              codes will see no suggestion. Enable the &quot;Unknown / invalid code&quot; rule below.
+            </p>
+          </Banner>
+        )}
+
+        <BlockStack gap="200">
+          {/* Theme */}
+          <InlineStack gap="200" blockAlign="center">
+            <Box minWidth="140px">
+              <Text as="p" tone="subdued" variant="bodySm">Theme</Text>
+            </Box>
+            <Text as="p" variant="bodySm">{data.theme.name}</Text>
+            <Badge tone={compatTone}>{compatLabel}</Badge>
+          </InlineStack>
+
+          {/* Cart Monitor */}
+          <InlineStack gap="200" blockAlign="center">
+            <Box minWidth="140px">
+              <Text as="p" tone="subdued" variant="bodySm">Cart Monitor</Text>
+            </Box>
+            <Badge tone={cartActive ? 'success' : neverActive ? 'critical' : 'warning'}>
+              {neverActive ? 'Never seen' : cartActive ? 'Active' : 'Inactive'}
+            </Badge>
+            <Text as="p" tone="subdued" variant="bodySm">{timeAgo(data.lastCartEvent)}</Text>
+          </InlineStack>
+
+          {/* Coupon failures */}
+          <InlineStack gap="200" blockAlign="center">
+            <Box minWidth="140px">
+              <Text as="p" tone="subdued" variant="bodySm">Coupon Failures</Text>
+            </Box>
+            <Badge tone={data.lastCouponFailed ? 'success' : 'info'}>
+              {data.lastCouponFailed ? 'Detected' : 'None yet'}
+            </Badge>
+            {data.lastCouponFailed && (
+              <Text as="p" tone="subdued" variant="bodySm">{timeAgo(data.lastCouponFailed)}</Text>
+            )}
+            {!data.lastCouponFailed && (
+              <Text as="p" tone="subdued" variant="bodySm">
+                Apply a fake coupon on your cart to test
+              </Text>
+            )}
+          </InlineStack>
+
+          {/* Recovery offers */}
+          <InlineStack gap="200" blockAlign="center">
+            <Box minWidth="140px">
+              <Text as="p" tone="subdued" variant="bodySm">Recovery Offers</Text>
+            </Box>
+            <Badge tone={data.lastRecoveryOffered ? 'success' : 'info'}>
+              {data.lastRecoveryOffered ? 'Working' : 'None yet'}
+            </Badge>
+            {data.lastRecoveryOffered && (
+              <Text as="p" tone="subdued" variant="bodySm">{timeAgo(data.lastRecoveryOffered)}</Text>
+            )}
+            {!data.lastRecoveryOffered && (
+              <Text as="p" tone="subdued" variant="bodySm">
+                Will show after first failure is handled
+              </Text>
+            )}
+          </InlineStack>
+
+          {/* Invalid rule */}
+          <InlineStack gap="200" blockAlign="center">
+            <Box minWidth="140px">
+              <Text as="p" tone="subdued" variant="bodySm">Invalid Rule</Text>
+            </Box>
+            <Badge tone={data.invalidRuleEnabled ? 'success' : 'critical'}>
+              {data.invalidRuleEnabled ? 'Enabled' : 'Disabled'}
+            </Badge>
+          </InlineStack>
+        </BlockStack>
+      </BlockStack>
+    </Card>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -338,6 +501,9 @@ export default function SmartRecoverySettings() {
       </SaveBar>
 
       <BlockStack gap="400">
+
+        {/* ── Recovery health check ──────────────────────────────────────── */}
+        {shop && <RecoveryStatusCard shop={shop} />}
 
         {isFirstVisit && (
           <Banner tone="info">
