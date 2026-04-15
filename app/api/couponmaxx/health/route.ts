@@ -9,20 +9,18 @@ import { Session } from '@shopify/shopify-api';
 // Shopify Theme Store IDs → compatibility level
 // themeStoreId 0 = custom/unlisted theme
 const THEME_COMPAT: Record<number, 'full' | 'partial'> = {
-  887: 'full',   // Dawn
-  796: 'full',   // Debut
-  730: 'full',   // Craft
-  779: 'full',   // Refresh
-  887: 'full',   // Dawn (duplicate key safety)
+  887: 'full',    // Dawn
+  796: 'full',    // Debut
+  730: 'full',    // Craft
+  779: 'full',    // Refresh
+  795: 'full',    // Crave
+  829: 'full',    // Studio
   380: 'partial', // Brooklyn
   413: 'partial', // Narrative
   378: 'partial', // Supply
   453: 'partial', // Simple
-  730: 'full',   // Craft
-  795: 'full',   // Crave
   766: 'partial', // Colorblock
   843: 'partial', // Sense
-  829: 'full',   // Studio
   814: 'partial', // Spotlight
 };
 
