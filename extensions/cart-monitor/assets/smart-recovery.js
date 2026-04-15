@@ -17,8 +17,11 @@
       : 'https://couponmaxx.vercel.app/api/couponmaxx/cx',
   };
 
+  console.log('[CMX Recovery] script loaded, CONFIG:', CONFIG);
+
   var _inflight = false;
   var _observer = null;
+  var _debounceTimer = null;
   var _lastInputValue = '';
   var _recoveryCodes = {};
 
@@ -87,23 +90,32 @@
   function findErrorContainer() {
     // 1. Try known selectors first
     var found = findFirst(ERROR_SELECTORS);
-    if (found) return found;
+    if (found) {
+      console.log('[CMX Recovery] findErrorContainer: found via selector, el:', found, 'text:', found.textContent && found.textContent.trim());
+      return found;
+    }
 
     // 2. DOM traversal fallback — walk up from the discount input and search
-    //    nearby subtrees for an error/alert element. Handles themes where the
-    //    error <p> is a sibling of a wrapping <div> rather than the input itself.
+    //    nearby subtrees for an error/alert element.
     var input = findInput();
-    if (!input) return null;
+    if (!input) {
+      console.log('[CMX Recovery] findErrorContainer: no input found either');
+      return null;
+    }
 
     var node = input;
     for (var depth = 0; depth < 3; depth++) {
       var parent = node.parentNode;
       if (!parent) break;
       var sibling = parent.querySelector('.field__message--error, [role="alert"], .cart-discount__error');
-      if (sibling && sibling !== input) return sibling;
+      if (sibling && sibling !== input) {
+        console.log('[CMX Recovery] findErrorContainer: found via DOM traversal at depth', depth, sibling);
+        return sibling;
+      }
       node = parent;
     }
 
+    console.log('[CMX Recovery] findErrorContainer: no container found');
     return null;
   }
 
@@ -124,7 +136,11 @@
   // ── Render ─────────────────────────────────────────────────────────────────
 
   function render(resp) {
-    if (resp.action === 'show_nothing' || !resp.action) return;
+    console.log('[CMX Recovery] render called, resp:', resp);
+    if (resp.action === 'show_nothing' || !resp.action) {
+      console.log('[CMX Recovery] render: action is show_nothing or missing — not rendering');
+      return;
+    }
 
     if (resp.code) {
       _recoveryCodes[resp.code.toUpperCase()] = true;
@@ -133,8 +149,8 @@
     var container = findErrorContainer();
 
     // Last-resort fallback: inject a recovery message element near the discount area.
-    // Try multiple insertion points before resorting to a sticky banner.
     if (!container) {
+      console.log('[CMX Recovery] render: no container found, injecting fallback element');
       var input = findInput();
       var fallback = document.createElement('p');
       fallback.className = 'field__message--error cmx-recovery-injected';
@@ -150,16 +166,19 @@
         if (discountForm && discountForm.parentNode) {
           discountForm.parentNode.insertBefore(fallback, discountForm.nextSibling);
           inserted = true;
+          console.log('[CMX Recovery] render: injected after discount form');
         }
         // 2. Try: after the input's immediate parent
         if (!inserted && input.parentNode && input.parentNode.parentNode) {
           input.parentNode.parentNode.insertBefore(fallback, input.parentNode.nextSibling);
           inserted = true;
+          console.log('[CMX Recovery] render: injected after input parent');
         }
         // 3. Try: directly after the input
         if (!inserted && input.parentNode) {
           input.parentNode.insertBefore(fallback, input.nextSibling);
           inserted = true;
+          console.log('[CMX Recovery] render: injected after input');
         }
       }
 
@@ -169,17 +188,22 @@
         if (checkoutBtn && checkoutBtn.parentNode) {
           checkoutBtn.parentNode.insertBefore(fallback, checkoutBtn);
           inserted = true;
+          console.log('[CMX Recovery] render: injected before checkout button');
         }
       }
 
       // 5. Last resort: sticky banner pinned to bottom of viewport
       if (!inserted) {
+        console.log('[CMX Recovery] render: using sticky banner fallback');
         fallback.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:99999;background:#fff;border:1px solid #c44;border-radius:8px;padding:10px 16px;font-size:13px;color:#c44;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:90vw;';
         document.body.appendChild(fallback);
         inserted = true;
       }
 
-      if (!inserted) return;
+      if (!inserted) {
+        console.log('[CMX Recovery] render: FAILED to insert fallback element');
+        return;
+      }
       container = fallback;
     }
 
@@ -216,6 +240,7 @@
       if (resp.expiresInMinutes) {
         container.appendChild(document.createTextNode(' valid for ' + resp.expiresInMinutes + ' mins only'));
       }
+      console.log('[CMX Recovery] render: showed recovery code', resp.code);
     } else {
       var reason = resp._resolvedReason || 'invalid';
       container.textContent = ({
@@ -226,6 +251,7 @@
         already_used: "You\u2019ve already used this code.",
         invalid: "That code didn\u2019t work.",
       })[reason] || "That code didn\u2019t work.";
+      console.log('[CMX Recovery] render: showed explanation for reason', reason);
     }
 
     // Reconnect observer after DOM settles
@@ -237,12 +263,19 @@
   // ── API call ───────────────────────────────────────────────────────────────
 
   function callApi(detail) {
-    if (_inflight) return;
+    if (_inflight) {
+      console.log('[CMX Recovery] callApi: skipped — request already inflight');
+      return;
+    }
 
     var code = (detail.code || '').toUpperCase();
-    if (_recoveryCodes[code]) return;
+    if (_recoveryCodes[code]) {
+      console.log('[CMX Recovery] callApi: skipped — code already in recovery set:', code);
+      return;
+    }
 
     _inflight = true;
+    console.log('[CMX Recovery] callApi: sending request to', CONFIG.recoveryUrl, 'payload:', detail);
 
     fetch(CONFIG.recoveryUrl, {
       method: 'POST',
@@ -263,11 +296,20 @@
       }),
     })
       .then(function (r) {
-        if (!r.ok) return null;
+        console.log('[CMX Recovery] API response status:', r.status);
+        if (!r.ok) {
+          console.warn('[CMX Recovery] API returned non-ok status:', r.status);
+          return null;
+        }
         return r.json();
       })
-      .then(function (data) { if (data) render(data); })
-      .catch(function () { /* recovery endpoint not available — silent */ })
+      .then(function (data) {
+        console.log('[CMX Recovery] API response data:', data);
+        if (data) render(data);
+      })
+      .catch(function (err) {
+        console.warn('[CMX Recovery] API fetch error:', err);
+      })
       .finally(function () { setTimeout(function () { _inflight = false; }, 3000); });
   }
 
@@ -288,10 +330,12 @@
   function triggerIfInvalidCode(code, sid) {
     if (!code) return;
     if (_recoveryCodes[code.toUpperCase()]) return;
+    console.log('[CMX Recovery] triggerIfInvalidCode: checking /cart.js for code', code);
     fetch('/cart.js')
       .then(function(r) { return r.json(); })
       .then(function(cart) {
         var codes = cart.discount_codes || [];
+        console.log('[CMX Recovery] triggerIfInvalidCode: cart.discount_codes:', codes);
         var match = null;
         for (var i = 0; i < codes.length; i++) {
           if (codes[i].code && codes[i].code.toUpperCase() === code.toUpperCase()) {
@@ -299,65 +343,95 @@
             break;
           }
         }
-        if (match && match.applicable === false) {
-          callApi({
-            code: code,
-            failureReason: 'unknown',
-            cartValue: cart.total_price || 0,
-            lineItems: (cart.items || []).map(function(i) {
-              return { productId: i.product_id, variantId: i.variant_id,
-                       productTitle: i.product_title, price: i.price, quantity: i.quantity };
-            }),
-            sessionId: sid,
-            attemptsThisSession: 1,
-          });
+        if (match) {
+          console.log('[CMX Recovery] triggerIfInvalidCode: matched discount entry:', match);
+          if (match.applicable === false) {
+            console.log('[CMX Recovery] triggerIfInvalidCode: code is NOT applicable, firing callApi');
+            callApi({
+              code: code,
+              failureReason: 'unknown',
+              cartValue: cart.total_price || 0,
+              lineItems: (cart.items || []).map(function(i) {
+                return { productId: i.product_id, variantId: i.variant_id,
+                         productTitle: i.product_title, price: i.price, quantity: i.quantity };
+              }),
+              sessionId: sid,
+              attemptsThisSession: 1,
+            });
+          } else {
+            console.log('[CMX Recovery] triggerIfInvalidCode: code IS applicable (valid discount) — no recovery needed');
+          }
+        } else {
+          console.log('[CMX Recovery] triggerIfInvalidCode: code not found in cart.discount_codes');
         }
       })
-      .catch(function() {});
+      .catch(function(err) {
+        console.warn('[CMX Recovery] triggerIfInvalidCode: /cart.js fetch failed', err);
+      });
   }
 
   // ── MutationObserver fallback ──────────────────────────────────────────────
 
+  function handleMutation() {
+    var el = findErrorContainer();
+    if (!el || el.classList.contains('cmx-recovery-active')) return;
+    var t = el.textContent && el.textContent.trim();
+    if (!t) return;
+    var lo = t.toLowerCase();
+
+    // Match failure messages AND "Code applied: X" (applied but may not give discount)
+    var isFailureText =
+      lo.indexOf('discount') !== -1 ||
+      lo.indexOf('coupon') !== -1 ||
+      lo.indexOf('promo') !== -1 ||
+      lo.indexOf('cannot be applied') !== -1 ||
+      lo.indexOf('promotion applied') !== -1;
+
+    var isAppliedText = lo.indexOf('code applied') !== -1 || lo.indexOf('applied:') !== -1;
+
+    if (!isFailureText && !isAppliedText) return;
+
+    console.log('[CMX Recovery] observer triggered, container:', el, 'text:', t, 'isFailureText:', isFailureText, 'isAppliedText:', isAppliedText);
+
+    var input = findInput();
+    var code = input ? input.value.trim() : _lastInputValue;
+    // If DOM shows "Code applied: X", extract the code from the text if input is empty
+    if (!code && isAppliedText) {
+      var m = t.match(/(?:code applied|applied)[:\s]+([A-Z0-9_\-]+)/i);
+      if (m) code = m[1];
+      console.log('[CMX Recovery] observer: extracted code from text:', code);
+    }
+    if (!code) {
+      console.log('[CMX Recovery] observer: no code found in input or text, skipping');
+      return;
+    }
+    if (_recoveryCodes[code.toUpperCase()]) {
+      console.log('[CMX Recovery] observer: code already recovered, skipping:', code);
+      return;
+    }
+
+    console.log('[CMX Recovery] observer: processing code', code);
+
+    var sid = sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
+
+    if (isAppliedText && !isFailureText) {
+      // "Code applied" — need to verify it's actually not giving a discount
+      triggerIfInvalidCode(code, sid);
+    } else {
+      callApi({ code: code, failureReason: 'unknown', cartValue: 0, lineItems: [], sessionId: sid, attemptsThisSession: 1 });
+    }
+  }
+
   function watchErrors() {
+    console.log('[CMX Recovery] watchErrors: setting up MutationObserver');
     _observer = new MutationObserver(function () {
-      var el = findErrorContainer();
-      if (!el || el.classList.contains('cmx-recovery-active')) return;
-      var t = el.textContent && el.textContent.trim();
-      if (!t) return;
-      var lo = t.toLowerCase();
-
-      // Match failure messages AND "Code applied: X" (applied but may not give discount)
-      var isFailureText =
-        lo.indexOf('discount') !== -1 ||
-        lo.indexOf('coupon') !== -1 ||
-        lo.indexOf('promo') !== -1 ||
-        lo.indexOf('cannot be applied') !== -1 ||
-        lo.indexOf('promotion applied') !== -1;
-
-      var isAppliedText = lo.indexOf('code applied') !== -1 || lo.indexOf('applied:') !== -1;
-
-      if (!isFailureText && !isAppliedText) return;
-
-      var input = findInput();
-      var code = input ? input.value.trim() : _lastInputValue;
-      // If DOM shows "Code applied: X", extract the code from the text if input is empty
-      if (!code && isAppliedText) {
-        var m = t.match(/(?:code applied|applied)[:\s]+([A-Z0-9_\-]+)/i);
-        if (m) code = m[1];
-      }
-      if (!code) return;
-      if (_recoveryCodes[code.toUpperCase()]) return;
-
-      var sid = sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
-
-      if (isAppliedText && !isFailureText) {
-        // "Code applied" — need to verify it's actually not giving a discount
-        triggerIfInvalidCode(code, sid);
-      } else {
-        callApi({ code: code, failureReason: 'unknown', cartValue: 0, lineItems: [], sessionId: sid, attemptsThisSession: 1 });
-      }
+      // Debounce: wait 150ms after last mutation before processing
+      // Prevents storm of calls during Shopify's morph.js DOM updates
+      if (_debounceTimer) clearTimeout(_debounceTimer);
+      _debounceTimer = setTimeout(handleMutation, 150);
     });
     _observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    console.log('[CMX Recovery] watchErrors: MutationObserver active');
 
     document.addEventListener('change', function (e) {
       var input = findInput();
@@ -367,9 +441,16 @@
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
-  window.addEventListener('cmx:coupon_failed', function (e) { callApi(e.detail); });
+  window.addEventListener('cmx:coupon_failed', function (e) {
+    console.log('[CMX Recovery] cmx:coupon_failed event received:', e.detail);
+    callApi(e.detail);
+  });
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchErrors);
-  else watchErrors();
+  if (document.readyState === 'loading') {
+    console.log('[CMX Recovery] DOMContentLoaded not yet fired, waiting');
+    document.addEventListener('DOMContentLoaded', watchErrors);
+  } else {
+    watchErrors();
+  }
 
 })();

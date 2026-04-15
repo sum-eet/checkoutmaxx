@@ -67,7 +67,7 @@ const DEFAULT_SETTINGS: RecoverySettings = {
     min_not_met:      { enabled: false, action: 'show_hint_and_suggest', collections: 'all' },
     usage_limit:      { enabled: false, action: 'explanation_only' },
     wrong_collection: { enabled: false, action: 'redirect_collection' },
-    invalid:          { enabled: false, action: 'explanation_only' },
+    invalid:          { enabled: true,  action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
     already_used:     { enabled: false, action: 'explanation_only' },
   },
   hunterThreshold: 3,
