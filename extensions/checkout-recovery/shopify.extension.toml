@@ -1,6 +1,7 @@
-api_version = "2025-04"
+api_version = "2025-07"
 
 [[extensions]]
+uid = "600deb5a-0084-db1f-cf54-0e2c2e15d1dcd25b12e0"
 type = "ui_extension"
 name = "CouponMaxx Checkout Recovery"
 handle = "checkout-recovery"
