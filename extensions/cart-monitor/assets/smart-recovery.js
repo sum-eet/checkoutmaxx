@@ -28,6 +28,9 @@
   // Known error/message element selectors across common Shopify themes.
   // Ordered: most specific first, generic fallbacks last.
   var ERROR_SELECTORS = [
+    // CouponMaxx Liquid hook — merchant-installed, 100% accurate
+    '[data-cmx-failed-code]',
+
     // Dawn (Shopify default) — id-based error elements
     '#CartDiscountCode-error',
     '#CartDiscountCode-CartDrawer-error',
@@ -354,6 +357,20 @@
   // ── MutationObserver fallback ──────────────────────────────────────────────
 
   function handleMutation() {
+    // Priority 0: Liquid hook — merchant-installed, reads applicable: false from Liquid directly.
+    // More reliable than any CSS selector or text scan.
+    var hookEl = document.querySelector('[data-cmx-failed-code]');
+    if (hookEl) {
+      var hookCode = (hookEl.getAttribute('data-cmx-failed-code') || '').trim();
+      var hookCartValue = parseInt(hookEl.getAttribute('data-cmx-cart-value') || '0', 10);
+      if (hookCode && !_recoveryCodes[hookCode.toUpperCase()]) {
+        console.log('[CMX Recovery] Liquid hook: failed code detected:', hookCode);
+        var hookSid = sessionStorage.getItem('_cmx_sid') || ('liq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7));
+        callApi({ code: hookCode, failureReason: 'unknown', cartValue: hookCartValue, lineItems: [], sessionId: hookSid, attemptsThisSession: 1 });
+        return;
+      }
+    }
+
     var el = findErrorContainer();
     if (!el || el.classList.contains('cmx-recovery-active')) return;
     var t = el.textContent && el.textContent.trim();
@@ -420,6 +437,29 @@
     }, true);
   }
 
+  // ── Discount form submit listener (Track A) ────────────────────────────────
+  // Catches themes that submit discount forms via native <form> POST or Shopify
+  // Sections API — cases where our fetch/XHR interceptors in cart-monitor.js
+  // never fire. Polls /cart.js 1.5s later (after Shopify processes the discount).
+
+  function watchDiscountSubmit() {
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (!form) return;
+      var inp = form.querySelector('[name="discount"], [name="coupon"], [data-discount-input]');
+      if (!inp) return;
+      var code = inp.value.trim();
+      if (!code || _recoveryCodes[code.toUpperCase()]) return;
+      _lastInputValue = code;
+      console.log('[CMX Recovery] discount form submitted, code:', code, '— polling /cart.js in 1.5s');
+      setTimeout(function () {
+        var sid = sessionStorage.getItem('_cmx_sid') || ('fs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7));
+        triggerIfInvalidCode(code, sid);
+      }, 1500);
+    }, true); // capture phase — fires before theme's own submit handlers
+    console.log('[CMX Recovery] watchDiscountSubmit: form submit listener active');
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────────
 
   window.addEventListener('cmx:coupon_failed', function (e) {
@@ -429,9 +469,13 @@
 
   if (document.readyState === 'loading') {
     console.log('[CMX Recovery] DOMContentLoaded not yet fired, waiting');
-    document.addEventListener('DOMContentLoaded', watchErrors);
+    document.addEventListener('DOMContentLoaded', function () {
+      watchErrors();
+      watchDiscountSubmit();
+    });
   } else {
     watchErrors();
+    watchDiscountSubmit();
   }
 
 })();

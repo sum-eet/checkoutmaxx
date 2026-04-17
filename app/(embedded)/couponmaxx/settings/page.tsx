@@ -264,6 +264,74 @@ function RecoveryStatusCard({ shop }: { shop: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Setup guide card
+// ---------------------------------------------------------------------------
+
+const LIQUID_SNIPPET = `{% comment %}CouponMaxx Recovery Hook{% endcomment %}
+{% for dc in cart.discount_codes %}
+  {% unless dc.applicable %}
+    <div data-cmx-failed-code="{{ dc.code | escape }}"
+         data-cmx-cart-value="{{ cart.total_price }}"
+         style="display:none" aria-hidden="true"></div>
+  {% endunless %}
+{% endfor %}`;
+
+function SetupGuideCard() {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(LIQUID_SNIPPET).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <BlockStack gap="100">
+            <Text as="p" variant="headingMd">100% Detection Setup</Text>
+            <Text as="p" tone="subdued">
+              Paste this snippet into your cart template for guaranteed detection on any theme.
+            </Text>
+          </BlockStack>
+          <Button size="slim" onClick={handleCopy}>
+            {copied ? 'Copied!' : 'Copy snippet'}
+          </Button>
+        </InlineStack>
+
+        <Box
+          background="bg-surface-secondary"
+          padding="300"
+          borderRadius="200"
+        >
+          <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+            {LIQUID_SNIPPET}
+          </pre>
+        </Box>
+
+        <BlockStack gap="100">
+          <Text as="p" variant="bodySm" fontWeight="semibold">Where to paste it</Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Admin → Online Store → Themes → Edit code → find your cart template file → paste near the discount code input.
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            • <strong>Dawn / Sense / Craft:</strong> <code>sections/cart-drawer.liquid</code> — after the discount input block
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            • <strong>Debut / Brooklyn:</strong> <code>snippets/cart-template.liquid</code> — after <code>.cart__discount-error</code>
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            • <strong>Other themes:</strong> any file that renders the cart discount form — paste near the coupon <code>&lt;input&gt;</code>
+          </Text>
+        </BlockStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -504,6 +572,9 @@ export default function SmartRecoverySettings() {
 
         {/* ── Recovery health check ──────────────────────────────────────── */}
         {shop && <RecoveryStatusCard shop={shop} />}
+
+        {/* ── Setup guide ───────────────────────────────────────────────── */}
+        <SetupGuideCard />
 
         {isFirstVisit && (
           <Banner tone="info">
