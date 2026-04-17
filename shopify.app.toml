@@ -29,3 +29,7 @@ handle = "checkout-monitor"
 [[extensions]]
 type = "theme"
 handle = "cart-monitor"
+
+[[extensions]]
+type = "ui_extension"
+handle = "checkout-recovery"

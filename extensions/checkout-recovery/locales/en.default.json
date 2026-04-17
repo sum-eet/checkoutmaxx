@@ -1,0 +1,11 @@
+{
+  "claim_label": "Looking for a coupon?",
+  "claim_button": "Claim it",
+  "input_placeholder": "Enter a discount code",
+  "apply_button": "Apply",
+  "recovery_intro": "That code didn't work — try this instead:",
+  "apply_recovery_button": "Apply",
+  "success_prefix": "applied",
+  "finding": "Finding your discount…",
+  "applying": "Applying…"
+}

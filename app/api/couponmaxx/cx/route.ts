@@ -37,13 +37,13 @@ type CartItem = {
 type RecoveryRequest = {
   shopId: string;          // shop domain
   sessionId: string;
-  failedCode: string;
-  failureReason: FailureReason;
+  failedCode?: string;     // optional — absent for checkout_claim flow
+  failureReason?: FailureReason;
   cartValue: number;       // cents
   cartItems: CartItem[];
   customerName: string | null;
   attemptsThisSession: number;
-  device: 'mobile' | 'desktop';
+  device: 'mobile' | 'desktop' | 'unknown';
   source: string | null;
 };
 
@@ -339,8 +339,94 @@ export async function POST(req: NextRequest) {
   const { shopId: shopDomain, sessionId, failedCode, failureReason,
           cartValue, cartItems, customerName, attemptsThisSession, device, source } = body;
 
-  if (!shopDomain || !sessionId || !failedCode || !failureReason) {
+  if (!shopDomain || !sessionId) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: CORS_HEADERS });
+  }
+
+  // ── Checkout Claim path: no failed code, generate proactively ─────────────
+  const isClaim = source === 'checkout_claim' || !failedCode;
+  if (isClaim) {
+    const { data: shop } = await supabase
+      .from('Shop')
+      .select('id, accessToken')
+      .eq('shopDomain', shopDomain)
+      .eq('isActive', true)
+      .single();
+
+    if (!shop) {
+      return NextResponse.json({ error: 'Shop not found' }, { status: 404, headers: CORS_HEADERS });
+    }
+
+    const { data: settingsRow } = await supabase
+      .from('MerchantRecoverySettings')
+      .select('*')
+      .eq('shopId', shop.id)
+      .single();
+
+    const claimSettings: MerchantSettings = settingsRow
+      ? { ...DEFAULT_SETTINGS, ...settingsRow }
+      : DEFAULT_SETTINGS;
+
+    if (!claimSettings.enabled) {
+      return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
+    }
+
+    const invalidRule: RuleConfig = claimSettings.rules['invalid'] ?? { action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 };
+
+    if (!invalidRule.enabled || invalidRule.action !== 'offer_fallback_code') {
+      return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
+    }
+
+    const limited = await isRateLimited(shop.id, sessionId, claimSettings.dailyCodeLimit);
+    if (limited) {
+      return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
+    }
+
+    const claimCode = await generateShopifyDiscountCode(
+      shopDomain,
+      shop.accessToken,
+      claimSettings.useCustomerName ? customerName : null,
+      invalidRule.discount ?? 10,
+      (invalidRule.discountType ?? 'percentage') as 'percentage' | 'fixed',
+      invalidRule.expiryMinutes ?? 15,
+    );
+
+    if (!claimCode) {
+      return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
+    }
+
+    const discountLabel = (invalidRule.discountType ?? 'percentage') === 'percentage'
+      ? `${invalidRule.discount ?? 10}% off`
+      : `$${((invalidRule.discount ?? 10) / 100).toFixed(2)} off`;
+
+    const claimEventId = crypto.randomUUID();
+    await supabase.from('RecoveryEvent').insert({
+      id: claimEventId,
+      shopId: shop.id,
+      sessionId,
+      failedCode: '',
+      failureReason: 'invalid',
+      recoveryAction: 'show_code',
+      recoveryCode: claimCode,
+      discountValue: invalidRule.discount ?? 10,
+      discountType: invalidRule.discountType ?? 'percentage',
+      cartValueAtFailure: cartValue,
+      customerName: claimSettings.useCustomerName ? customerName : null,
+      attemptsThisSession: 0,
+      device,
+      source: 'checkout_claim',
+    });
+
+    console.log('[CMX] checkout_claim: generated code', claimCode, 'for shop', shopDomain);
+
+    return NextResponse.json({
+      action: 'show_code',
+      code: claimCode,
+      discount: { type: invalidRule.discountType ?? 'percentage', value: invalidRule.discount ?? 10 },
+      discountLabel,
+      expiresInMinutes: invalidRule.expiryMinutes ?? 15,
+      recoveryId: claimEventId,
+    }, { headers: CORS_HEADERS });
   }
 
   // Load shop

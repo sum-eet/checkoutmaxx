@@ -1,0 +1,17 @@
+api_version = "2025-04"
+
+[[extensions]]
+type = "ui_extension"
+name = "CouponMaxx Checkout Recovery"
+handle = "checkout-recovery"
+
+[[extensions.targeting]]
+module = "./src/Checkout.jsx"
+target = "purchase.checkout.reductions.render-after"
+
+[extensions.settings]
+  [[extensions.settings.fields]]
+  key = "app_url"
+  type = "single_line_text_field"
+  name = "App URL"
+  description = "CouponMaxx API URL. Do not change unless instructed by support."
