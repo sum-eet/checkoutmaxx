@@ -49,6 +49,7 @@ When `ensureShop` finds an existing active row with `accessToken === "pending_oa
 5. Match scopes in all 3 locations: `shopify.app.toml`, `lib/shopify.ts`, partner dashboard.
 6. Offline tokens only.
 7. Soft-delete on uninstall (set `isActive=false`, don't delete row).
+8. **Pixel registration must be idempotent.** Query `query { webPixel { id } }` first. If present → `webPixelUpdate`. If not → `webPixelCreate`. Both paths must return the pixel ID.
 
 ---
 
@@ -64,6 +65,7 @@ When `ensureShop` finds an existing active row with `accessToken === "pending_oa
 8. **DON'T run `prisma db push` against prod** — use migrations. Partial unique index `Shop_shopDomain_active_unique` is DB-managed (see `prisma/migrations/20260417000000_shop_partial_unique/migration.sql`).
 9. **DON'T add feature flags for auth behavior** — one path, always.
 10. **DON'T remove the `pending_oauth` upgrade branch in `ensureShop`.**
+16. **DON'T call `webPixelCreate` unconditionally.** Extension-declared pixels persist across uninstall/reinstall in Shopify's backend. Always query first and update if present.
 11. **DON'T touch `app/api/webhooks/app-uninstalled/route.ts`** — uninstall path is working.
 12. **DON'T touch `app/api/webhooks/gdpr/**`** — compliance surface.
 13. **DON'T touch billing routes** — out of auth scope.
@@ -186,6 +188,7 @@ If Test 4 fails: rollback, fix, restart from Test 1.
 | Uninstall didn't stick | `[UNINSTALL]` | Webhook HMAC fail — check secret |
 | Pixel doesn't fire | `[pixelRegistration]` | `accessToken = pending_oauth` — token exchange failed |
 | App won't boot at all | `[env-check]` | Missing env var — check Vercel project settings |
+| `[ensureShop:bg] Pixel registration failed: settings already set` | `[registerAppPixel]` | Old code. Check `lib/pixel-registration.ts` uses update-or-create pattern. |
 
 ---
 

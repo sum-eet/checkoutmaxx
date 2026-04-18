@@ -6,6 +6,16 @@
 >
 > Rule: Every Claude Code session that modifies the codebase must append
 > an entry here before the session ends. No exceptions.
+>
+> **Enforcement:** Before ending any session that modified `app/`, `lib/`, `prisma/`, or `extensions/`, Claude MUST append a dated entry here. If skipped once, future sessions lose the WHY and re-break fixed bugs.
+>
+> **Format template:**
+> ```
+> ## YYYY-MM-DD: <short title>
+> **Root cause:** ...
+> **Fix:** ...
+> **Follow-up deferred:** ...
+> ```
 
 ---
 
@@ -1363,3 +1373,33 @@ Build: zero errors ✓
 4. Wait 28 days for Shopify Web Vitals measurements (LCP, CLS, INP)
 5. Get 50 installs + 5 reviews
 6. Apply for BFS in Partner Dashboard → Distribution → Apply now
+
+---
+
+## 2026-04-18: Auth refactor — canonical provisionShop
+
+**Root cause:** `app/api/auth/callback/route.ts` and `lib/ensure-shop.ts` had divergent Shop-creation logic. Callback deactivated + inserted a new row; ensureShop preserved the existing row. When both fired on a managed install, the callback obliterated valid rows that ensureShop had just built. This produced fragmented IDs, orphaned data, and broken reinstalls on every cycle.
+
+**Fix:** New `lib/provision-shop.ts` — single function both paths call. Contract: deactivate all active rows for `shopDomain` → insert fresh UUID row → on 23505 unique constraint race, re-query and return winner. Both `app/api/auth/callback/route.ts` and `lib/ensure-shop.ts` now call `provisionShop()` exclusively. Nothing else creates Shop rows. Added `lib/env-check.ts` boot-time validator imported from `lib/shopify.ts`. Added structured logging to `lib/verify-session-token.ts` (HMAC mismatch, missing dest, token shape). Archived old `docs/AUTH-BIBLE.md` → `docs/archive/AUTH-BIBLE-v1-2026-04-12.md`. New `docs/AUTH-BIBLE-V2.md` is canonical going forward.
+
+**Follow-up deferred:** Concurrent-request race can still produce two fresh active rows when two calls land within ~100ms. Low probability in practice. Fix post-submission via Postgres transaction or advisory lock on `shopDomain`.
+
+---
+
+## 2026-04-18: Supabase PostgREST boolean coercion fix in ensureShop
+
+**Root cause:** `supabase.from("Shop").select(...).eq("isActive", true)` in `lib/ensure-shop.ts` returned rows where `isActive = false`. PostgREST sometimes stringifies booleans in certain driver configurations, causing the filter to match wrong rows. Symptom: reinstall after uninstall returned a stale deactivated row, skipped `provisionShop`, showed old data.
+
+**Fix:** Fetch all rows for `shopDomain` without the `isActive` filter, JS-filter in memory (`rows.filter(r => r.isActive === true)`). Same pattern already used in `provisionShop`'s race-resolve path. Log scanned row count for visibility: `[ensureShop] DB lookup: existing=X (scanned=N)`.
+
+**Follow-up deferred:** Same bug pattern exists in `app/api/pixel/ingest/route.ts`, `app/api/webhooks/**`, `app/api/billing/**`, `lib/metrics.ts`. Not in install critical path. Fix post-approval.
+
+---
+
+## 2026-04-19: Pixel registration idempotent
+
+**Root cause:** Extension-declared web pixel (`extensions/checkout-monitor/shopify.extension.toml`, `type = "web_pixel"`) persists across uninstall/reinstall cycles — Shopify keeps the pixel row alive if the extension handle is unchanged. `lib/pixel-registration.ts:registerAppPixel` called `webPixelCreate` unconditionally. Shopify rejected subsequent calls with `"The settings for this web pixel has already been set. Please use the update mutation."` Every reinstall logged a scary error even though the pixel was live and firing events.
+
+**Fix:** `registerAppPixel` now queries `query { webPixel { id } }` (no-ID form returns current app's pixel) before creating. If `webPixel.id` present → `webPixelUpdate(id, settings)`. If not present (Shopify throws GraphQL error rather than returning null) → `webPixelCreate`. Belt-and-suspenders: if `webPixelCreate` still errors with "already been set", re-query and update. Both paths return the pixel id and log with `[registerAppPixel]` prefix. `deregisterAppPixel` unchanged.
+
+**Verified:** After deploy, reinstall shows `[registerAppPixel] Pixel updated: gid://shopify/WebPixel/...` and `[ensureShop:bg] Pixel registered: ...`. No more "already been set" error. DB `pixelId` column populated.

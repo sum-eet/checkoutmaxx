@@ -49,8 +49,16 @@ function CheckoutRecovery() {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    console.log('[CMX Checkout] MOUNTED — shop:', myshopifyDomain, '| appUrl:', appUrl);
+    return () => {
+      mountedRef.current = false;
+      console.log('[CMX Checkout] UNMOUNTED');
+    };
   }, []);
+
+  useEffect(() => {
+    console.log('[CMX Checkout] state changed →', state);
+  }, [state]);
 
   // Auto-dismiss success after 5s
   useEffect(() => {
@@ -61,12 +69,9 @@ function CheckoutRecovery() {
     return () => clearTimeout(t);
   }, [state]);
 
-  // Don't render on accelerated checkouts (Apple Pay, Google Pay, etc.)
-  const canUpdate = instructions?.discounts?.canUpdateDiscountCodes !== false;
-  if (!canUpdate) {
-    console.log('[CMX Checkout] canUpdateDiscountCodes is false — hiding extension');
-    return null;
-  }
+  // Log canUpdateDiscountCodes but never hide — show to everyone
+  const canUpdate = instructions?.discounts?.canUpdateDiscountCodes;
+  console.log('[CMX Checkout] canUpdateDiscountCodes:', canUpdate, '| shop:', myshopifyDomain, '| state:', state);
 
   async function callApi(payload) {
     const res = await fetch(`${appUrl}/api/couponmaxx/cx`, {

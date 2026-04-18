@@ -22,6 +22,10 @@ shop_deletion_url = "https://couponmaxx.vercel.app/api/webhooks/shop/redact"
 [pos]
 embedded = false
 
+[build]
+automatically_update_urls_on_dev = true
+include_config_on_deploy = true
+
 [[extensions]]
 type = "web_pixel"
 handle = "checkout-monitor"
