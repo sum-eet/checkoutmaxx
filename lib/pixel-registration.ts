@@ -59,10 +59,16 @@ export async function registerAppPixel(
   const client = new shopify.clients.Graphql({ session });
   const settings = JSON.stringify({ shopDomain: shop });
 
-  // Check if pixel already exists (persists across reinstalls)
-  const checkResponse = await client.request(GET_EXISTING_PIXEL, {});
-  const existingPixelId = (checkResponse.data as any)?.webPixel?.id as
-    string | undefined;
+  // Check if pixel already exists (persists across reinstalls).
+  // Shopify throws a GraphQL error (not userErrors) when no pixel exists — treat as none.
+  let existingPixelId: string | undefined;
+  try {
+    const checkResponse = await client.request(GET_EXISTING_PIXEL, {});
+    existingPixelId = (checkResponse.data as any)?.webPixel?.id as string | undefined;
+  } catch (e: any) {
+    console.log(`[registerAppPixel] webPixel query: ${e?.message} — no existing pixel`);
+    existingPixelId = undefined;
+  }
   console.log(`[registerAppPixel] existing pixelId=${existingPixelId ?? "none"}`);
 
   if (existingPixelId) {
