@@ -16,14 +16,8 @@ const WEB_PIXEL_CREATE = `
 
 const GET_EXISTING_PIXEL = `
   query {
-    currentAppInstallation {
-      webPixels(first: 1) {
-        edges {
-          node {
-            id
-          }
-        }
-      }
+    webPixel {
+      id
     }
   }
 `;
@@ -67,8 +61,8 @@ export async function registerAppPixel(
 
   // Check if pixel already exists (persists across reinstalls)
   const checkResponse = await client.request(GET_EXISTING_PIXEL, {});
-  const existingPixelId = (checkResponse.data as any)?.currentAppInstallation
-    ?.webPixels?.edges?.[0]?.node?.id as string | undefined;
+  const existingPixelId = (checkResponse.data as any)?.webPixel?.id as
+    string | undefined;
   console.log(`[registerAppPixel] existing pixelId=${existingPixelId ?? "none"}`);
 
   if (existingPixelId) {
@@ -108,8 +102,8 @@ export async function registerAppPixel(
     if (alreadySet) {
       console.log("[registerAppPixel] create rejected 'already set' — re-querying for ID");
       const retryCheck = await client.request(GET_EXISTING_PIXEL, {});
-      const retryId = (retryCheck.data as any)?.currentAppInstallation
-        ?.webPixels?.edges?.[0]?.node?.id as string | undefined;
+      const retryId = (retryCheck.data as any)?.webPixel?.id as
+        string | undefined;
       if (!retryId) {
         throw new Error("Pixel registration failed: 'already set' but no existing pixel found");
       }
