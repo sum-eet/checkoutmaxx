@@ -30,21 +30,21 @@ export async function ensureShop(
   }
 
   // Check DB for active shop with real token.
-  // Use .eq("isActive", true) directly — same pattern as resolveShopId() in cart/ingest.
-  // ORDER BY installedAt DESC so the most recent install wins on ties.
-  const { data: existing, error: selectError } = await supabase
+  // Filter isActive in JS — Supabase PostgREST boolean coercion can stringify "true",
+  // causing .eq("isActive", true) to match inactive rows. Same pattern as provisionShop.
+  const { data: rows, error: selectError } = await supabase
     .from("Shop")
-    .select("id, accessToken")
+    .select("id, accessToken, isActive")
     .eq("shopDomain", shopDomain)
-    .eq("isActive", true)
-    .order("installedAt", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("installedAt", { ascending: false });
 
   if (selectError) {
     console.error("[ensureShop] SELECT failed:", selectError.code, selectError.message, selectError.details);
   }
-  console.log("[ensureShop] DB lookup: existing=%s", existing ? existing.id : "NULL");
+  const existing = (rows ?? []).find(
+    (r) => r.isActive === true || (r.isActive as any) === "true"
+  ) ?? null;
+  console.log("[ensureShop] DB lookup: existing=%s (scanned=%d)", existing ? existing.id : "NULL", rows?.length ?? 0);
 
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {
     console.log("[ensureShop] RETURNING existing active shop:", existing.id);
