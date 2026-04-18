@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { Session } from "@shopify/shopify-api";
 import { sessionStorage } from "@/lib/shopify";
-import prisma from "@/lib/prisma";
 import { supabase } from "@/lib/supabase";
 import { registerAppPixel, deregisterAppPixel } from "@/lib/pixel-registration";
 import { registerWebhooks } from "@/lib/shopify";
+import { provisionShop } from "@/lib/provision-shop";
 
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
@@ -98,77 +98,31 @@ export async function GET(req: NextRequest) {
   }
   console.log(`[AUTH] STEP 3 SESSION OK (${Date.now() - t0}ms):`, shop);
 
-  // ── STEP 4: ALWAYS CREATE FRESH SHOP ROW ──
-  // On every OAuth completion (install or reinstall), deactivate ALL existing
-  // records for this domain and create a brand new Shop with a fresh UUID.
-  // This guarantees a clean slate — no old data bleeds into the new install.
-  let shopRecord: { id: string; pixelId: string | null } | null = null;
-
-  // Save old pixelId so we can deregister it in background.
-  // Fetch all rows and filter in JS — Supabase .eq("isActive", true) is unreliable
-  // (known PostgREST boolean coercion issue documented in ensure-shop.ts).
+  // ── STEP 4: PROVISION SHOP (canonical path via provisionShop) ──
+  // Fetch old pixelId before provisioning so BG work can deregister it.
   const { data: allOldShops } = await supabase
     .from("Shop")
     .select("id, pixelId, isActive")
     .eq("shopDomain", shop);
   const oldShop = (allOldShops ?? []).find(
-    s => s.isActive === true || s.isActive === "true" as any
+    (s) => s.isActive === true || (s.isActive as any) === "true"
   ) ?? null;
-
   const oldPixelId = oldShop?.pixelId ?? null;
-
-  // Deactivate ALL existing records for this domain — no isActive filter so we
-  // catch rows that may have a stringified boolean or corrupted state.
-  // Handles both: uninstall webhook already fired, and webhook delayed/missed cases.
-  await supabase
-    .from("Shop")
-    .update({ isActive: false, pixelId: null })
-    .eq("shopDomain", shop);
-
   if (oldShop) {
-    console.log(`[AUTH] STEP 4 DEACTIVATED old shop record:`, oldShop.id);
+    console.log(`[AUTH] STEP 4 found old shop record:`, oldShop.id);
   }
 
-  // Create new Shop record with fresh UUID
-  const newShopId = crypto.randomUUID();
+  let shopRecord: { id: string } | null = null;
   try {
-    const { data: sbResult, error: sbError } = await supabase
-      .from("Shop")
-      .insert({
-        id: newShopId,
-        shopDomain: shop,
-        accessToken,
-        isActive: true,
-        installedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      })
-      .select("id, pixelId")
-      .single();
-
-    if (sbError) throw sbError;
-    shopRecord = { id: sbResult.id, pixelId: null };
-    console.log(`[AUTH] STEP 4 SHOP CREATED fresh (${Date.now() - t0}ms): ${sbResult.id} (old: ${oldShop?.id ?? 'none'})`);
-  } catch (sbErr: any) {
-    console.error("[AUTH] STEP 4 Supabase insert failed, trying Prisma:", sbErr.message);
-    try {
-      const result = await prisma.shop.create({
-        data: {
-          shopDomain: shop,
-          accessToken,
-          isActive: true,
-          installedAt: new Date(),
-        },
-        select: { id: true },
-      });
-      shopRecord = { id: result.id, pixelId: null };
-      console.log(`[AUTH] STEP 4 SHOP CREATED via Prisma fallback (${Date.now() - t0}ms):`, result.id);
-    } catch (prismaErr: any) {
-      console.error("[AUTH] STEP 4 BOTH Supabase AND Prisma failed:", prismaErr.message);
-      return new Response(
-        `Shop record creation failed. Please try reinstalling the app.\nSupabase: ${sbErr.message}\nPrisma: ${prismaErr.message}`,
-        { status: 500 }
-      );
-    }
+    const result = await provisionShop(shop, accessToken);
+    shopRecord = { id: result.shopId };
+    console.log(`[AUTH] STEP 4 SHOP PROVISIONED (${Date.now() - t0}ms): ${result.shopId} (old: ${oldShop?.id ?? "none"})`);
+  } catch (err: any) {
+    console.error("[AUTH] STEP 4 provisionShop FAILED:", err.message);
+    return new Response(
+      `Shop provisioning failed. Please try reinstalling the app.\n${err.message}`,
+      { status: 500 }
+    );
   }
 
   // ── STEP 5: REDIRECT ──
@@ -180,9 +134,9 @@ export async function GET(req: NextRequest) {
   const backgroundWork = async () => {
     const bgStart = Date.now();
 
-    if (shopRecord?.pixelId) {
+    if (oldPixelId) {
       try {
-        await deregisterAppPixel(shop, accessToken, shopRecord.pixelId);
+        await deregisterAppPixel(shop, accessToken, oldPixelId);
         console.log(`[AUTH] BG: old pixel deregistered (${Date.now() - bgStart}ms)`);
       } catch (err: any) {
         console.error("[AUTH] BG: deregister pixel error:", err.message);

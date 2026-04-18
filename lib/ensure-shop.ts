@@ -5,6 +5,7 @@ import { getShopFromRequest, getSessionTokenFromRequest } from "./verify-session
 import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
 import { Session } from "@shopify/shopify-api";
+import { provisionShop } from "./provision-shop";
 
 /**
  * Ensure a Shop record exists with a valid access token.
@@ -105,55 +106,21 @@ export async function ensureShop(
     return { shopId: existing.id, shopDomain };
   }
 
-  // No active shop — create one. Use the partial unique index
-  // (Shop_shopDomain_active_unique) to prevent duplicates from concurrent requests.
-  // Do NOT deactivate existing records here — that causes race conditions where
-  // concurrent requests deactivate each other's records. The auth callback handles
-  // deactivation on reinstall.
-  const newId = crypto.randomUUID();
-  console.log("[ensureShop] Creating Shop row:", newId, "for", shopDomain, "hasToken:", !!accessToken);
-  const { error: insertError } = await supabase.from("Shop").insert({
-    id: newId,
-    shopDomain,
-    accessToken: accessToken || "pending_oauth",
-    isActive: true,
-    installedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  // No active shop — use canonical provisionShop (deactivate all + fresh UUID)
+  console.log("[ensureShop] provisioning fresh shop for", shopDomain, "hasToken:", !!accessToken);
+  try {
+    const result = await provisionShop(shopDomain, accessToken || "pending_oauth");
+    console.log("[ensureShop] SUCCESS: Shop provisioned id=%s, hasRealToken=%s", result.shopId, !!accessToken);
 
-  if (insertError) {
-    // 23505 = unique constraint violation — another request already created the record
-    if (insertError.code === "23505") {
-      console.log("[ensureShop] Record already exists (concurrent request won). Looking it up...");
-      const { data: conflictShop, error: conflictErr } = await supabase
-        .from("Shop")
-        .select("id, accessToken")
-        .eq("shopDomain", shopDomain)
-        .eq("isActive", true)
-        .order("installedAt", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (conflictErr) {
-        console.error("[ensureShop] conflict lookup failed:", conflictErr.code, conflictErr.message);
-      }
-      if (conflictShop?.id) {
-        if (accessToken && conflictShop.accessToken === "pending_oauth") {
-          await supabase.from("Shop").update({ accessToken }).eq("id", conflictShop.id);
-        }
-        return { shopId: conflictShop.id, shopDomain };
-      }
+    if (accessToken) {
+      registerBackgroundWork(shopDomain, accessToken, result.shopId);
     }
-    console.error("[ensureShop] INSERT FAILED: code=%s message=%s", insertError.code, insertError.message);
+
+    return { shopId: result.shopId, shopDomain };
+  } catch (err: any) {
+    console.error("[ensureShop] provisionShop FAILED:", err.message);
     return null;
   }
-
-  console.log("[ensureShop] SUCCESS: Shop created with id=%s, hasRealToken=%s", newId, !!accessToken);
-
-  if (accessToken) {
-    registerBackgroundWork(shopDomain, accessToken, newId);
-  }
-
-  return { shopId: newId, shopDomain };
 }
 
 function registerBackgroundWork(shopDomain: string, accessToken: string, shopId: string) {

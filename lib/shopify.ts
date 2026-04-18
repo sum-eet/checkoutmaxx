@@ -1,6 +1,13 @@
 import "@shopify/shopify-api/adapters/web-api";
 import { shopifyApi, ApiVersion, LogSeverity, Session } from "@shopify/shopify-api";
 import { PrismaSessionStorage } from "./session-storage";
+import { envCheck } from "./env-check";
+
+// Validate required env vars at module load — loud failure beats silent 401s later.
+// Skipped during build (build-placeholder values are acceptable at compile time).
+if (process.env.SHOPIFY_API_KEY !== "build-placeholder") {
+  envCheck();
+}
 
 export const shopify = shopifyApi({
   // Fallback strings prevent build-time throw when env vars aren't present.

@@ -6,26 +6,52 @@ import { createHmac } from "crypto";
  */
 export function verifySessionToken(token: string): string | null {
   const secret = process.env.SHOPIFY_API_SECRET;
-  if (!secret) return null;
+  if (!secret) {
+    console.error("[verifySessionToken] SHOPIFY_API_SECRET not set — cannot verify token");
+    return null;
+  }
+
+  // Log first 4 chars of secret for cross-env eyeball comparison (never log full secret)
+  const secretHint = secret.slice(0, 4);
 
   try {
     const [headerB64, payloadB64, signatureB64] = token.split(".");
-    if (!headerB64 || !payloadB64 || !signatureB64) return null;
+    if (!headerB64 || !payloadB64 || !signatureB64) {
+      console.warn("[verifySessionToken] malformed token — missing header/payload/signature segments");
+      return null;
+    }
 
     const expected = createHmac("sha256", secret)
       .update(`${headerB64}.${payloadB64}`)
       .digest("base64url");
 
-    if (expected !== signatureB64) return null;
+    if (expected !== signatureB64) {
+      console.warn(`[verifySessionToken] hmac_mismatch secret_hint=${secretHint} — wrong SHOPIFY_API_SECRET for this Vercel project?`);
+      return null;
+    }
 
     const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString());
 
-    if (payload.exp && Date.now() / 1000 > payload.exp) return null;
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      console.warn("[verifySessionToken] token expired exp=%s now=%s", payload.exp, Math.floor(Date.now() / 1000));
+      return null;
+    }
 
     const dest = payload.dest || payload.iss || "";
+    if (!dest) {
+      console.warn("[verifySessionToken] missing dest/iss claim in token payload");
+      return null;
+    }
+
     const match = dest.match(/https?:\/\/([^/]+)/);
-    return match ? match[1] : null;
-  } catch {
+    if (!match) {
+      console.warn("[verifySessionToken] dest claim has no recognizable domain: %s", dest);
+      return null;
+    }
+
+    return match[1];
+  } catch (err: any) {
+    console.error("[verifySessionToken] unexpected error:", err.message);
     return null;
   }
 }
