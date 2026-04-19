@@ -616,71 +616,6 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
       </Card>
 
       {/* ---- Sub-section 2: Notification channels ---- */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-
-        {/* Slack card */}
-        <Card>
-          <Text variant="headingSm" as="h2">Slack</Text>
-          <div style={{ marginTop: 12 }}>
-
-          {slackConnected ? (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#16A34A' }} />
-                <span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>Connected</span>
-              </div>
-              {slackChannel && (
-                <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
-                  #{slackChannel}
-                </div>
-              )}
-              <button
-                onClick={() => { setSlackConnected(false); setSlackChannel(null); }}
-                style={{
-                  background: 'none', border: '1px solid #D1D5DB', borderRadius: 6,
-                  padding: '4px 10px', fontSize: 12, color: '#6B7280', cursor: 'pointer',
-                }}
-              >
-                Disconnect
-              </button>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#D1D5DB' }} />
-                <span style={{ fontSize: 13, color: '#6B7280' }}>Not connected</span>
-              </div>
-              {/* Slack OAuth — server-side redirect handles client_id + redirect_uri */}
-              <a
-                href={`/api/couponmaxx/slack/auth?shop=${shopDomain}`}
-                style={{
-                  display: 'inline-block', background: '#0EA5E9', color: '#FFFFFF',
-                  borderRadius: 6, padding: '6px 14px', fontSize: 13, fontWeight: 500,
-                  textDecoration: 'none',
-                }}
-              >
-                Connect Slack
-              </a>
-            </div>
-          )}
-
-          {/* Per-severity channel toggles */}
-          <div style={{ borderTop: '1px solid #F3F4F6', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {(['critical', 'warning', 'info'] as const).map((sev) => (
-              <div key={sev} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 13, color: '#374151', textTransform: 'capitalize' }}>
-                  {sev === 'warning' ? 'Warnings' : sev.charAt(0).toUpperCase() + sev.slice(1)}
-                </span>
-                <Toggle
-                  checked={settings.channels.slack[sev]}
-                  onChange={(v) => updateChannel('slack', { [sev]: v })}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        </Card>
-
         {/* Email card */}
         <Card>
           <Text variant="headingSm" as="h2">Email</Text>
@@ -742,7 +677,6 @@ function SettingsTab({ shopDomain }: { shopDomain: string }) {
           </div>
         </div>
         </Card>
-      </div>
 
 
       {/* ---- Sub-section 3: Weekly digest ---- */}
@@ -831,24 +765,6 @@ function NotificationsPageInner() {
   return (
     <Page title="Notifications">
       <BlockStack gap="400">
-
-        {/* Slack OAuth banners */}
-        {slackBanner === 'connected' && (
-          <Banner
-            tone="success"
-            onDismiss={() => setSlackBanner(null)}
-          >
-            Slack connected successfully.
-          </Banner>
-        )}
-        {slackBanner === 'error' && (
-          <Banner
-            tone="critical"
-            onDismiss={() => setSlackBanner(null)}
-          >
-            Slack connection failed. Please try again.
-          </Banner>
-        )}
 
         {/* Tab bar */}
         <Tabs

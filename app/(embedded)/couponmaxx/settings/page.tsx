@@ -570,12 +570,6 @@ export default function SmartRecoverySettings() {
 
       <BlockStack gap="400">
 
-        {/* ── Recovery health check ──────────────────────────────────────── */}
-        {shop && <RecoveryStatusCard shop={shop} />}
-
-        {/* ── Setup guide ───────────────────────────────────────────────── */}
-        <SetupGuideCard />
-
         {isFirstVisit && (
           <Banner tone="info">
             Smart Recovery is ready to go. When a customer&apos;s coupon fails, we&apos;ll show
@@ -661,34 +655,6 @@ export default function SmartRecoverySettings() {
               </FormLayout.Group>
             </FormLayout>
 
-            <SectionHeader title="HIGH-VALUE CART PROTECTION" />
-            <FormLayout>
-              <FormLayout.Group condensed>
-                <TextField
-                  label="Cart minimum ($)"
-                  type="number"
-                  value={String(Math.round(settings.highValueThreshold / 100))}
-                  min={0}
-                  prefix="$"
-                  autoComplete="off"
-                  helpText="Boost recovery discount for carts above this value."
-                  onChange={(v) =>
-                    update('highValueThreshold', (parseInt(v, 10) || 200) * 100)
-                  }
-                />
-                <TextField
-                  label="Discount boost (pp)"
-                  type="number"
-                  value={String(settings.highValueBoost)}
-                  min={0}
-                  max={20}
-                  suffix="pp"
-                  autoComplete="off"
-                  helpText="Added to the base discount for high-value carts (e.g. 15% → 20%)."
-                  onChange={(v) => update('highValueBoost', parseInt(v, 10) || 5)}
-                />
-              </FormLayout.Group>
-            </FormLayout>
           </BlockStack>
         </Card>
 
@@ -710,18 +676,6 @@ export default function SmartRecoverySettings() {
               />
             </InlineStack>
 
-            <InlineStack align="space-between" blockAlign="center">
-              <BlockStack gap="050">
-                <Text as="p" variant="bodyMd">Reference cart contents</Text>
-                <Text as="p" tone="subdued" variant="bodySm">
-                  &ldquo;15% off your HydroPitcher&rdquo; vs &ldquo;15% off&rdquo;
-                </Text>
-              </BlockStack>
-              <Toggle
-                checked={settings.useCartContents}
-                onChange={(v) => update('useCartContents', v)}
-              />
-            </InlineStack>
           </BlockStack>
         </Card>
 
