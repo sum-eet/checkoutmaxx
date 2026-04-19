@@ -40,7 +40,22 @@ export async function GET(req: NextRequest) {
 
   // ── 1. Activity checks ─────────────────────────────────────────────────────
 
-  const [cartEventRes, couponFailedRes, recoveryEventRes, settingsRes] = await Promise.all([
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [
+    cartEventRes,
+    couponFailedRes,
+    recoveryEventRes,
+    settingsRes,
+    pixelEventRes,
+    pixelCountRes,
+    sessionPingRes,
+    cartCountRes,
+    recoveryCountRes,
+    shopRowRes,
+    lastClaimRes,
+  ] = await Promise.all([
     // Most recent cart event (any type) — confirms extension is active on storefront
     supabase
       .from('CartEvent')
@@ -74,6 +89,62 @@ export async function GET(req: NextRequest) {
       .from('MerchantRecoverySettings')
       .select('enabled, rules')
       .eq('shopId', shopId)
+      .maybeSingle(),
+
+    // Most recent pixel event (CheckoutEvent = pixel ingest table)
+    supabase
+      .from('CheckoutEvent')
+      .select('occurredAt')
+      .eq('shopId', shopId)
+      .order('occurredAt', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+
+    // Pixel events today count
+    supabase
+      .from('CheckoutEvent')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shopId)
+      .gte('occurredAt', startOfToday.toISOString()),
+
+    // Most recent session ping (SessionPing uses shopDomain, not shopId)
+    supabase
+      .from('SessionPing')
+      .select('occurredAt')
+      .eq('shopDomain', shopDomain)
+      .order('occurredAt', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+
+    // Cart events today count
+    supabase
+      .from('CartEvent')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shopId)
+      .gte('occurredAt', startOfToday.toISOString()),
+
+    // Recovery events today count (RecoveryEvent uses createdAt)
+    supabase
+      .from('RecoveryEvent')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shopId)
+      .gte('createdAt', startOfToday.toISOString()),
+
+    // Shop row state
+    supabase
+      .from('Shop')
+      .select('isActive, accessToken, pixelId, installedAt, updatedAt')
+      .eq('id', shopId)
+      .maybeSingle(),
+
+    // Last claim code generated
+    supabase
+      .from('RecoveryEvent')
+      .select('recoveryCode, createdAt')
+      .eq('shopId', shopId)
+      .eq('source', 'checkout_claim')
+      .order('createdAt', { ascending: false })
+      .limit(1)
       .maybeSingle(),
   ]);
 
@@ -132,5 +203,21 @@ export async function GET(req: NextRequest) {
     lastRecoveryOffered,
     recoveryEnabled,
     invalidRuleEnabled,
+    lastPixelEvent: pixelEventRes.data?.occurredAt ?? null,
+    pixelEventsToday: pixelCountRes.count ?? 0,
+    lastSessionPing: sessionPingRes.data?.occurredAt ?? null,
+    cartEventsToday: cartCountRes.count ?? 0,
+    recoveryEventsToday: recoveryCountRes.count ?? 0,
+    shopState: {
+      isActive: shopRowRes.data?.isActive ?? false,
+      hasToken: !!shopRowRes.data?.accessToken,
+      hasPixelId: !!shopRowRes.data?.pixelId,
+      installedAt: shopRowRes.data?.installedAt ?? null,
+      updatedAt: shopRowRes.data?.updatedAt ?? null,
+    },
+    lastClaim: {
+      code: lastClaimRes.data?.recoveryCode ?? null,
+      occurredAt: lastClaimRes.data?.createdAt ?? null,
+    },
   });
 }

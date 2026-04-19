@@ -354,6 +354,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!shop) {
+      console.log(`[CMX:claim] shop_not_found shop=${shopDomain}`);
       return NextResponse.json({ error: 'Shop not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
@@ -368,17 +369,20 @@ export async function POST(req: NextRequest) {
       : DEFAULT_SETTINGS;
 
     if (!claimSettings.enabled) {
+      console.log(`[CMX:claim] show_nothing reason=recovery_disabled shop=${shopDomain}`);
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
     const invalidRule: RuleConfig = claimSettings.rules['invalid'] ?? { action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 };
 
     if (!invalidRule.enabled || invalidRule.action !== 'offer_fallback_code') {
+      console.log(`[CMX:claim] show_nothing reason=invalid_rule_disabled shop=${shopDomain}`);
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
     const limited = await isRateLimited(shop.id, sessionId, claimSettings.dailyCodeLimit);
     if (limited) {
+      console.log(`[CMX:claim] show_nothing reason=rate_limited shop=${shopDomain} session=${sessionId}`);
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
@@ -392,6 +396,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (!claimCode) {
+      console.log(`[CMX:claim] show_nothing reason=code_gen_failed shop=${shopDomain}`);
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
