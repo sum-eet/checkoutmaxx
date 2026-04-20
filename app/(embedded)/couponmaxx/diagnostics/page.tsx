@@ -152,7 +152,7 @@ export default function DiagnosticsPage() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 10000);
+    const id = setInterval(load, 30000);
     return () => clearInterval(id);
   }, [load]);
 

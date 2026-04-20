@@ -6,6 +6,7 @@ import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
 import { Session } from "@shopify/shopify-api";
 import { provisionShop } from "./provision-shop";
+import { isTruthyActive } from "./is-active";
 
 /**
  * Ensure a Shop record exists with a valid access token.
@@ -41,9 +42,15 @@ export async function ensureShop(
   if (selectError) {
     console.error("[ensureShop] SELECT failed:", selectError.code, selectError.message, selectError.details);
   }
-  const existing = (rows ?? []).find(
-    (r) => r.isActive === true || (r.isActive as any) === "true"
-  ) ?? null;
+  console.log("[ensureShop] raw rows sample: %j",
+    (rows ?? []).slice(0, 3).map((r: any) => ({
+      id: r.id,
+      isActive: r.isActive,
+      isActiveType: typeof r.isActive,
+      hasToken: !!r.accessToken,
+    }))
+  );
+  const existing = (rows ?? []).find((r) => isTruthyActive(r.isActive)) ?? null;
   console.log("[ensureShop] DB lookup: existing=%s (scanned=%d)", existing ? existing.id : "NULL", rows?.length ?? 0);
 
   if (existing && existing.accessToken && existing.accessToken !== "pending_oauth") {

@@ -1,6 +1,11 @@
 import prisma from "../lib/prisma";
 
-const shopId = "cmmmbfwm90000m5x655lmb3h5";
+const shopId = process.argv[2];
+if (!shopId) {
+  console.error("Usage: npx ts-node scripts/check-funnel.ts <shopId>");
+  process.exit(1);
+}
+
 const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
 const steps = [

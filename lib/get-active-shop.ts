@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { isTruthyActive } from "./is-active";
 
 /**
  * Canonical "find the active Shop row for a domain" lookup.
@@ -22,8 +23,6 @@ export async function getActiveShop(
     console.error("[getActiveShop] SELECT failed:", error.code, error.message);
     return null;
   }
-  const active = (rows ?? []).find(
-    (r: any) => r.isActive === true || r.isActive === "true"
-  );
+  const active = (rows ?? []).find((r: any) => isTruthyActive(r.isActive));
   return active ?? null;
 }

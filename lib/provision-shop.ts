@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { isTruthyActive } from "./is-active";
 
 export interface ProvisionShopResult {
   shopId: string;
@@ -70,9 +71,7 @@ export async function provisionShop(
     if (raceErr) {
       throw new Error(`[provisionShop] race re-query failed shop=${shopDomain}: ${raceErr.message}`);
     }
-    const winner = (rows ?? []).find(
-      (r) => r.isActive === true || (r.isActive as any) === "true"
-    ) ?? null;
+    const winner = (rows ?? []).find((r) => isTruthyActive(r.isActive)) ?? null;
     if (winner?.id) {
       console.log(`[provisionShop] shop=${shopDomain} outcome=race_resolved id=${winner.id}`);
       return { shopId: winner.id };

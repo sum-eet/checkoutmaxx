@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { registerAppPixel, deregisterAppPixel } from "@/lib/pixel-registration";
 import { registerWebhooks } from "@/lib/shopify";
 import { provisionShop } from "@/lib/provision-shop";
+import { isTruthyActive } from "@/lib/is-active";
 
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
@@ -104,9 +105,7 @@ export async function GET(req: NextRequest) {
     .from("Shop")
     .select("id, pixelId, isActive")
     .eq("shopDomain", shop);
-  const oldShop = (allOldShops ?? []).find(
-    (s) => s.isActive === true || (s.isActive as any) === "true"
-  ) ?? null;
+  const oldShop = (allOldShops ?? []).find((s) => isTruthyActive(s.isActive)) ?? null;
   const oldPixelId = oldShop?.pixelId ?? null;
   if (oldShop) {
     console.log(`[AUTH] STEP 4 found old shop record:`, oldShop.id);
