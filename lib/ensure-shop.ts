@@ -5,7 +5,6 @@ import { getShopFromRequest, getSessionTokenFromRequest } from "./verify-session
 import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
 import { Session } from "@shopify/shopify-api";
-import { provisionShop } from "./provision-shop";
 import { isTruthyActive } from "./is-active";
 
 /**
@@ -113,21 +112,12 @@ export async function ensureShop(
     return { shopId: existing.id, shopDomain };
   }
 
-  // No active shop — use canonical provisionShop (deactivate all + fresh UUID)
-  console.log("[ensureShop] provisioning fresh shop for", shopDomain, "hasToken:", !!accessToken);
-  try {
-    const result = await provisionShop(shopDomain, accessToken || "pending_oauth");
-    console.log("[ensureShop] SUCCESS: Shop provisioned id=%s, hasRealToken=%s", result.shopId, !!accessToken);
-
-    if (accessToken) {
-      registerBackgroundWork(shopDomain, accessToken, result.shopId);
-    }
-
-    return { shopId: result.shopId, shopDomain };
-  } catch (err: any) {
-    console.error("[ensureShop] provisionShop FAILED:", err.message);
-    return null;
-  }
+  // No active shop — ensureShop is read-only. Only auth/callback creates Shop rows.
+  console.warn(
+    "[ensureShop] no active Shop row for %s — returning null; install flow must run first",
+    shopDomain
+  );
+  return null;
 }
 
 function registerBackgroundWork(shopDomain: string, accessToken: string, shopId: string) {
