@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { getShopFromRequest } from '@/lib/verify-session-token';
 import { ensureShop } from '@/lib/ensure-shop';
+import { getActiveShop } from '@/lib/get-active-shop';
 
 const DEFAULT_RULES = {
   expired:          { enabled: false, action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
@@ -48,8 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing shop or settings' }, { status: 400 });
   }
 
-  const { data: shop } = await supabase
-    .from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const shop = await getActiveShop(shopDomain, 'id');
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   const { error } = await supabase

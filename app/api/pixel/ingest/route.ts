@@ -142,6 +142,7 @@ import { waitUntil } from "@vercel/functions";
 import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
 import { logIngest } from "@/lib/ingest-log";
+import { getActiveShop } from "@/lib/get-active-shop";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 500;
@@ -225,14 +226,9 @@ async function processEvent({
 }) {
   const start = Date.now();
 
-  const { data: shop, error: shopError } = await supabase
-    .from("Shop")
-    .select("id")
-    .eq("shopDomain", shopDomain)
-    .eq("isActive", true)
-    .maybeSingle();
+  const shop = await getActiveShop(shopDomain, "id");
 
-  if (shopError || !shop) {
+  if (!shop) {
     logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found or db error" });
     return;
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
 import { logIngest } from '@/lib/ingest-log';
+import { getActiveShop } from '@/lib/get-active-shop';
 
 // Rate limiting: 500 requests per minute per shop domain
 const RATE_LIMIT = 500;
@@ -21,17 +22,10 @@ async function resolveShopId(shopDomain: string): Promise<string | null> {
     return cached.id;
   }
   shopCache.delete(shopDomain);
-  const { data } = await supabase
-    .from('Shop')
-    .select('id')
-    .eq('shopDomain', shopDomain)
-    .eq('isActive', true)
-    .order('installedAt', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (data?.id) {
-    shopCache.set(shopDomain, { id: data.id, cachedAt: Date.now() });
-    return data.id;
+  const activeShop = await getActiveShop(shopDomain, "id");
+  if (activeShop?.id) {
+    shopCache.set(shopDomain, { id: activeShop.id, cachedAt: Date.now() });
+    return activeShop.id;
   }
   // Do NOT cache null — shop may be created shortly after
   return null;

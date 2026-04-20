@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { shopify, sessionStorage } from "@/lib/shopify";
 import { getActiveSubscription } from "@/lib/billing";
 import { supabase } from "@/lib/supabase";
+import { getActiveShop } from "@/lib/get-active-shop";
 
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
@@ -29,6 +30,12 @@ export async function GET(req: NextRequest) {
   }
   console.log("[billing/callback] sub=%s status=%s (%dms)", sub?.id ?? "NULL", sub?.status ?? "NULL", Date.now() - t0);
 
+  const activeShop = await getActiveShop(shop, "id");
+  if (!activeShop) {
+    console.error("[billing/callback] active shop not found:", shop);
+    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
+  }
+
   if (sub?.status === "ACTIVE") {
     const { error: updateErr } = await supabase
       .from("Shop")
@@ -37,8 +44,7 @@ export async function GET(req: NextRequest) {
         billingPlan: "pro",
         // trialEndsAt is managed by Shopify — do not set it manually here
       })
-      .eq("shopDomain", shop)
-      .eq("isActive", true);
+      .eq("id", activeShop.id);
     if (updateErr) console.error("[billing/callback] DB update ACTIVE failed:", updateErr.message);
     console.log("[billing/callback] ACTIVE: shop=%s (%dms)", shop, Date.now() - t0);
     return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
@@ -46,8 +52,7 @@ export async function GET(req: NextRequest) {
     const { error: updateErr } = await supabase
       .from("Shop")
       .update({ subscriptionStatus: "DECLINED", billingPlan: "free" })
-      .eq("shopDomain", shop)
-      .eq("isActive", true);
+      .eq("id", activeShop.id);
     if (updateErr) console.error("[billing/callback] DB update DECLINED failed:", updateErr.message);
     console.log("[billing/callback] DECLINED: shop=%s (%dms)", shop, Date.now() - t0);
     return NextResponse.redirect(

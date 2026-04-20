@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { ensureShop } from '@/lib/ensure-shop';
 import { shopify, sessionStorage } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
+import { getActiveShop } from '@/lib/get-active-shop';
 
 // Shopify Theme Store IDs → compatibility level
 // themeStoreId 0 = custom/unlisted theme
@@ -162,12 +163,7 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    const { data: shopRow } = await supabase
-      .from('Shop')
-      .select('accessToken')
-      .eq('shopDomain', shopDomain)
-      .eq('isActive', true)
-      .maybeSingle();
+    const shopRow = await getActiveShop(shopDomain, 'accessToken');
 
     if (shopRow?.accessToken) {
       const session = new Session({

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { shopify } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
+import { getActiveShop } from '@/lib/get-active-shop';
 
 // ── CORS (storefront calls this endpoint directly) ────────────────────────────
 
@@ -346,12 +347,7 @@ export async function POST(req: NextRequest) {
   // ── Checkout Claim path: no failed code, generate proactively ─────────────
   const isClaim = source === 'checkout_claim' || !failedCode;
   if (isClaim) {
-    const { data: shop } = await supabase
-      .from('Shop')
-      .select('id, accessToken')
-      .eq('shopDomain', shopDomain)
-      .eq('isActive', true)
-      .single();
+    const shop = await getActiveShop(shopDomain, 'id, accessToken');
 
     if (!shop) {
       console.log(`[CMX:claim] shop_not_found shop=${shopDomain}`);
@@ -435,12 +431,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Load shop
-  const { data: shop } = await supabase
-    .from('Shop')
-    .select('id, accessToken')
-    .eq('shopDomain', shopDomain)
-    .eq('isActive', true)
-    .single();
+  const shop = await getActiveShop(shopDomain, 'id, accessToken');
 
   if (!shop) {
     return NextResponse.json({ error: 'Shop not found' }, { status: 404, headers: CORS_HEADERS });

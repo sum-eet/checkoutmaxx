@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { getActiveShop } from '@/lib/get-active-shop';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const shopDomain = body.shop;
   if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
 
-  const { data: shop } = await supabase.from('Shop').select('id').eq('shopDomain', shopDomain).eq('isActive', true).single();
+  const shop = await getActiveShop(shopDomain, 'id');
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   const { data: alert } = await supabase.from('AlertLog').select('id, shopId').eq('id', id).single();
