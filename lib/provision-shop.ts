@@ -26,6 +26,19 @@ export async function provisionShop(
 ): Promise<ProvisionShopResult> {
   console.log(`[provisionShop] START shop=${shopDomain}`);
 
+  // Fix 1: Pre-check — if a concurrent ensureShop call already activated a row,
+  // return it immediately instead of blindly deactivating it.
+  const { data: preRows } = await supabase
+    .from("Shop")
+    .select("id, isActive")
+    .eq("shopDomain", shopDomain)
+    .order("installedAt", { ascending: false });
+  const preActive = (preRows ?? []).find((r: any) => isTruthyActive(r.isActive));
+  if (preActive?.id) {
+    console.log(`[provisionShop] pre-check: active row exists ${preActive.id}, returning early`);
+    return { shopId: preActive.id };
+  }
+
   // Step 1: deactivate all existing rows for this domain (handles delayed uninstall webhook)
   const { error: deactivateError } = await supabase
     .from("Shop")
@@ -64,7 +77,7 @@ export async function provisionShop(
     console.log(`[provisionShop] shop=${shopDomain} outcome=race_resolved — re-querying`);
     const { data: rows, error: raceErr } = await supabase
       .from("Shop")
-      .select("id, isActive")
+      .select("id, isActive, accessToken")
       .eq("shopDomain", shopDomain)
       .order("installedAt", { ascending: false });
 
@@ -75,6 +88,36 @@ export async function provisionShop(
     if (winner?.id) {
       console.log(`[provisionShop] shop=${shopDomain} outcome=race_resolved id=${winner.id}`);
       return { shopId: winner.id };
+    }
+
+    // Fix 2: No active winner found — a concurrent UPDATE deactivated it before
+    // this re-query ran. Re-activate the most recent row with a real token.
+    const mostRecent = (rows ?? []).find(
+      (r: any) => r.accessToken && r.accessToken !== "pending_oauth"
+    );
+    if (mostRecent?.id) {
+      const { error: reactivateErr } = await supabase
+        .from("Shop")
+        .update({ isActive: true, updatedAt: new Date().toISOString() })
+        .eq("id", mostRecent.id);
+      if (!reactivateErr) {
+        console.log(`[provisionShop] race_resolved: re-activated most recent row ${mostRecent.id}`);
+        return { shopId: mostRecent.id };
+      }
+      if (reactivateErr?.code === "23505") {
+        // Another concurrent call won the re-activation race — find the winner
+        const { data: finalRows } = await supabase
+          .from("Shop")
+          .select("id, isActive")
+          .eq("shopDomain", shopDomain)
+          .order("installedAt", { ascending: false });
+        const finalWinner = (finalRows ?? []).find((r: any) => isTruthyActive(r.isActive));
+        if (finalWinner?.id) {
+          console.log(`[provisionShop] race_resolved: final winner ${finalWinner.id}`);
+          return { shopId: finalWinner.id };
+        }
+      }
+      console.error(`[provisionShop] reactivate failed shop=${shopDomain}:`, reactivateErr?.message);
     }
   }
 
