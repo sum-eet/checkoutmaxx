@@ -7,10 +7,8 @@ import {
   BlockStack,
   InlineStack,
   Text,
-  TextField,
   Button,
   Banner,
-  Divider,
   Spinner,
 } from '@shopify/ui-extensions-react/checkout';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -39,9 +37,8 @@ function CheckoutRecovery() {
 
   const appUrl = ((settings.app_url || DEFAULT_APP_URL) + '').replace(/\/$/, '');
 
-  // State machine: idle | claiming | applying | recovery | success
+  // State machine: idle | claiming | recovery | success
   const [state, setState] = useState('idle');
-  const [inputCode, setInputCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [discountLabel, setDiscountLabel] = useState('');
   const [successCode, setSuccessCode] = useState('');
@@ -125,55 +122,6 @@ function CheckoutRecovery() {
     }
   }
 
-  async function handleApply() {
-    const code = inputCode.trim().toUpperCase();
-    if (!code) return;
-    console.log('[CMX Checkout] applying code:', code);
-    setState('applying');
-
-    // Try applying the code via Shopify's API
-    const result = await applyDiscount({ type: 'addDiscountCode', code });
-    console.log('[CMX Checkout] apply result:', result);
-    if (!mountedRef.current) return;
-
-    if (result.type === 'success') {
-      setSuccessCode(code);
-      setDiscountLabel('');
-      setInputCode('');
-      setState('success');
-      return;
-    }
-
-    // Code failed — get recovery suggestion
-    try {
-      const data = await callApi({
-        shopId: myshopifyDomain,
-        sessionId: getSessionId(),
-        failedCode: code,
-        failureReason: 'invalid',
-        cartValue: 0,
-        cartItems: [],
-        customerName: null,
-        attemptsThisSession: 1,
-        device: 'unknown',
-        source: 'checkout',
-      });
-      console.log('[CMX Checkout] recovery API:', data);
-      if (!mountedRef.current) return;
-
-      if (data.action === 'show_code' && data.code) {
-        setRecoveryCode(data.code);
-        setDiscountLabel(data.discountLabel || '');
-        setState('recovery');
-      } else {
-        setState('idle');
-      }
-    } catch (err) {
-      console.warn('[CMX Checkout] recovery fetch error:', err);
-      if (mountedRef.current) setState('idle');
-    }
-  }
-
   async function handleApplyRecovery() {
     console.log('[CMX Checkout] applying recovery code:', recoveryCode);
     const result = await applyDiscount({ type: 'addDiscountCode', code: recoveryCode });
@@ -227,34 +175,13 @@ function CheckoutRecovery() {
     );
   }
 
-  // Idle / applying state
+  // Idle state — single Claim row, no duplicate discount input
   return (
-    <BlockStack spacing="tight">
-      <InlineStack spacing="tight" blockAlignment="center">
-        <Text tone="subdued">Looking for a coupon?</Text>
-        <Button variant="secondary" onPress={handleClaim}>
-          Claim it →
-        </Button>
-      </InlineStack>
-      <Divider />
-      <InlineStack spacing="tight" blockAlignment="center">
-        <TextField
-          label="Discount code"
-          labelHidden
-          placeholder="Enter a discount code"
-          value={inputCode}
-          onChange={setInputCode}
-          disabled={state === 'applying'}
-        />
-        <Button
-          variant="secondary"
-          onPress={handleApply}
-          loading={state === 'applying'}
-          disabled={!inputCode.trim() || state === 'applying'}
-        >
-          Apply
-        </Button>
-      </InlineStack>
-    </BlockStack>
+    <InlineStack spacing="tight" blockAlignment="center">
+      <Text tone="subdued">Looking for a coupon?</Text>
+      <Button variant="secondary" onPress={handleClaim}>
+        Claim it →
+      </Button>
+    </InlineStack>
   );
 }
