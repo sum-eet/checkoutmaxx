@@ -6,6 +6,7 @@ import { registerAppPixel } from "./pixel-registration";
 import { registerWebhooks } from "./shopify";
 import { Session } from "@shopify/shopify-api";
 import { isTruthyActive } from "./is-active";
+import { provisionShop } from "./provision-shop";
 
 /**
  * Ensure a Shop record exists with a valid access token.
@@ -112,11 +113,22 @@ export async function ensureShop(
     return { shopId: existing.id, shopDomain };
   }
 
-  // No active shop — ensureShop is read-only. Only auth/callback creates Shop rows.
-  console.warn(
-    "[ensureShop] no active Shop row for %s — returning null; install flow must run first",
-    shopDomain
-  );
+  // scanned=0 means auth/callback never wrote a row (install race or callback failure).
+  // Provision once using the token we just exchanged so the app is usable immediately.
+  // scanned>0 but no active row means the shop was deactivated — don't provision, return null.
+  if ((rows?.length ?? 0) === 0 && accessToken) {
+    console.log("[ensureShop] scanned=0, provisioning first-time row for", shopDomain);
+    try {
+      const result = await provisionShop(shopDomain, accessToken);
+      console.log("[ensureShop] first-time provision succeeded:", result.shopId);
+      registerBackgroundWork(shopDomain, accessToken, result.shopId);
+      return { shopId: result.shopId, shopDomain };
+    } catch (err: any) {
+      console.error("[ensureShop] first-time provision failed:", err.message);
+    }
+  }
+
+  console.warn("[ensureShop] no active Shop row for %s — returning null", shopDomain);
   return null;
 }
 
