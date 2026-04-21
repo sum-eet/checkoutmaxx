@@ -287,13 +287,13 @@ async function generateShopifyDiscountCode(
 
   const userErrors = result?.userErrors as { field: string; message: string }[] | undefined;
   if (userErrors && userErrors.length > 0) {
-    console.error('[recovery/decide] Shopify discount userErrors:', userErrors);
+    console.error('[CX] shopify_discount_create_fail', { userErrors, shopDomain, code });
     return null;
   }
 
   // Verify the discount was actually created
   if (!result?.codeDiscountNode?.id) {
-    console.error('[recovery/decide] Discount created but no ID returned — likely scope issue');
+    console.error('[CX] shopify_discount_create_fail', { reason: 'no_id_returned', shopDomain, code });
     return null;
   }
 
@@ -340,6 +340,8 @@ export async function POST(req: NextRequest) {
   const { shopId: shopDomain, sessionId, failedCode, failureReason,
           cartValue, cartItems, customerName, attemptsThisSession, device, source } = body;
 
+  console.log('[CX] hit', { shopDomain, sessionId, source: source ?? null, failedCode: failedCode ?? null });
+
   if (!shopDomain || !sessionId) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400, headers: CORS_HEADERS });
   }
@@ -364,21 +366,23 @@ export async function POST(req: NextRequest) {
       ? { ...DEFAULT_SETTINGS, ...settingsRow }
       : DEFAULT_SETTINGS;
 
+    console.log('[CX] settings_lookup', { shopId: shop.id, found: !!settingsRow, enabled: claimSettings.enabled });
+
     if (!claimSettings.enabled) {
-      console.log(`[CMX:claim] show_nothing reason=recovery_disabled shop=${shopDomain}`);
+      console.warn('[CX] blocked', { reason: 'recovery_disabled', shopDomain });
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
     const invalidRule: RuleConfig = claimSettings.rules['invalid'] ?? { action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 };
 
     if (invalidRule.enabled === false || invalidRule.action !== 'offer_fallback_code') {
-      console.log(`[CMX:claim] show_nothing reason=invalid_rule_disabled shop=${shopDomain}`);
+      console.warn('[CX] blocked', { reason: 'invalid_rule_disabled', shopDomain, invalidRule });
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
     const limited = await isRateLimited(shop.id, sessionId, claimSettings.dailyCodeLimit);
     if (limited) {
-      console.log(`[CMX:claim] show_nothing reason=rate_limited shop=${shopDomain} session=${sessionId}`);
+      console.warn('[CX] blocked', { reason: 'rate_limited', shopDomain, sessionId });
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
@@ -392,13 +396,21 @@ export async function POST(req: NextRequest) {
     );
 
     if (!claimCode) {
-      console.log(`[CMX:claim] show_nothing reason=code_gen_failed shop=${shopDomain}`);
+      console.warn('[CX] blocked', { reason: 'code_gen_failed', shopDomain });
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
 
     const discountLabel = (invalidRule.discountType ?? 'percentage') === 'percentage'
       ? `${invalidRule.discount ?? 10}% off`
       : `$${((invalidRule.discount ?? 10) / 100).toFixed(2)} off`;
+
+    console.log('[CX] code_generated', {
+      code: claimCode,
+      amount: invalidRule.discount ?? 10,
+      type: invalidRule.discountType ?? 'percentage',
+      expiresInMinutes: invalidRule.expiryMinutes ?? 15,
+      shopDomain,
+    });
 
     const claimEventId = crypto.randomUUID();
     await supabase.from('RecoveryEvent').insert({

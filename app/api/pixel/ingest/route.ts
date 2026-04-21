@@ -225,10 +225,12 @@ async function processEvent({
 }) {
   const start = Date.now();
 
+  console.log("[pixel/ingest] hit", { shopDomain, eventType, sessionId: sessionId ?? null });
+
   const shop = await getShop(shopDomain);
+  console.log("[pixel/ingest] shop_lookup", { shopDomain, found: !!shop, shopId: shop?.id ?? null });
 
   if (!shop) {
-    console.log("[pixel/ingest] shop not found:", shopDomain);
     return;
   }
 
@@ -280,7 +282,9 @@ async function processEvent({
   });
 
   if (insertError) {
-    console.error("[pixel/ingest] DB write failed:", insertError);
+    console.error("[pixel/ingest] insert_fail", { code: (insertError as any).code, message: insertError.message, shopId: shop.id, eventType });
+  } else {
+    console.log("[pixel/ingest] ok", { shopId: shop.id, eventType, sessionId: sessionId ?? null });
   }
 
   // When an order completes, write a CartEvent so the session builder can

@@ -316,6 +316,17 @@ export default function DiagnosticsPage() {
 
               {/* Event streams */}
               <DiagRow
+                label="Storefront pixel signal"
+                dot={
+                  data.pixelEventsToday > 0
+                    ? { color: '#16A34A', label: `${data.pixelEventsToday} today` }
+                    : data.lastPixelEvent && Date.now() - new Date(data.lastPixelEvent).getTime() < 7 * 24 * 60 * 60 * 1000
+                    ? { color: '#F59E0B', label: 'No events today' }
+                    : { color: '#EF4444', label: 'Never' }
+                }
+                detail={data.pixelEventsToday > 0 ? `Last: ${timeAgo(data.lastPixelEvent)}` : 'No prod traffic yet'}
+              />
+              <DiagRow
                 label="Pixel events (CheckoutEvent)"
                 dot={statusDot(data.lastPixelEvent)}
                 detail={timeAgo(data.lastPixelEvent)}

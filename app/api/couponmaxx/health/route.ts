@@ -142,8 +142,10 @@ export async function GET(req: NextRequest) {
   const lastCartEvent = cartEventRes.data?.occurredAt ?? null;
   const lastCouponFailed = couponFailedRes.data?.occurredAt ?? null;
   const lastRecoveryOffered = recoveryEventRes.data?.occurredAt ?? null;
-  const recoveryEnabled = settingsRes.data?.enabled ?? false;
-  const invalidRuleEnabled = settingsRes.data?.rules?.invalid?.enabled ?? false;
+  // Default true — matches DEFAULT_SETTINGS in cx/route (no settings row = feature enabled)
+  const recoveryEnabled = settingsRes.data?.enabled ?? true;
+  const invalidRule = settingsRes.data?.rules?.invalid ?? { action: 'offer_fallback_code' };
+  const invalidRuleEnabled = invalidRule.enabled !== false && invalidRule.action === 'offer_fallback_code';
 
   // ── 2. Theme detection ─────────────────────────────────────────────────────
 

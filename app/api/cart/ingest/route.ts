@@ -68,12 +68,17 @@ async function processEvent(text: string) {
     shopDomain = event.shopDomain ?? 'unknown';
     const { sessionId, cartToken, occurredAt, url, device, country, utmSource, utmMedium, utmCampaign, utmReferrer, payload = {} } = event;
 
-    if (!eventType || !shopDomain || !sessionId) return;
+    console.log('[cart/ingest] hit', { shopDomain, eventType, sessionId: sessionId ?? null });
+
+    if (!eventType || !shopDomain || !sessionId) {
+      console.warn('[cart/ingest] reject', { reason: 'missing_fields', eventType, shopDomain, hasSession: !!sessionId });
+      return;
+    }
     if (SKIP_EVENTS.has(eventType)) return;
 
     const shopResult = await getShop(shopDomain);
+    console.log('[cart/ingest] shop_lookup', { shopDomain, found: !!shopResult, shopId: shopResult?.id ?? null });
     if (!shopResult) {
-      console.log('[cart/ingest] shop not found:', shopDomain);
       return;
     }
     const shopId = shopResult.id;
@@ -129,8 +134,11 @@ async function processEvent(text: string) {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
     });
 
-    if (insertError) console.error('[cart/ingest] insert failed', insertError.message);
-    else console.log('[cart/ingest] ok shop=%s event=%s', shopDomain, eventType);
+    if (insertError) {
+      console.error('[cart/ingest] insert_fail', { code: (insertError as any).code, message: insertError.message, shopId, eventType });
+    } else {
+      console.log('[cart/ingest] ok', { shopId, eventType, cartToken: cartToken ?? null });
+    }
 
   } catch (err: any) {
     console.error('[cart/ingest]', err);
