@@ -7,7 +7,18 @@ function useShop(): string | null {
   const [shop, setShop] = useState<string | null>(null);
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    setShop(p.get('shop') ?? p.get('shopDomain') ?? null);
+    const direct = p.get('shop') ?? p.get('shopDomain') ?? null;
+    if (direct) { setShop(direct); return; }
+    // Try decoding id_token to extract shop domain
+    const token = p.get('id_token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const dest: string = payload.dest || payload.iss || '';
+        const m = dest.match(/https?:\/\/([^/]+)/);
+        if (m) setShop(m[1]);
+      } catch {}
+    }
   }, []);
   return shop;
 }
@@ -146,9 +157,8 @@ export default function DiagnosticsPage() {
   const [fireResult, setFireResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!shop) return;
     try {
-      const res = await fetcher(`/api/couponmaxx/health?shop=${shop}`);
+      const res = await fetcher(`/api/couponmaxx/health`);
       setData(res);
       setError(null);
     } catch (e: any) {
@@ -156,7 +166,7 @@ export default function DiagnosticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [shop]);
+  }, []);
 
   useEffect(() => {
     load();
