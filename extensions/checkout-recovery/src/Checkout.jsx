@@ -8,6 +8,7 @@ import {
   Text,
   Button,
   Banner,
+  View,
 } from '@shopify/ui-extensions-react/checkout';
 import { useState, useEffect, useRef } from 'react';
 
@@ -40,14 +41,7 @@ function CheckoutRecovery() {
     console.log('[CMX Checkout] state →', state);
   }, [state]);
 
-  // Auto-dismiss success after 5s
-  useEffect(() => {
-    if (state !== 'success') return;
-    const t = setTimeout(() => {
-      if (mountedRef.current) setState('idle');
-    }, 5000);
-    return () => clearTimeout(t);
-  }, [state]);
+  // Success state is terminal — no auto-dismiss
 
   const canUpdate = instructions?.discounts?.canUpdateDiscountCodes;
   console.log('[CMX Checkout] canUpdateDiscountCodes:', canUpdate, '| state:', state);
@@ -100,16 +94,19 @@ function CheckoutRecovery() {
   }
 
   return (
-    <InlineStack spacing="tight" blockAlignment="center">
-      <Text tone="subdued">Looking for a coupon?</Text>
-      <Button
-        variant="secondary"
-        onPress={handleClaim}
-        loading={state === 'applying'}
-        disabled={state === 'applying'}
-      >
-        Claim it →
-      </Button>
-    </InlineStack>
+    <View border="base" cornerRadius="base" padding="base">
+      <InlineStack spacing="tight" blockAlignment="center" inlineAlignment="space-between">
+        <Text size="small" tone="subdued">Looking for a discount?</Text>
+        <Button
+          kind="plain"
+          appearance="monochrome"
+          onPress={handleClaim}
+          loading={state === 'applying'}
+          disabled={state === 'applying'}
+        >
+          Claim
+        </Button>
+      </InlineStack>
+    </View>
   );
 }
