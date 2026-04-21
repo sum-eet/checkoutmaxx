@@ -6,16 +6,19 @@ type = "ui_extension"
 name = "CouponMaxx Checkout Recovery"
 handle = "checkout-recovery"
 
-[extensions.capabilities]
-network_access = true
-
 [[extensions.targeting]]
 module = "./src/Checkout.jsx"
 target = "purchase.checkout.reductions.render-after"
 
 [extensions.settings]
   [[extensions.settings.fields]]
-  key = "app_url"
+  key = "discount_code"
   type = "single_line_text_field"
-  name = "App URL"
-  description = "CouponMaxx API URL. Do not change unless instructed by support."
+  name = "Discount code"
+  description = "Discount code offered to shoppers via the Claim button. Must match an active discount created in Shopify admin."
+
+  [[extensions.settings.fields]]
+  key = "discount_label"
+  type = "single_line_text_field"
+  name = "Discount label (optional)"
+  description = "Short human label shown with the code. e.g. '10% off'."

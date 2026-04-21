@@ -4,25 +4,12 @@ import {
   useShop,
   useSettings,
   useInstructions,
-  BlockStack,
   InlineStack,
   Text,
   Button,
   Banner,
-  Spinner,
 } from '@shopify/ui-extensions-react/checkout';
-import { useState, useEffect, useCallback, useRef } from 'react';
-
-const DEFAULT_APP_URL = 'https://couponmaxx.vercel.app';
-
-// Module-level session ID — checkout extensions have no sessionStorage
-let _sessionId = '';
-function getSessionId() {
-  if (!_sessionId) {
-    _sessionId = 'co_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  }
-  return _sessionId;
-}
+import { useState, useEffect, useRef } from 'react';
 
 export default reactExtension(
   'purchase.checkout.reductions.render-after',
@@ -35,26 +22,22 @@ function CheckoutRecovery() {
   const instructions = useInstructions();
   const applyDiscount = useApplyDiscountCodeChange();
 
-  const appUrl = ((settings.app_url || DEFAULT_APP_URL) + '').replace(/\/$/, '');
+  const discountCode = String(settings.discount_code || '').trim().toUpperCase();
+  const discountLabel = String(settings.discount_label || '').trim();
 
-  // State machine: idle | claiming | recovery | success
+  // State: idle | applying | success | failed
   const [state, setState] = useState('idle');
-  const [recoveryCode, setRecoveryCode] = useState('');
-  const [discountLabel, setDiscountLabel] = useState('');
-  const [successCode, setSuccessCode] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
-    console.log('[CMX Checkout] MOUNTED — shop:', myshopifyDomain, '| appUrl:', appUrl);
-    return () => {
-      mountedRef.current = false;
-      console.log('[CMX Checkout] UNMOUNTED');
-    };
+    console.log('[CMX Checkout] MOUNTED — shop:', myshopifyDomain, '| code:', discountCode || '(none)');
+    return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
-    console.log('[CMX Checkout] state changed →', state);
+    console.log('[CMX Checkout] state →', state);
   }, [state]);
 
   // Auto-dismiss success after 5s
@@ -66,120 +49,65 @@ function CheckoutRecovery() {
     return () => clearTimeout(t);
   }, [state]);
 
-  // Log canUpdateDiscountCodes but never hide — show to everyone
   const canUpdate = instructions?.discounts?.canUpdateDiscountCodes;
-  console.log('[CMX Checkout] canUpdateDiscountCodes:', canUpdate, '| shop:', myshopifyDomain, '| state:', state);
-
-  async function callApi(payload) {
-    const res = await fetch(`${appUrl}/api/couponmaxx/cx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('API ' + res.status);
-    return res.json();
-  }
+  console.log('[CMX Checkout] canUpdateDiscountCodes:', canUpdate, '| state:', state);
 
   async function handleClaim() {
-    console.log('[CMX Checkout] claim clicked, shop:', myshopifyDomain);
-    setState('claiming');
+    if (!discountCode) {
+      console.warn('[CMX Checkout] claim: no discount_code configured in settings');
+      setErrorMsg('No coupon available right now.');
+      setState('failed');
+      return;
+    }
+    console.log('[CMX Checkout] claim clicked, applying:', discountCode);
+    setState('applying');
     try {
-      const data = await callApi({
-        shopId: myshopifyDomain,
-        sessionId: getSessionId(),
-        failedCode: '',
-        failureReason: 'invalid',
-        cartValue: 0,
-        cartItems: [],
-        customerName: null,
-        attemptsThisSession: 0,
-        device: 'unknown',
-        source: 'checkout_claim',
-      });
-      console.log('[CMX Checkout] claim API:', data);
+      const result = await applyDiscount({ type: 'addDiscountCode', code: discountCode });
+      console.log('[CMX Checkout] apply result:', result);
       if (!mountedRef.current) return;
-
-      if (data.action === 'show_code' && data.code) {
-        const result = await applyDiscount({ type: 'addDiscountCode', code: data.code });
-        console.log('[CMX Checkout] claim apply result:', result);
-        if (!mountedRef.current) return;
-        if (result.type === 'success') {
-          setSuccessCode(data.code);
-          setDiscountLabel(data.discountLabel || '');
-          setState('success');
-        } else {
-          // Auto-apply failed — show code for manual use
-          setRecoveryCode(data.code);
-          setDiscountLabel(data.discountLabel || '');
-          setState('recovery');
-        }
+      if (result.type === 'success') {
+        setState('success');
       } else {
-        setState('idle');
+        setErrorMsg("That coupon couldn't be applied.");
+        setState('failed');
       }
     } catch (err) {
-      console.warn('[CMX Checkout] claim error:', err);
-      if (mountedRef.current) setState('idle');
+      console.warn('[CMX Checkout] apply threw:', err);
+      if (!mountedRef.current) return;
+      setErrorMsg("Couldn't apply coupon. Try again.");
+      setState('failed');
     }
   }
 
-  async function handleApplyRecovery() {
-    console.log('[CMX Checkout] applying recovery code:', recoveryCode);
-    const result = await applyDiscount({ type: 'addDiscountCode', code: recoveryCode });
-    console.log('[CMX Checkout] recovery apply result:', result);
-    if (!mountedRef.current) return;
-    if (result.type === 'success') {
-      setSuccessCode(recoveryCode);
-      setDiscountLabel(discountLabel);
-      setRecoveryCode('');
-      setState('success');
-    }
-  }
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ──
 
   if (state === 'success') {
     return (
       <Banner tone="success">
         <Text>
-          ✓ {successCode} applied{discountLabel ? ' — ' + discountLabel : ''}
+          ✓ {discountCode} applied{discountLabel ? ' — ' + discountLabel : ''}
         </Text>
       </Banner>
     );
   }
 
-  if (state === 'recovery') {
+  if (state === 'failed') {
     return (
-      <BlockStack spacing="tight">
-        <Banner tone="warning">
-          <BlockStack spacing="extraTight">
-            <Text>That code didn't work — try this instead:</Text>
-            <InlineStack spacing="tight" blockAlignment="center">
-              <Text>{recoveryCode}</Text>
-              {discountLabel ? <Text tone="subdued">· {discountLabel}</Text> : null}
-            </InlineStack>
-          </BlockStack>
-        </Banner>
-        <Button variant="primary" onPress={handleApplyRecovery}>
-          Apply {recoveryCode}
-        </Button>
-      </BlockStack>
+      <Banner tone="warning">
+        <Text>{errorMsg}</Text>
+      </Banner>
     );
   }
 
-  if (state === 'claiming') {
-    return (
-      <InlineStack spacing="tight" blockAlignment="center">
-        <Spinner size="small" />
-        <Text tone="subdued">Finding your discount…</Text>
-      </InlineStack>
-    );
-  }
-
-  // Idle state — single Claim row, no duplicate discount input
   return (
     <InlineStack spacing="tight" blockAlignment="center">
       <Text tone="subdued">Looking for a coupon?</Text>
-      <Button variant="secondary" onPress={handleClaim}>
+      <Button
+        variant="secondary"
+        onPress={handleClaim}
+        loading={state === 'applying'}
+        disabled={state === 'applying'}
+      >
         Claim it →
       </Button>
     </InlineStack>
