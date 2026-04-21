@@ -1,92 +1,72 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { createHmac, timingSafeEqual } from "crypto";
 import { supabase } from "@/lib/supabase";
-import { deletePixel } from "@/lib/pixel";
+
+function ok() {
+  return NextResponse.json({ ok: true });
+}
 
 export async function POST(req: NextRequest) {
-  console.log("[UNINSTALL] ====== WEBHOOK HIT ======");
+  console.log("[UNINSTALL] ====== WEBHOOK ======");
 
   const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
-  if (!hmacHeader) {
-    console.error("[UNINSTALL] NO HMAC HEADER");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!hmacHeader) return ok();
 
   const rawBody = await req.text();
-  const { createHmac } = await import("crypto");
   const secret = process.env.SHOPIFY_API_SECRET!;
   const computed = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
 
-  if (computed !== hmacHeader) {
+  const aBuf = Buffer.from(computed);
+  const bBuf = Buffer.from(hmacHeader);
+  if (aBuf.length !== bBuf.length || !timingSafeEqual(aBuf, bBuf)) {
     console.error("[UNINSTALL] HMAC MISMATCH");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return ok();
   }
 
   let body: any;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    console.error("[UNINSTALL] INVALID JSON BODY");
-    return NextResponse.json({ error: "Bad request" }, { status: 400 });
-  }
+  try { body = JSON.parse(rawBody); } catch { return ok(); }
 
-  const shop = (body?.domain || body?.myshopify_domain) as string | undefined;
-  if (!shop) {
-    console.error("[UNINSTALL] NO SHOP DOMAIN IN PAYLOAD");
-    return NextResponse.json({ error: "Missing shop" }, { status: 400 });
-  }
+  const shopDomain = (body?.domain || body?.myshopify_domain) as string | undefined;
+  if (!shopDomain) return ok();
 
-  console.log("[UNINSTALL] STEP 1 VERIFIED:", shop);
+  const triggeredAtHeader = req.headers.get("x-shopify-triggered-at");
+  const triggered = triggeredAtHeader ? new Date(triggeredAtHeader) : new Date();
+  console.log("[UNINSTALL] shop=%s triggered=%s", shopDomain, triggered.toISOString());
 
-  // Find the ACTIVE shop record for this domain
-  const { data: shopRecord } = await supabase
+  const { data: row, error: selErr } = await supabase
     .from("Shop")
-    .select("id, pixelId, accessToken")
-    .eq("shopDomain", shop)
-    .eq("isActive", true)
+    .select("id, installedAt")
+    .eq("shopDomain", shopDomain)
     .maybeSingle();
 
-  if (!shopRecord) {
-    console.log("[UNINSTALL] No active shop record found for:", shop, "— nothing to do");
-    return NextResponse.json({ ok: true });
+  if (selErr) {
+    console.error("[UNINSTALL] SELECT failed", selErr.message);
+    return ok();
+  }
+  if (!row) {
+    console.log("[UNINSTALL] no row for %s", shopDomain);
+    return ok();
   }
 
-  console.log("[UNINSTALL] STEP 2 FOUND SHOP:", shopRecord.id);
-
-  // Deregister pixel with Shopify (cleanup)
-  if (shopRecord.pixelId && shopRecord.accessToken) {
-    try {
-      await deletePixel(shop, shopRecord.accessToken, shopRecord.pixelId);
-      console.log("[UNINSTALL] STEP 3 PIXEL DEREGISTERED");
-    } catch (err: any) {
-      console.error("[UNINSTALL] STEP 3 PIXEL DEREGISTER FAILED:", err.message);
-    }
-  } else {
-    console.log("[UNINSTALL] STEP 3 NO PIXEL TO DEREGISTER");
+  if (new Date(row.installedAt) > triggered) {
+    console.log("[UNINSTALL] stale webhook — installedAt(%s) > triggered(%s), skip",
+      row.installedAt, triggered.toISOString());
+    return ok();
   }
 
-  // SOFT DELETE — mark inactive, keep ALL data (CartEvent, CheckoutEvent, etc.)
-  // Next install will create a NEW Shop record with a fresh cuid.
-  const { error: updateError } = await supabase
+  const { error: updErr } = await supabase
     .from("Shop")
-    .update({ isActive: false, pixelId: null })
-    .eq("id", shopRecord.id);
+    .update({
+      isActive: false,
+      accessToken: null,
+      pixelId: null,
+      uninstalledAt: triggered.toISOString(),
+    })
+    .eq("id", row.id);
 
-  if (updateError) {
-    console.error("[UNINSTALL] STEP 4 SOFT DELETE FAILED:", updateError.message);
-  } else {
-    console.log("[UNINSTALL] STEP 4 SHOP SOFT DELETED:", shopRecord.id);
-  }
+  if (updErr) console.error("[UNINSTALL] UPDATE failed", updErr.message);
+  else console.log("[UNINSTALL] deactivated id=%s", row.id);
 
-  // Delete the session — not needed after uninstall
-  try {
-    await prisma.session.delete({ where: { id: `offline_${shop}` } });
-    console.log("[UNINSTALL] STEP 5 SESSION DELETED");
-  } catch (err: any) {
-    console.log("[UNINSTALL] STEP 5 SESSION DELETE SKIPPED:", err.message);
-  }
-
-  console.log("[UNINSTALL] ====== DONE ======");
-  return NextResponse.json({ ok: true });
+  return ok();
 }

@@ -8,7 +8,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Required by @shopify/shopify-app-session-storage-prisma
 model Session {
   id            String    @id
   shop          String
@@ -28,96 +27,25 @@ model Session {
 }
 
 model Shop {
-  id         String  @id @default(cuid())
-  shopDomain String
-  accessToken String
-  pixelId    String? // Shopify pixel ID once registered
-  isActive   Boolean  @default(true)
+  id              String   @id @default(cuid())
+  shopDomain      String   @unique
+  accessToken     String?
+  pixelId         String?
+  isActive        Boolean  @default(true)
+  installedAt     DateTime @default(now())
+  uninstalledAt   DateTime?
+  timezone        String   @default("UTC")
 
-  installedAt DateTime @default(now())
-  timezone    String   @default("UTC")
-
-  // Notification config
-  alertEmail        String?
-  slackWebhookUrl   String?
-  alertEmailEnabled Boolean @default(true)
-  alertSlackEnabled Boolean @default(false)
-
-  // Alert type toggles
-  alertAbandonmentEnabled Boolean @default(true)
-  alertDiscountEnabled    Boolean @default(true)
-  alertExtensionEnabled   Boolean @default(true)
-  alertPaymentEnabled     Boolean @default(true)
-
-  // CouponMaxx notification settings (added via supabase/shop-slack.sql)
-  notificationSettings Json?
-  notificationEmail    String?
-  slackChannelName     String?
-
-  // Alert sensitivity thresholds (overrides from settings page)
-  abandonmentThreshold  Float @default(0.20) // 20%
-  discountFailureMin    Int   @default(3)
-  paymentFailureRate    Float @default(0.15) // 15%
-
-  // Billing
   subscriptionId     String?
   subscriptionStatus String?
   trialEndsAt        DateTime?
   billingPlan        String    @default("free")
 
-  checkoutEvents CheckoutEvent[]
-  alertLogs      AlertLog[]
-  baselines      Baseline[]
-  cartEvents     CartEvent[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([shopDomain])
-}
-
-model CheckoutEvent {
-  id     String @id @default(cuid())
-  shopId String
-  shop   Shop   @relation(fields: [shopId], references: [id])
-
-  sessionId String // client-side checkout token
-  eventType String // checkout_started | checkout_contact_info_submitted |
-                   // checkout_address_info_submitted | checkout_shipping_info_submitted |
-                   // payment_info_submitted | checkout_completed |
-                   // alert_displayed | ui_extension_errored
-
-  // Enrichment fields
-  deviceType   String? // mobile | desktop | tablet
-  country      String?
-  discountCode String? // extracted from alert_displayed or checkout_completed
-  totalPrice   Float?
-  currency     String?
-  gatewayName  String? // payment gateway from checkout_completed
-  errorMessage String? // from ui_extension_errored
-  extensionId  String? // from ui_extension_errored
-
-  rawPayload Json     // full event payload (PII-stripped before storage)
-  occurredAt DateTime // client-side timestamp from pixel event
-  receivedAt DateTime @default(now())
-
-  @@index([shopId, eventType, occurredAt])
-  @@index([shopId, sessionId])
-  @@index([shopId, occurredAt])
-}
-
-model Baseline {
-  id     String @id @default(cuid())
-  shopId String
-  shop   Shop   @relation(fields: [shopId], references: [id])
-
-  metricName  String   // checkout_cvr | payment_failure_rate
-  value       Float    // rolling 7-day average
-  windowStart DateTime
-  windowEnd   DateTime
-  computedAt  DateTime @default(now())
-
-  @@index([shopId, metricName])
+  cartEvents     CartEvent[]
+  checkoutEvents CheckoutEvent[]
 }
 
 model CartEvent {
@@ -126,24 +54,19 @@ model CartEvent {
   sessionId        String
   cartToken        String
   eventType        String
-  // eventType values:
-  // cart_fetched | cart_item_added | cart_item_changed | cart_item_removed
-  // cart_bulk_updated | cart_checkout_clicked | cart_page_hidden
-  // cart_coupon_applied | cart_coupon_failed | cart_coupon_recovered | cart_coupon_removed
-
-  cartValue        Int?     // in cents
+  cartValue        Int?
   cartItemCount    Int?
-  lineItems        Json?    // sanitised array: [{productId, variantId, productTitle, price, quantity}]
+  lineItems        Json?
   couponCode       String?
   couponSuccess    Boolean?
-  couponFailReason String?  // always "unknown" from cart; real reason at checkout via Web Pixel
-  couponRecovered  Boolean? // true = customer added items after failure to unlock discount
-  discountAmount   Int?     // in cents
+  couponFailReason String?
+  couponRecovered  Boolean?
+  discountAmount   Int?
   lineIndex        Int?
   newQuantity      Int?
   pageUrl          String?
-  device           String?  // mobile | desktop
-  country          String?  // from window.Shopify.country on storefront
+  device           String?
+  country          String?
   utmSource        String?
   utmMedium        String?
   utmCampaign      String?
@@ -160,35 +83,28 @@ model CartEvent {
   @@index([shopId, couponCode, occurredAt])
 }
 
-model AlertLog {
+model CheckoutEvent {
   id     String @id @default(cuid())
   shopId String
   shop   Shop   @relation(fields: [shopId], references: [id])
 
-  alertType String // abandonment_spike | failed_discount | extension_error | payment_failure
-  severity  String // critical | warning | info
-  title     String
-  body      String // full alert message
-  metadata  Json   // structured data: cvr, baseline, discount_code, etc.
+  sessionId String
+  eventType String
 
-  actionUrl   String? // deep link into Shopify admin
-  actionLabel String?
+  deviceType   String?
+  country      String?
+  discountCode String?
+  totalPrice   Float?
+  currency     String?
+  gatewayName  String?
+  errorMessage String?
+  extensionId  String?
 
-  sentEmail Boolean @default(false)
-  sentSlack Boolean @default(false)
+  rawPayload Json
+  occurredAt DateTime
+  receivedAt DateTime @default(now())
 
-  firedAt    DateTime  @default(now())
-  resolvedAt DateTime?
-  resolvedBy String? // 'merchant' | 'auto'
-
-  // ROI tracking fields (Part 9)
-  roiEstimatedUsd       Float?
-  roiMethodology        String? // human-readable explanation
-  cvrAtAlert            Float?
-  baselineCvrAtAlert    Float?
-  aovAtAlert            Float?
-  sessionsPerHourAtAlert Int?
-
-  @@index([shopId, firedAt])
-  @@index([shopId, alertType, firedAt])
+  @@index([shopId, eventType, occurredAt])
+  @@index([shopId, sessionId])
+  @@index([shopId, occurredAt])
 }

@@ -26,8 +26,6 @@ export async function POST(req: NextRequest) {
     for (const shop of shops) {
       await prisma.checkoutEvent.deleteMany({ where: { shopId: shop.id } });
       await prisma.cartEvent.deleteMany({ where: { shopId: shop.id } });
-      await prisma.alertLog.deleteMany({ where: { shopId: shop.id } });
-      await prisma.baseline.deleteMany({ where: { shopId: shop.id } });
       await prisma.shop.delete({ where: { id: shop.id } });
     }
     if (shops.length > 0) {
