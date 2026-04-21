@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { deriveSourceV3 } from '@/lib/session-utils';
-import { getShopFromRequest } from "@/lib/verify-session-token";
-import { ensureShop } from "@/lib/ensure-shop";
+import { getAuthenticatedShop } from "@/lib/verify-session-token";
+import { getShop } from "@/lib/shop";
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date | string)   { return new Date(d).toISOString().slice(0, 10); }
@@ -109,9 +109,11 @@ type SessionSummaryRow = {
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  const shopResult = await ensureShop(req);
-  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-  const { shopId, shopDomain } = shopResult;
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shopData = await getShop(shopDomain);
+  if (!shopData) return NextResponse.json({ error: 'Install required' }, { status: 400 });
+  const shopId = shopData.id;
 
   const rawEnd   = new Date(p.get('end')   ?? new Date().toISOString());
   const rawStart = new Date(p.get('start') ?? subDays(rawEnd, 7).toISOString());

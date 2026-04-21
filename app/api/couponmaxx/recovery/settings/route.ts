@@ -2,9 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getShopFromRequest } from '@/lib/verify-session-token';
-import { ensureShop } from '@/lib/ensure-shop';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getAuthenticatedShop } from '@/lib/verify-session-token';
+import { getShop } from '@/lib/shop';
 
 const DEFAULT_RULES = {
   expired:          { enabled: false, action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 },
@@ -16,9 +15,10 @@ const DEFAULT_RULES = {
 };
 
 export async function GET(req: NextRequest) {
-  const shopResult = await ensureShop(req);
-  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-  const shop = { id: shopResult.shopId };
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
 
   const { data } = await supabase
     .from('MerchantRecoverySettings').select('*').eq('shopId', shop.id).single();
@@ -42,15 +42,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
+
   const body = await req.json().catch(() => ({}));
-  const { shop: shopDomain, settings } = body;
-
-  if (!shopDomain || !settings) {
-    return NextResponse.json({ error: 'Missing shop or settings' }, { status: 400 });
+  const { settings } = body;
+  if (!settings) {
+    return NextResponse.json({ error: 'Missing settings' }, { status: 400 });
   }
-
-  const shop = await getActiveShop(shopDomain, 'id');
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   const { error } = await supabase
     .from('MerchantRecoverySettings')

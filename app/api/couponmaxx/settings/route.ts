@@ -1,9 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getShopFromRequest } from "@/lib/verify-session-token";
-import { ensureShop } from "@/lib/ensure-shop";
-import { getActiveShop } from "@/lib/get-active-shop";
+import { getAuthenticatedShop } from '@/lib/verify-session-token';
+import { getShop } from '@/lib/shop';
 
 const DEFAULT_SETTINGS = {
   brokenCoupon:       { enabled: true,  threshold: 10, attempts: 10 },
@@ -27,31 +26,34 @@ const DEFAULT_SETTINGS = {
 };
 
 export async function GET(req: NextRequest) {
-  const shopResult = await ensureShop(req);
-  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
 
-  const { data: shop } = await supabase.from('Shop').select('id, notificationSettings, notificationEmail, slackChannelName, slackWebhookUrl')
-    .eq('id', shopResult.shopId).single();
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const { data: shopRow } = await supabase.from('Shop').select('id, notificationSettings, notificationEmail, slackChannelName, slackWebhookUrl')
+    .eq('id', shop.id).single();
+  if (!shopRow) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
-  const settings = (shop as Record<string, unknown>).notificationSettings ?? DEFAULT_SETTINGS;
+  const settings = (shopRow as Record<string, unknown>).notificationSettings ?? DEFAULT_SETTINGS;
   return NextResponse.json({
     settings,
-    email: (shop as Record<string, unknown>).notificationEmail ?? null,
+    email: (shopRow as Record<string, unknown>).notificationEmail ?? null,
     slack: {
-      connected: !!((shop as Record<string, unknown>).slackWebhookUrl),
-      channel: (shop as Record<string, unknown>).slackChannelName ?? null,
+      connected: !!((shopRow as Record<string, unknown>).slackWebhookUrl),
+      channel: (shopRow as Record<string, unknown>).slackChannelName ?? null,
     },
   });
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
-  const { shop: shopDomain, settings, email } = body;
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
 
-  const shop = await getActiveShop(shopDomain, 'id');
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const body = await req.json().catch(() => ({}));
+  const { settings, email } = body;
 
   const update: Record<string, unknown> = {};
   if (settings) update.notificationSettings = settings;

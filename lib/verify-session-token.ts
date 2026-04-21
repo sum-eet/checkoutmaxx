@@ -1,9 +1,5 @@
 import { createHmac } from "crypto";
 
-/**
- * Verify an App Bridge session token (JWT signed with app secret).
- * Returns the shop domain if valid, null if invalid.
- */
 export function verifySessionToken(token: string): string | null {
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
@@ -11,7 +7,6 @@ export function verifySessionToken(token: string): string | null {
     return null;
   }
 
-  // Log first 4 chars of secret for cross-env eyeball comparison (never log full secret)
   const secretHint = secret.slice(0, 4);
 
   try {
@@ -56,12 +51,9 @@ export function verifySessionToken(token: string): string | null {
   }
 }
 
-/**
- * Get authenticated shop from request.
- * Tries session token first, falls back to query param.
- */
-export function getShopFromRequest(req: Request): string | null {
-  // 1. Try Authorization header
+// For authenticated admin routes — requires a valid session token.
+// Never falls back to ?shop query param.
+export function getAuthenticatedShop(req: Request): string | null {
   const auth = req.headers.get("authorization");
   if (auth?.startsWith("Bearer ")) {
     const shop = verifySessionToken(auth.slice(7));
@@ -70,22 +62,23 @@ export function getShopFromRequest(req: Request): string | null {
 
   const url = new URL(req.url);
 
-  // 2. Try id_token from URL (App Bridge 4.x passes it here)
   const idToken = url.searchParams.get("id_token");
   if (idToken) {
     const shop = verifySessionToken(idToken);
     if (shop) return shop;
   }
 
-  // 3. Fallback to shop query param
+  return null;
+}
+
+// For public ingest endpoints — extracts ?shop from query param, no token verification.
+// Separate validation (rate limiting, sanitization) lives in the ingest route.
+export function getShopFromPublicRequest(req: Request): string | null {
+  const url = new URL(req.url);
   return url.searchParams.get("shop");
 }
 
-/**
- * Extract the raw session token JWT from the request.
- * Returns null if no valid token found.
- * Used by ensureShop() for token exchange.
- */
+// Extract the raw session token JWT from the request.
 export function getSessionTokenFromRequest(req: Request): string | null {
   const auth = req.headers.get("authorization");
   if (auth?.startsWith("Bearer ")) {

@@ -2,10 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { ensureShop } from '@/lib/ensure-shop';
+import { getShop } from '@/lib/shop';
+import { getAuthenticatedShop } from '@/lib/verify-session-token';
 import { shopify, sessionStorage } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
-import { getActiveShop } from '@/lib/get-active-shop';
 
 // Shopify Theme Store IDs → compatibility level
 // themeStoreId 0 = custom/unlisted theme
@@ -34,10 +34,11 @@ const THEMES_QUERY = `
 `;
 
 export async function GET(req: NextRequest) {
-  const shopResult = await ensureShop(req);
-  if (!shopResult) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-
-  const { shopId, shopDomain } = shopResult;
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
+  const shopId = shop.id;
 
   // ── 1. Activity checks ─────────────────────────────────────────────────────
 
@@ -57,7 +58,6 @@ export async function GET(req: NextRequest) {
     shopRowRes,
     lastClaimRes,
   ] = await Promise.all([
-    // Most recent cart event (any type) — confirms extension is active on storefront
     supabase
       .from('CartEvent')
       .select('occurredAt')
@@ -66,7 +66,6 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .maybeSingle(),
 
-    // Most recent coupon failure — confirms failure detection is working
     supabase
       .from('CartEvent')
       .select('occurredAt')
@@ -76,7 +75,6 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .maybeSingle(),
 
-    // Most recent recovery offer — confirms end-to-end flow is working
     supabase
       .from('RecoveryEvent')
       .select('occurredAt')
@@ -85,14 +83,12 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .maybeSingle(),
 
-    // Merchant recovery settings
     supabase
       .from('MerchantRecoverySettings')
       .select('enabled, rules')
       .eq('shopId', shopId)
       .maybeSingle(),
 
-    // Most recent pixel event (CheckoutEvent = pixel ingest table)
     supabase
       .from('CheckoutEvent')
       .select('occurredAt')
@@ -101,14 +97,12 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .maybeSingle(),
 
-    // Pixel events today count
     supabase
       .from('CheckoutEvent')
       .select('*', { count: 'exact', head: true })
       .eq('shopId', shopId)
       .gte('occurredAt', startOfToday.toISOString()),
 
-    // Most recent session ping (SessionPing uses shopDomain, not shopId)
     supabase
       .from('SessionPing')
       .select('occurredAt')
@@ -117,28 +111,24 @@ export async function GET(req: NextRequest) {
       .limit(1)
       .maybeSingle(),
 
-    // Cart events today count
     supabase
       .from('CartEvent')
       .select('*', { count: 'exact', head: true })
       .eq('shopId', shopId)
       .gte('occurredAt', startOfToday.toISOString()),
 
-    // Recovery events today count (RecoveryEvent uses createdAt)
     supabase
       .from('RecoveryEvent')
       .select('*', { count: 'exact', head: true })
       .eq('shopId', shopId)
       .gte('createdAt', startOfToday.toISOString()),
 
-    // Shop row state
     supabase
       .from('Shop')
       .select('isActive, accessToken, pixelId, installedAt, updatedAt')
       .eq('id', shopId)
       .maybeSingle(),
 
-    // Last claim code generated
     supabase
       .from('RecoveryEvent')
       .select('recoveryCode, createdAt')
@@ -163,15 +153,13 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    const shopRow = await getActiveShop(shopDomain, 'accessToken');
-
-    if (shopRow?.accessToken) {
+    if (shop.accessToken) {
       const session = new Session({
         id: `offline_${shopDomain}`,
         shop: shopDomain,
         state: 'offline',
         isOnline: false,
-        accessToken: shopRow.accessToken,
+        accessToken: shop.accessToken,
       });
       const client = new shopify.clients.Graphql({ session });
       const res = await client.request(THEMES_QUERY);
@@ -188,7 +176,6 @@ export async function GET(req: NextRequest) {
     }
   } catch (err: any) {
     console.warn('[health] theme detection failed:', err?.message);
-    // Non-fatal — return rest of health data without theme info
   }
 
   return NextResponse.json({

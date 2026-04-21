@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import { NextRequest } from "next/server";
 
 /**
@@ -8,14 +9,14 @@ export function mockRequest(
   options?: { method?: string; body?: unknown; headers?: Record<string, string> }
 ): NextRequest {
   const { method = "GET", body, headers = {} } = options ?? {};
-  const init: RequestInit = { method, headers };
+  const init: RequestInit & { signal?: AbortSignal } = { method, headers };
   if (body) {
     init.body = typeof body === "string" ? body : JSON.stringify(body);
     if (!headers["Content-Type"]) {
       (init.headers as Record<string, string>)["Content-Type"] = "application/json";
     }
   }
-  return new NextRequest(new URL(url, "https://test.vercel.app"), init);
+  return new NextRequest(new URL(url, "https://test.vercel.app"), init as any);
 }
 
 /**

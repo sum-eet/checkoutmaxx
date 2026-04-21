@@ -1,8 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getShopFromRequest } from "@/lib/verify-session-token";
-import { ensureShop } from "@/lib/ensure-shop";
+import { getAuthenticatedShop } from "@/lib/verify-session-token";
+import { getShop } from "@/lib/shop";
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date | string) { return new Date(d).toISOString().slice(0, 10); }
@@ -21,15 +21,18 @@ function buildDailyMap(start: Date, end: Date) {
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
-  // ensureShop auto-creates the Shop record via token exchange if missing
-  const shopResult = await ensureShop(req);
-  const shopDomain = shopResult?.shopDomain ?? getShopFromRequest(req);
-  console.log('[analytics] GET shop=%s shopId=%s start=%s end=%s', shopDomain, shopResult?.shopId ?? 'NULL', p.get('start'), p.get('end'));
-  if (!shopResult) {
-    console.error('[analytics] ensureShop returned null for', shopDomain);
-    return NextResponse.json({ error: 'Missing shop' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) {
+    console.error('[analytics] no authenticated shopDomain');
+    return NextResponse.json({ error: 'Missing shop' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   }
-  const shopId = shopResult.shopId;
+  const shop = await getShop(shopDomain);
+  if (!shop) {
+    console.error('[analytics] shop not found for', shopDomain);
+    return NextResponse.json({ error: 'Install required' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const shopId = shop.id;
+  console.log('[analytics] GET shop=%s shopId=%s start=%s end=%s', shopDomain, shopId, p.get('start'), p.get('end'));
 
   const rawEnd = new Date(p.get('end') ?? new Date().toISOString());
   const rawStart = new Date(p.get('start') ?? subDays(rawEnd, 7).toISOString());

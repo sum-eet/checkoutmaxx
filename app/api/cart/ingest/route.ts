@@ -2,34 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
 import { logIngest } from '@/lib/ingest-log';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getShop } from '@/lib/shop';
 
 // Rate limiting: 500 requests per minute per shop domain
 const RATE_LIMIT = 500;
 const RATE_WINDOW_MS = 60_000;
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-
-// Cache shop lookups with a 60s TTL.
-// After reinstall, a warm function instance would otherwise serve the old shopId
-// indefinitely. TTL bounds the window to at most 60s of stale routing.
-// Null results are NOT cached so a newly created Shop is picked up immediately.
-const CACHE_TTL_MS = 60_000;
-const shopCache = new Map<string, { id: string; cachedAt: number }>();
-
-async function resolveShopId(shopDomain: string): Promise<string | null> {
-  const cached = shopCache.get(shopDomain);
-  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-    return cached.id;
-  }
-  shopCache.delete(shopDomain);
-  const activeShop = await getActiveShop(shopDomain, "id");
-  if (activeShop?.id) {
-    shopCache.set(shopDomain, { id: activeShop.id, cachedAt: Date.now() });
-    return activeShop.id;
-  }
-  // Do NOT cache null — shop may be created shortly after
-  return null;
-}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -94,8 +72,8 @@ async function processEvent(text: string) {
     if (!eventType || !shopDomain || !sessionId) return;
     if (SKIP_EVENTS.has(eventType)) return;
 
-    const shopId = await resolveShopId(shopDomain);
-    if (!shopId) {
+    const shopResult = await getShop(shopDomain);
+    if (!shopResult) {
       logIngest({
         endpoint: 'cart',
         shopDomain,
@@ -107,6 +85,7 @@ async function processEvent(text: string) {
       });
       return;
     }
+    const shopId = shopResult.id;
 
     const rawLineItems = Array.isArray(payload.lineItems)
       ? payload.lineItems

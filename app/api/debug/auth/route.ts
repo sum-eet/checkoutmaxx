@@ -1,6 +1,6 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { getShopFromRequest, getSessionTokenFromRequest, verifySessionToken } from "@/lib/verify-session-token";
+import { getAuthenticatedShop, getSessionTokenFromRequest, verifySessionToken } from "@/lib/verify-session-token";
 
 /**
  * Debug endpoint — shows what auth info is available in the request.
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     timestamp: new Date().toISOString(),
-    shopFromRequest: getShopFromRequest(req),
+    shopFromRequest: getAuthenticatedShop(req),
     shopFromToken,
     hasSessionToken: !!getSessionTokenFromRequest(req),
     hasIdTokenParam: !!url.searchParams.get("id_token"),

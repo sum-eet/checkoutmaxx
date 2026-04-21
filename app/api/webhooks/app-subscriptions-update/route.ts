@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { getActiveShop } from "@/lib/get-active-shop";
+import { getShop } from "@/lib/shop";
 
 export async function POST(req: NextRequest) {
   console.log("[billing/webhook] ====== APP_SUBSCRIPTIONS_UPDATE HIT ======");
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   console.log("[billing/webhook] shop=%s status=%s", shop, status);
 
-  const activeShop = await getActiveShop(shop, "id");
+  const activeShop = await getShop(shop);
   if (!activeShop) {
     console.error("[billing/webhook] active shop not found:", shop);
     return NextResponse.json({ error: "Shop not found" }, { status: 404 });

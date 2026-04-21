@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { shopify } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getShop } from '@/lib/shop';
 
 // ── CORS (storefront calls this endpoint directly) ────────────────────────────
 
@@ -345,7 +345,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Load shop
-  const shop = await getActiveShop(shopDomain, 'id, accessToken');
+  const shop = await getShop(shopDomain);
 
   if (!shop) {
     return NextResponse.json({ error: 'Shop not found' }, { status: 404, headers: CORS_HEADERS });

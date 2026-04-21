@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { supabase } from "@/lib/supabase";
-import { deregisterAppPixel } from "@/lib/pixel-registration";
+import { deletePixel } from "@/lib/pixel";
 
 export async function POST(req: NextRequest) {
   console.log("[UNINSTALL] ====== WEBHOOK HIT ======");
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   // Deregister pixel with Shopify (cleanup)
   if (shopRecord.pixelId && shopRecord.accessToken) {
     try {
-      await deregisterAppPixel(shop, shopRecord.accessToken, shopRecord.pixelId);
+      await deletePixel(shop, shopRecord.accessToken, shopRecord.pixelId);
       console.log("[UNINSTALL] STEP 3 PIXEL DEREGISTERED");
     } catch (err: any) {
       console.error("[UNINSTALL] STEP 3 PIXEL DEREGISTER FAILED:", err.message);

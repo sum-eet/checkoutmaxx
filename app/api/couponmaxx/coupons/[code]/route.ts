@@ -2,19 +2,19 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { buildSessionsFromEvents } from '@/lib/session-utils';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getShop } from '@/lib/shop';
+import { getAuthenticatedShop } from '@/lib/verify-session-token';
 
 function subDays(d: Date, n: number) { return new Date(d.getTime() - n * 86400000); }
 function dateStr(d: Date) { return d.toISOString().slice(0, 10); }
 
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
   const p = req.nextUrl.searchParams;
-  const shopDomain = p.get('shop');
   const code = params.code.toUpperCase();
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-
-  const shop = await getActiveShop(shopDomain, 'id');
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
   const shopId = shop.id;
 
   const end = new Date(p.get('end') ?? new Date().toISOString());

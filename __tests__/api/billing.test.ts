@@ -25,7 +25,7 @@ describe("/api/billing/create", () => {
   });
 
   it("returns 401 when no session found", async () => {
-    mockSessionStorage.loadSession.mockResolvedValue(null);
+    mockSessionStorage.loadSession.mockResolvedValue(null as any);
     const req = mockRequest("https://test.vercel.app/api/billing/create?shop=test.myshopify.com");
     const res = await GET(req);
     expect(res.status).toBe(401);

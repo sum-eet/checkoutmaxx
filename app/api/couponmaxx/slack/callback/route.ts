@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getShop } from '@/lib/shop';
 
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/couponmaxx/notifications?error=slack_oauth_failed', req.url));
   }
 
-  const shop = await getActiveShop(shopDomain, 'id');
+  const shop = await getShop(shopDomain);
   if (!shop) return NextResponse.redirect(new URL('/couponmaxx/notifications?error=shop_not_found', req.url));
 
   // Exchange code for access token

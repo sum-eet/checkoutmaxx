@@ -2,31 +2,31 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockRequest } from "../helpers";
 
 import { supabase } from "@/lib/supabase";
-import { getShopFromRequest } from "@/lib/verify-session-token";
-import { ensureShop } from "@/lib/ensure-shop";
+import { getAuthenticatedShop } from "@/lib/verify-session-token";
+import { getShop } from "@/lib/shop";
 
 const mockSupabase = vi.mocked(supabase);
-const mockGetShop = vi.mocked(getShopFromRequest);
-const mockEnsureShop = vi.mocked(ensureShop);
+const mockGetAuthenticatedShop = vi.mocked(getAuthenticatedShop);
+const mockGetShop = vi.mocked(getShop);
 
 describe("GET /api/couponmaxx/recovery/stats", () => {
   let GET: typeof import("@/app/api/couponmaxx/recovery/stats/route").GET;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockGetShop.mockReturnValue("test-shop.myshopify.com");
+    mockGetAuthenticatedShop.mockReturnValue("test-shop.myshopify.com");
+    mockGetShop.mockResolvedValue({ id: "shop-1", shopDomain: "test-shop.myshopify.com" } as any);
     ({ GET } = await import("@/app/api/couponmaxx/recovery/stats/route"));
   });
 
-  it("returns 400 when shop missing", async () => {
-    mockEnsureShop.mockResolvedValueOnce(null);
+  it("returns 401 when shop missing", async () => {
+    mockGetAuthenticatedShop.mockReturnValue(null);
     const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats");
     const res = await GET(req);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it("returns empty stats when no recovery events", async () => {
-    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const eventChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -45,7 +45,7 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
       return eventChain as any;
     });
 
-    const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats?shop=test-shop.myshopify.com");
+    const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats");
     const res = await GET(req);
     expect(res.status).toBe(200);
 
@@ -60,7 +60,6 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
   });
 
   it("computes stats correctly from recovery events", async () => {
-    mockEnsureShop.mockResolvedValueOnce({ shopId: "shop-1", shopDomain: "test-shop.myshopify.com" });
     const eventChain = {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
@@ -86,15 +85,15 @@ describe("GET /api/couponmaxx/recovery/stats", () => {
       return settingsChain as any;
     });
 
-    const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats?shop=test-shop.myshopify.com");
+    const req = mockRequest("https://test.vercel.app/api/couponmaxx/recovery/stats");
     const res = await GET(req);
     const body = await res.json();
 
-    expect(body.codesOffered).toBe(3); // 3 show_code events
-    expect(body.codesUsed).toBe(2); // 2 with recoveryUsed=true
-    expect(body.useRate).toBe(66.7); // 2/3
-    expect(body.revenueRecovered).toBe(8000); // 5000 + 3000
-    expect(body.avgRevenuePerUse).toBe(4000); // 8000 / 2
-    expect(body.topTrigger).toBe("expired"); // 2 expired vs 1 each other
+    expect(body.codesOffered).toBe(3);
+    expect(body.codesUsed).toBe(2);
+    expect(body.useRate).toBe(66.7);
+    expect(body.revenueRecovered).toBe(8000);
+    expect(body.avgRevenuePerUse).toBe(4000);
+    expect(body.topTrigger).toBe("expired");
   });
 });

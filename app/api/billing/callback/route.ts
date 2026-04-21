@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { shopify, sessionStorage } from "@/lib/shopify";
 import { getActiveSubscription } from "@/lib/billing";
 import { supabase } from "@/lib/supabase";
-import { getActiveShop } from "@/lib/get-active-shop";
+import { getShop } from "@/lib/shop";
 
 export async function GET(req: NextRequest) {
   const t0 = Date.now();
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
   console.log("[billing/callback] sub=%s status=%s (%dms)", sub?.id ?? "NULL", sub?.status ?? "NULL", Date.now() - t0);
 
-  const activeShop = await getActiveShop(shop, "id");
+  const activeShop = await getShop(shop);
   if (!activeShop) {
     console.error("[billing/callback] active shop not found:", shop);
     return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));

@@ -1,16 +1,15 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getActiveShop } from '@/lib/get-active-shop';
+import { getAuthenticatedShop } from '@/lib/verify-session-token';
+import { getShop } from '@/lib/shop';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
-  const body = await req.json().catch(() => ({}));
-  const shopDomain = body.shop;
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 400 });
-
-  const shop = await getActiveShop(shopDomain, 'id');
-  if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await getShop(shopDomain);
+  if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
 
   const { data: alert } = await supabase.from('AlertLog').select('id, shopId').eq('id', id).single();
   if (!alert) return NextResponse.json({ error: 'Alert not found' }, { status: 404 });
