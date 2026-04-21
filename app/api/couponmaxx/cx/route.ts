@@ -371,7 +371,7 @@ export async function POST(req: NextRequest) {
 
     const invalidRule: RuleConfig = claimSettings.rules['invalid'] ?? { action: 'offer_fallback_code', discount: 10, discountType: 'percentage', expiryMinutes: 15 };
 
-    if (!invalidRule.enabled || invalidRule.action !== 'offer_fallback_code') {
+    if (invalidRule.enabled === false || invalidRule.action !== 'offer_fallback_code') {
       console.log(`[CMX:claim] show_nothing reason=invalid_rule_disabled shop=${shopDomain}`);
       return NextResponse.json({ action: 'show_nothing' }, { headers: CORS_HEADERS });
     }
