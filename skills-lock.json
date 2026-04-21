@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "shopify-apps": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "da79a22624a7c7f323998da0ba6b8fb10218defb7818ace28739b729640d0ae5"
+    },
+    "shopify-development": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "370a326a1a31504b3f1537372fc5c16ed7cfa4070815991b9b31a318aa1444f3"
+    },
+    "shopify-expert": {
+      "source": "jeffallan/claude-skills",
+      "sourceType": "github",
+      "computedHash": "bfb5ff1980becb36a178ab75bf6a3967ad9e8553f23cff1248f4f8b3a3bba248"
+    }
+  }
+}

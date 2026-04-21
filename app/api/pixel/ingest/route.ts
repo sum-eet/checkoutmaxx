@@ -141,7 +141,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
-import { logIngest } from "@/lib/ingest-log";
 import { getShop } from "@/lib/shop";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -229,7 +228,7 @@ async function processEvent({
   const shop = await getShop(shopDomain);
 
   if (!shop) {
-    logIngest({ endpoint: "pixel", shopDomain, eventType, success: false, latencyMs: Date.now() - start, errorMessage: "shop not found or db error" });
+    console.log("[pixel/ingest] shop not found:", shopDomain);
     return;
   }
 
@@ -278,16 +277,6 @@ async function processEvent({
     extensionId,
     rawPayload: safePayload,
     occurredAt: new Date(occurredAt).toISOString(),
-  });
-
-  logIngest({
-    endpoint: "pixel",
-    shopDomain,
-    eventType,
-    success: !insertError,
-    latencyMs: Date.now() - start,
-    errorCode: insertError?.code ?? null,
-    errorMessage: insertError?.message ?? null,
   });
 
   if (insertError) {

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { supabase } from '@/lib/supabase';
-import { logIngest } from '@/lib/ingest-log';
 import { getShop } from '@/lib/shop';
 
 // Rate limiting: 500 requests per minute per shop domain
@@ -74,15 +73,7 @@ async function processEvent(text: string) {
 
     const shopResult = await getShop(shopDomain);
     if (!shopResult) {
-      logIngest({
-        endpoint: 'cart',
-        shopDomain,
-        eventType,
-        success: false,
-        latencyMs: Date.now() - start,
-        errorCode: null,
-        errorMessage: 'shop not found',
-      });
+      console.log('[cart/ingest] shop not found:', shopDomain);
       return;
     }
     const shopId = shopResult.id;
@@ -138,25 +129,10 @@ async function processEvent(text: string) {
       occurredAt: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
     });
 
-    logIngest({
-      endpoint: 'cart',
-      shopDomain,
-      eventType,
-      success: !insertError,
-      latencyMs: Date.now() - start,
-      errorCode: insertError?.code ?? null,
-      errorMessage: insertError?.message ?? null,
-    });
+    if (insertError) console.error('[cart/ingest] insert failed', insertError.message);
+    else console.log('[cart/ingest] ok shop=%s event=%s', shopDomain, eventType);
 
   } catch (err: any) {
     console.error('[cart/ingest]', err);
-    logIngest({
-      endpoint: 'cart',
-      shopDomain,
-      eventType,
-      success: false,
-      latencyMs: Date.now() - start,
-      errorMessage: err?.message ?? String(err),
-    });
   }
 }

@@ -3,68 +3,7 @@
 import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import en from "@shopify/polaris/locales/en.json";
 import "@shopify/polaris/build/esm/styles.css";
-import { useShop } from "@/hooks/useShop";
-import { usePathname } from "next/navigation";
-
-
-function LiveBanner() {
-  const shop = useShop();
-  const customDomains: Record<string, string> = {
-    "jg2svv-pc.myshopify.com": "drwater.store",
-  };
-  const displayName = shop
-    ? (customDomains[shop] ?? shop.replace(".myshopify.com", ""))
-    : "…";
-
-  return (
-    <>
-      <style>{`
-        @keyframes livePulse {
-          0%   { box-shadow: 0 0 0 0 rgba(0,127,95,.6); }
-          70%  { box-shadow: 0 0 0 7px rgba(0,127,95,0); }
-          100% { box-shadow: 0 0 0 0 rgba(0,127,95,0); }
-        }
-        .live-dot {
-          width: 8px; height: 8px; border-radius: 50%;
-          background: #007f5f; display: inline-block; flex-shrink: 0;
-          animation: livePulse 2s ease-in-out infinite;
-        }
-      `}</style>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 6,
-        padding: "6px 20px", background: "#f6f6f7",
-        borderBottom: "1px solid #e1e3e5", fontSize: 12, color: "#6d7175",
-      }}>
-        <span className="live-dot" />
-        <span>Live · {displayName}</span>
-        <span style={{ marginLeft: "auto", opacity: 0.5, fontFamily: "monospace" }}>
-          v{process.env.NEXT_PUBLIC_APP_VERSION ?? "dev"}
-        </span>
-      </div>
-    </>
-  );
-}
 
 export default function EmbeddedLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isCouponMaxx = pathname?.startsWith('/couponmaxx') ?? false;
-
-  return (
-    <PolarisProvider i18n={en}>
-      {/* CouponMaxx has its own NavMenu in couponmaxx/layout.tsx — skip the old one */}
-      {!isCouponMaxx && (
-        <ui-nav-menu>
-          <a href="/dashboard/converted" rel="home">Converted Carts</a>
-          <a href="/dashboard/abandoned">Abandoned Carts</a>
-          <a href="/dashboard/cart">Cart Activity</a>
-          <a href="/alerts">Notifications</a>
-          <a href="/settings">Settings</a>
-        {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-        </ui-nav-menu>
-      )}
-      {/* CouponMaxx has its own Header — skip the live banner there */}
-      {!isCouponMaxx && <LiveBanner />}
-      {children}
-    </PolarisProvider>
-  );
+  return <PolarisProvider i18n={en}>{children}</PolarisProvider>;
 }

@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Banner, BlockStack, Card, Page, Spinner, Text, InlineStack } from '@shopify/polaris';
-import { useShop } from '@/hooks/useShop';
+
+function useShop(): string | null {
+  const [shop, setShop] = useState<string | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    setShop(p.get('shop') ?? p.get('shopDomain') ?? null);
+  }, []);
+  return shop;
+}
 
 // ---------------------------------------------------------------------------
 // Types
