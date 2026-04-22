@@ -20,10 +20,17 @@ type ClaimsData = {
   recent: ClaimRow[];
 };
 
+async function getFreshToken(): Promise<string | null> {
+  try {
+    const w = window as any;
+    if (w.shopify?.idToken) return await w.shopify.idToken();
+  } catch {}
+  return new URLSearchParams(window.location.search).get('id_token');
+}
+
 async function fetcher(url: string) {
   if (typeof window !== 'undefined') {
-    const p = new URLSearchParams(window.location.search);
-    const token = p.get('id_token');
+    const token = await getFreshToken();
     if (token) {
       const parsed = new URL(url, window.location.origin);
       if (!parsed.searchParams.has('id_token')) {

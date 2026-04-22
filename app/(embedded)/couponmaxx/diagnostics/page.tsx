@@ -57,16 +57,22 @@ type HealthData = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Same fetcher pattern as analytics/page.tsx — appends id_token from URL
+async function getFreshToken(): Promise<string | null> {
+  try {
+    const w = window as any;
+    if (w.shopify?.idToken) return await w.shopify.idToken();
+  } catch {}
+  return new URLSearchParams(window.location.search).get('id_token');
+}
+
 async function fetcher(url: string) {
   let enrichedUrl = url;
   if (typeof window !== 'undefined') {
-    const pageParams = new URLSearchParams(window.location.search);
-    const idToken = pageParams.get('id_token');
-    if (idToken) {
+    const token = await getFreshToken();
+    if (token) {
       const parsed = new URL(url, window.location.origin);
       if (!parsed.searchParams.has('id_token')) {
-        parsed.searchParams.set('id_token', idToken);
+        parsed.searchParams.set('id_token', token);
         enrichedUrl = parsed.pathname + '?' + parsed.searchParams.toString();
       }
     }

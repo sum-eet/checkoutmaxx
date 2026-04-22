@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
     if (
       r.eventType === 'cart_coupon_applied' ||
       r.eventType === 'cart_coupon_failed' ||
-      r.eventType === 'cart_coupon_recovered'
+      r.eventType === 'cart_coupon_recovered' ||
+      r.eventType === 'checkout_coupon_applied' ||
+      r.eventType === 'checkout_coupon_failed'
     ) {
       s.couponAttempts.push({ code: r.couponCode, success: r.couponSuccess, at: r.occurredAt });
     }
