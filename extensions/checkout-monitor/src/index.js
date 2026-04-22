@@ -61,7 +61,10 @@ register(({ analytics, browser, init }) => {
   // allowed during Shopify review). Pixel has sendBeacon access.
   function sendToCartIngest(eventType, code, extra) {
     try {
-      if (!currentSessionId) return;
+      if (!currentSessionId) {
+        console.warn("[CMX Pixel] sendToCartIngest SKIPPED — no currentSessionId", { eventType, code });
+        return;
+      }
       const body = JSON.stringify({
         shopDomain,
         sessionId: currentSessionId,
@@ -73,8 +76,12 @@ register(({ analytics, browser, init }) => {
           ...(extra || {}),
         },
       });
-      browser.sendBeacon(CART_INGEST_URL, body);
-    } catch (e) {}
+      console.log("[CMX Pixel] → /api/cart/ingest", { eventType, code, sessionId: currentSessionId });
+      const ok = browser.sendBeacon(CART_INGEST_URL, body);
+      console.log("[CMX Pixel] sendBeacon result", { eventType, ok });
+    } catch (e) {
+      console.error("[CMX Pixel] sendToCartIngest threw", e);
+    }
   }
 
   // Storefront events — homepage/cart analytics
@@ -156,6 +163,10 @@ register(({ analytics, browser, init }) => {
   });
 
   analytics.subscribe("alert_displayed", (event) => {
+    const target = event.data?.alert?.target;
+    const value = event.data?.alert?.value;
+    const message = event.data?.alert?.message;
+    console.log("[CMX Pixel] alert_displayed", { target, value, message, sessionId: currentSessionId });
     send("alert_displayed", event.data);
   });
 
@@ -169,6 +180,10 @@ register(({ analytics, browser, init }) => {
     if (!currentSessionId) {
       currentSessionId = extractSessionId(event.data?.checkout);
     }
+    console.log("[CMX Pixel] checkout_discount_code_applied", {
+      raw: event.data,
+      sessionId: currentSessionId,
+    });
     send("checkout_discount_code_applied", event.data);
 
     const codes =
@@ -183,6 +198,10 @@ register(({ analytics, browser, init }) => {
     if (!currentSessionId) {
       currentSessionId = extractSessionId(event.data?.checkout);
     }
+    console.log("[CMX Pixel] checkout_discount_code_rejected", {
+      raw: event.data,
+      sessionId: currentSessionId,
+    });
     send("checkout_discount_code_rejected", event.data);
 
     const code =

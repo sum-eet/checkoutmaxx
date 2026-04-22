@@ -251,6 +251,12 @@ async function processEvent({
 
   if (eventType === "alert_displayed") {
     const alert = (data as any)?.alert;
+    console.log("[pixel/ingest] alert_displayed detail", {
+      target: alert?.target,
+      value: alert?.value,
+      message: alert?.message,
+      sessionId,
+    });
     errorMessage = alert?.message || (data as any)?.message || null;
     if (alert?.target === "cart.discountCode" && alert?.value) {
       discountCode = alert.value as string;
@@ -285,6 +291,40 @@ async function processEvent({
     console.error("[pixel/ingest] insert_fail", { code: (insertError as any).code, message: insertError.message, shopId: shop.id, eventType });
   } else {
     console.log("[pixel/ingest] ok", { shopId: shop.id, eventType, sessionId: sessionId ?? null });
+  }
+
+  // Mirror cart-page wrongcode rejections into CartEvent so sessions UI sees them.
+  // `alert_displayed` with target=cart.discountCode is Shopify's signal for
+  // cart discount field errors. The UI extension can't intercept the native
+  // input; this pixel event is the only way to capture it.
+  if (
+    eventType === "alert_displayed" &&
+    (data as any)?.alert?.target === "cart.discountCode" &&
+    (data as any)?.alert?.value
+  ) {
+    const alert = (data as any).alert;
+    const { error: mirrorErr } = await supabase.from("CartEvent").insert({
+      id: crypto.randomUUID(),
+      shopId: shop.id,
+      sessionId: sessionId || "unknown",
+      cartToken: "",
+      eventType: "cart_coupon_failed",
+      couponCode: alert.value as string,
+      couponSuccess: false,
+      couponFailReason: (alert.message as string) || "rejected",
+      device: deviceType ?? null,
+      country: country ?? null,
+      occurredAt: new Date(occurredAt).toISOString(),
+    });
+    if (mirrorErr) {
+      console.error("[pixel/ingest] alert_displayed → CartEvent mirror FAILED", mirrorErr);
+    } else {
+      console.log("[pixel/ingest] alert_displayed mirrored to CartEvent cart_coupon_failed", {
+        code: alert.value,
+        sessionId,
+        shopId: shop.id,
+      });
+    }
   }
 
   // When an order completes, write a CartEvent so the session builder can

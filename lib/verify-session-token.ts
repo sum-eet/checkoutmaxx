@@ -68,6 +68,12 @@ export function getAuthenticatedShop(req: Request): string | null {
     if (shop) return shop;
   }
 
+  const hasAuth = !!req.headers.get("authorization");
+  const hasIdToken = !!idToken;
+  console.warn(
+    "[getAuthenticatedShop] no valid token",
+    { hasAuthHeader: hasAuth, hasIdTokenParam: hasIdToken, path: new URL(req.url).pathname },
+  );
   return null;
 }
 

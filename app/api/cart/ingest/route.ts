@@ -111,6 +111,15 @@ async function processEvent(text: string) {
         eventType === 'checkout_coupon_failed' ? false
       : null;
 
+    if (isCouponEvent) {
+      console.log('[cart/ingest] coupon event', {
+        eventType,
+        code: payload.code ?? null,
+        failureReason: payload.failureReason ?? null,
+        sessionId,
+      });
+    }
+
     let sanitisedUrl: string | null = null;
     try { sanitisedUrl = url ? new URL(url).pathname : null; } catch {}
 

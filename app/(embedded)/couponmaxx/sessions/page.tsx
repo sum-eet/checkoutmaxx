@@ -24,29 +24,7 @@ type Session = {
   completed: boolean;
 };
 
-async function getFreshToken(): Promise<string | null> {
-  try {
-    const w = window as any;
-    if (w.shopify?.idToken) return await w.shopify.idToken();
-  } catch {}
-  return new URLSearchParams(window.location.search).get('id_token');
-}
-
-async function fetcher(url: string) {
-  if (typeof window !== 'undefined') {
-    const token = await getFreshToken();
-    if (token) {
-      const parsed = new URL(url, window.location.origin);
-      if (!parsed.searchParams.has('id_token')) {
-        parsed.searchParams.set('id_token', token);
-        url = parsed.pathname + '?' + parsed.searchParams.toString();
-      }
-    }
-  }
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
+import { fetcher } from '@/lib/admin-fetch';
 
 function fmt(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
