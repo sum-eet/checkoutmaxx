@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const weekStart = new Date(now);
   weekStart.setDate(weekStart.getDate() - 7);
 
-  const [todayRes, weekRes, recentRes, cvTodayRes, cvHourRes] = await Promise.all([
+  const [todayRes, weekRes, recentRes, cvTodayRes, cvHourRes, coViewsRes, couponsTriedRes] = await Promise.all([
     supabase
       .from('RecoveryEvent')
       .select('*', { count: 'exact', head: true })
@@ -56,10 +56,22 @@ export async function GET(req: NextRequest) {
       .eq('shopId', shop.id)
       .eq('eventType', 'cart_viewed')
       .gte('occurredAt', new Date(Date.now() - 60 * 60 * 1000).toISOString()),
+    supabase
+      .from('CheckoutEvent')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shop.id)
+      .eq('eventType', 'checkout_started')
+      .gte('occurredAt', todayStart.toISOString()),
+    supabase
+      .from('CartEvent')
+      .select('*', { count: 'exact', head: true })
+      .eq('shopId', shop.id)
+      .in('eventType', ['cart_coupon_applied', 'cart_coupon_failed', 'cart_coupon_recovered', 'checkout_coupon_applied', 'checkout_coupon_failed'])
+      .gte('occurredAt', todayStart.toISOString()),
   ]);
 
   console.log('[CMX claims] today:', todayRes.count, 'week:', weekRes.count, 'recent rows:', recentRes.data?.length);
-  console.log('[CMX claims] cartViews today:', cvTodayRes.count, 'hour:', cvHourRes.count);
+  console.log('[CMX claims] cartViews today:', cvTodayRes.count, 'hour:', cvHourRes.count, 'checkoutViews:', coViewsRes.count, 'couponsTried:', couponsTriedRes.count);
 
   return NextResponse.json({
     counts: {
@@ -67,6 +79,8 @@ export async function GET(req: NextRequest) {
       week: weekRes.count ?? 0,
       cartViewsToday: cvTodayRes.count ?? 0,
       cartViewsHour: cvHourRes.count ?? 0,
+      checkoutViewsToday: coViewsRes.count ?? 0,
+      couponsTriedToday: couponsTriedRes.count ?? 0,
     },
     recent: recentRes.data ?? [],
   });
