@@ -5,6 +5,12 @@ import { Banner, BlockStack, Card, Page, Spinner, Text, Badge } from '@shopify/p
 
 type CouponAttempt = { code: string | null; success: boolean | null; at: string };
 
+type LineItem = {
+  productTitle: string | null;
+  quantity: number | null;
+  price: number | null;
+};
+
 type Session = {
   sessionId: string;
   startedAt: string;
@@ -12,6 +18,7 @@ type Session = {
   device: string | null;
   country: string | null;
   cartValue: number;
+  lineItems: LineItem[];
   couponAttempts: CouponAttempt[];
   reachedCheckout: boolean;
   completed: boolean;
@@ -50,6 +57,15 @@ function statusBadge(s: Session): JSX.Element {
   if (s.completed) return <Badge tone="success">Completed</Badge>;
   if (s.reachedCheckout) return <Badge tone="info">Checkout started</Badge>;
   return <Badge tone="warning">Abandoned</Badge>;
+}
+
+function productsCell(items: LineItem[]): string {
+  if (!items?.length) return '—';
+  const titles = items.map(i => i.productTitle).filter(Boolean) as string[];
+  if (!titles.length) return `${items.length} item${items.length > 1 ? 's' : ''}`;
+  const head = titles.slice(0, 2).join(', ');
+  const extra = titles.length > 2 ? ` +${titles.length - 2}` : '';
+  return head + extra;
 }
 
 function attemptsCell(attempts: CouponAttempt[]): string {
@@ -97,7 +113,7 @@ export default function SessionsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: '2px solid #E5E7EB' }}>
-                      {['Started', 'Device / Country', 'Cart value', 'Coupon attempts', 'Status'].map(h => (
+                      {['Started', 'Device / Country', 'Cart value', 'Products', 'Coupon attempts', 'Status'].map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '8px 10px', color: '#6B7280', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -110,6 +126,9 @@ export default function SessionsPage() {
                           {[s.device, s.country].filter(Boolean).join(' · ') || '—'}
                         </td>
                         <td style={{ padding: '8px 10px', color: '#374151' }}>{fmtCart(s.cartValue)}</td>
+                        <td style={{ padding: '8px 10px', color: '#374151', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {productsCell(s.lineItems)}
+                        </td>
                         <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>
                           {attemptsCell(s.couponAttempts)}
                         </td>

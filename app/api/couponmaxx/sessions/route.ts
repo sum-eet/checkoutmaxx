@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   const { data: cartRows, error: cartErr } = await supabase
     .from('CartEvent')
-    .select('sessionId, eventType, couponCode, couponSuccess, cartValue, device, country, occurredAt')
+    .select('sessionId, eventType, couponCode, couponSuccess, cartValue, lineItems, device, country, occurredAt')
     .eq('shopId', shop.id)
     .gte('occurredAt', since.toISOString())
     .order('occurredAt', { ascending: true })
@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     device: string | null;
     country: string | null;
     cartValue: number;
+    lineItems: any[];
     couponAttempts: { code: string | null; success: boolean | null; at: string }[];
     reachedCheckout: boolean;
     completed: boolean;
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
         device: r.device,
         country: r.country,
         cartValue: r.cartValue ?? 0,
+        lineItems: [],
         couponAttempts: [],
         reachedCheckout: false,
         completed: false,
@@ -65,7 +67,14 @@ export async function GET(req: NextRequest) {
     const s = bySession.get(r.sessionId)!;
     s.lastSeenAt = r.occurredAt;
     if (r.cartValue) s.cartValue = r.cartValue;
-    if (r.eventType === 'cart_coupon_applied' || r.eventType === 'cart_coupon_failed') {
+    if (Array.isArray(r.lineItems) && r.lineItems.length > 0) {
+      s.lineItems = r.lineItems;
+    }
+    if (
+      r.eventType === 'cart_coupon_applied' ||
+      r.eventType === 'cart_coupon_failed' ||
+      r.eventType === 'cart_coupon_recovered'
+    ) {
       s.couponAttempts.push({ code: r.couponCode, success: r.couponSuccess, at: r.occurredAt });
     }
     if (r.eventType === 'cart_checkout_clicked') s.reachedCheckout = true;

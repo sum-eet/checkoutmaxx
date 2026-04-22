@@ -16,7 +16,7 @@ type ClaimRow = {
 };
 
 type ClaimsData = {
-  counts: { today: number; week: number };
+  counts: { today: number; week: number; cartViewsToday: number; cartViewsHour: number };
   recent: ClaimRow[];
 };
 
@@ -97,6 +97,19 @@ export default function DiscountsPage() {
                 <Text variant="bodySm" tone="subdued" as="p">Claims this week</Text>
                 <Text variant="heading2xl" as="p">
                   {loading ? '—' : String(data?.counts.week ?? 0)}
+                </Text>
+              </BlockStack>
+            </Card>
+          </div>
+          <div style={{ flex: 1 }}>
+            <Card>
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued" as="p">Cart views today</Text>
+                <Text variant="heading2xl" as="p">
+                  {loading ? '—' : String(data?.counts.cartViewsToday ?? 0)}
+                </Text>
+                <Text variant="bodySm" tone="subdued" as="p">
+                  +{data?.counts.cartViewsHour ?? 0} in last hour
                 </Text>
               </BlockStack>
             </Card>

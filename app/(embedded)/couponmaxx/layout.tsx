@@ -4,9 +4,9 @@ import { Tabs } from '@shopify/polaris';
 import { usePathname, useRouter } from 'next/navigation';
 
 const TABS = [
-  { id: 'diagnostics', label: 'Diagnostics', href: '/couponmaxx/diagnostics' },
   { id: 'sessions',    label: 'Sessions',    href: '/couponmaxx/sessions' },
   { id: 'discounts',   label: 'Discounts',   href: '/couponmaxx/discounts' },
+  { id: 'diagnostics', label: 'Diagnostics', href: '/couponmaxx/diagnostics' },
 ];
 
 export default function CouponMaxxLayout({ children }: { children: React.ReactNode }) {

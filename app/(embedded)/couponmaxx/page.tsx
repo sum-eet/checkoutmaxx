@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function CouponMaxxRoot() {
-  redirect("/couponmaxx/diagnostics");
+  redirect("/couponmaxx/sessions");
 }
