@@ -9,6 +9,7 @@ import { register } from "@shopify/web-pixels-extension";
 
 register(({ analytics, browser, init }) => {
   const INGEST_URL = "https://couponmaxx.vercel.app/api/pixel/ingest";
+  const CART_INGEST_URL = "https://couponmaxx.vercel.app/api/cart/ingest";
 
   const shopDomain =
     init.data?.shop?.myshopifyDomain ||
@@ -53,6 +54,27 @@ register(({ analytics, browser, init }) => {
     });
 
     browser.sendBeacon(INGEST_URL, body);
+  }
+
+  // Mirror checkout discount events to /api/cart/ingest so sessions UI picks them up.
+  // Required because the checkout UI extension cannot fetch() (no network_access
+  // allowed during Shopify review). Pixel has sendBeacon access.
+  function sendToCartIngest(eventType, code, extra) {
+    try {
+      if (!currentSessionId) return;
+      const body = JSON.stringify({
+        shopDomain,
+        sessionId: currentSessionId,
+        eventType,
+        occurredAt: new Date().toISOString(),
+        device: getDeviceType(),
+        payload: {
+          code: code || null,
+          ...(extra || {}),
+        },
+      });
+      browser.sendBeacon(CART_INGEST_URL, body);
+    } catch (e) {}
   }
 
   // Storefront events — homepage/cart analytics
@@ -139,5 +161,39 @@ register(({ analytics, browser, init }) => {
 
   analytics.subscribe("ui_extension_errored", (event) => {
     send("ui_extension_errored", event.data);
+  });
+
+  // Discount code events — fire on BOTH Claim-button applies AND native Shopify
+  // discount input. Captures the "WRONGCODE" case the checkout extension can't see.
+  analytics.subscribe("checkout_discount_code_applied", (event) => {
+    if (!currentSessionId) {
+      currentSessionId = extractSessionId(event.data?.checkout);
+    }
+    send("checkout_discount_code_applied", event.data);
+
+    const codes =
+      event.data?.checkout?.discountApplications
+        ?.filter((d) => d.type === "DISCOUNT_CODE")
+        ?.map((d) => d.title) || [];
+    const code = codes[codes.length - 1] || null;
+    sendToCartIngest("checkout_coupon_applied", code, {});
+  });
+
+  analytics.subscribe("checkout_discount_code_rejected", (event) => {
+    if (!currentSessionId) {
+      currentSessionId = extractSessionId(event.data?.checkout);
+    }
+    send("checkout_discount_code_rejected", event.data);
+
+    const code =
+      event.data?.discountCode ||
+      event.data?.code ||
+      event.data?.checkout?.discountCode ||
+      null;
+    const reason =
+      event.data?.errorMessage ||
+      event.data?.reason ||
+      "rejected";
+    sendToCartIngest("checkout_coupon_failed", code, { failureReason: reason });
   });
 });

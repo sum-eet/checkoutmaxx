@@ -97,12 +97,18 @@ async function processEvent(text: string) {
       quantity: item.quantity ?? null,
     })) ?? null;
 
-    const isCouponEvent = ['cart_coupon_applied', 'cart_coupon_failed',
-      'cart_coupon_recovered', 'cart_coupon_removed'].includes(eventType);
+    const isCouponEvent = [
+      'cart_coupon_applied', 'cart_coupon_failed',
+      'cart_coupon_recovered', 'cart_coupon_removed',
+      'checkout_coupon_applied', 'checkout_coupon_failed',
+    ].includes(eventType);
 
     const couponSuccess =
-      eventType === 'cart_coupon_applied' || eventType === 'cart_coupon_recovered' ? true
-      : eventType === 'cart_coupon_failed' ? false
+      eventType === 'cart_coupon_applied' ||
+      eventType === 'cart_coupon_recovered' ||
+      eventType === 'checkout_coupon_applied' ? true
+      : eventType === 'cart_coupon_failed' ||
+        eventType === 'checkout_coupon_failed' ? false
       : null;
 
     let sanitisedUrl: string | null = null;

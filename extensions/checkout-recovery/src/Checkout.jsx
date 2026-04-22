@@ -12,8 +12,6 @@ import {
 } from '@shopify/ui-extensions-react/checkout';
 import { useState, useEffect, useRef } from 'react';
 
-const BACKEND = 'https://checkoutmaxx-rt55.vercel.app';
-
 export default reactExtension(
   'purchase.checkout.reductions.render-after',
   () => <CheckoutRecovery />,
@@ -32,7 +30,6 @@ function CheckoutRecovery() {
   const [state, setState] = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const mountedRef = useRef(true);
-  const sessionIdRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -62,20 +59,7 @@ function CheckoutRecovery() {
       const result = await applyDiscount({ type: 'addDiscountCode', code: discountCode });
       console.log('[CMX Checkout] apply result:', result);
       if (!mountedRef.current) return;
-      const success = result.type === 'success';
-      const eventType = success ? 'checkout_coupon_applied' : 'checkout_coupon_failed';
-      fetch(`${BACKEND}/api/cart/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopDomain: myshopifyDomain,
-          sessionId: sessionIdRef.current,
-          eventType,
-          occurredAt: new Date().toISOString(),
-          payload: { code: discountCode, retriedAfterFail: false },
-        }),
-      }).catch(() => {});
-      if (success) {
+      if (result.type === 'success') {
         setState('success');
       } else {
         setErrorMsg("That coupon couldn't be applied.");
@@ -84,17 +68,6 @@ function CheckoutRecovery() {
     } catch (err) {
       console.warn('[CMX Checkout] apply threw:', err);
       if (!mountedRef.current) return;
-      fetch(`${BACKEND}/api/cart/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopDomain: myshopifyDomain,
-          sessionId: sessionIdRef.current,
-          eventType: 'checkout_coupon_failed',
-          occurredAt: new Date().toISOString(),
-          payload: { code: discountCode },
-        }),
-      }).catch(() => {});
       setErrorMsg("Couldn't apply coupon. Try again.");
       setState('failed');
     }
