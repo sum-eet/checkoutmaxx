@@ -45,16 +45,16 @@ export async function GET(req: NextRequest) {
       .order('createdAt', { ascending: false })
       .limit(50),
     supabase
-      .from('CartEvent')
+      .from('CheckoutEvent')
       .select('*', { count: 'exact', head: true })
       .eq('shopId', shop.id)
-      .eq('eventType', 'cart_drawer_opened')
+      .eq('eventType', 'cart_viewed')
       .gte('occurredAt', todayStart.toISOString()),
     supabase
-      .from('CartEvent')
+      .from('CheckoutEvent')
       .select('*', { count: 'exact', head: true })
       .eq('shopId', shop.id)
-      .eq('eventType', 'cart_drawer_opened')
+      .eq('eventType', 'cart_viewed')
       .gte('occurredAt', new Date(Date.now() - 60 * 60 * 1000).toISOString()),
   ]);
 
