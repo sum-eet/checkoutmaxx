@@ -14,7 +14,7 @@ export async function exchangeTokenForOffline(
       grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
       subject_token: sessionToken,
       subject_token_type: 'urn:ietf:params:oauth:token-type:id_token',
-      requested_token_type: 'urn:ietf:params:oauth:token-type:offline-access-token',
+      requested_token_type: 'urn:shopify:params:oauth:token-type:offline-access-token',
     }),
   });
   if (!res.ok) {
