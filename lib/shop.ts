@@ -1,4 +1,9 @@
 import { supabase } from "./supabase";
+import { Session } from "@shopify/shopify-api";
+import { sessionStorage, registerWebhooks } from "./shopify";
+import { exchangeTokenForOffline } from "./token-exchange";
+import { registerAppPixel } from "./pixel";
+import { waitUntil } from "@vercel/functions";
 
 export async function getShop(
   shopDomain: string
@@ -29,6 +34,64 @@ export async function getShop(
   }
   console.log("[shop] getShop → %s", data.id);
   return { id: data.id, accessToken: data.accessToken, pixelId: data.pixelId ?? null };
+}
+
+export async function ensureShop(
+  shopDomain: string,
+  sessionToken: string
+): Promise<{ id: string; accessToken: string; pixelId: string | null } | null> {
+  const existing = await getShop(shopDomain);
+  if (existing) return existing;
+
+  console.log("[shop] ensureShop provisioning via token-exchange for %s", shopDomain);
+  let accessToken: string;
+  try {
+    accessToken = await exchangeTokenForOffline(shopDomain, sessionToken);
+  } catch (e: any) {
+    console.error("[shop] ensureShop token-exchange failed", e.message);
+    return null;
+  }
+
+  // Persist offline session so billing/callback + webhooks still work.
+  try {
+    const session = new Session({
+      id: `offline_${shopDomain}`, shop: shopDomain, state: "installed", isOnline: false,
+    });
+    session.accessToken = accessToken;
+    await sessionStorage.storeSession(session);
+  } catch (e: any) {
+    console.error("[shop] ensureShop session store failed", e.message);
+  }
+
+  let created;
+  try {
+    created = await createShop(shopDomain, accessToken);
+  } catch (e: any) {
+    console.error("[shop] ensureShop createShop failed", e.message);
+    return null;
+  }
+
+  const shopCap = shopDomain, tokCap = accessToken, idCap = created.id;
+  waitUntil(Promise.all([
+    (async () => {
+      try {
+        const pid = await registerAppPixel(shopCap, tokCap);
+        if (pid) await supabase.from("Shop").update({ pixelId: pid }).eq("id", idCap);
+        console.log("[shop] ensureShop pixel bg ok", pid);
+      } catch (e: any) { console.error("[shop] ensureShop pixel bg", e?.message); }
+    })(),
+    (async () => {
+      try {
+        const s = new Session({ id: `offline_${shopCap}`, shop: shopCap, state: "installed", isOnline: false });
+        s.accessToken = tokCap;
+        await registerWebhooks(s);
+        console.log("[shop] ensureShop webhooks bg ok");
+      } catch (e: any) { console.error("[shop] ensureShop webhook bg", e?.message); }
+    })(),
+  ]));
+
+  console.log("[shop] ensureShop ok id=%s shop=%s", created.id, shopDomain);
+  return { id: created.id, accessToken, pixelId: null };
 }
 
 export async function createShop(

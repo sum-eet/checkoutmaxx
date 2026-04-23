@@ -2,23 +2,24 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getAuthenticatedShop } from '@/lib/verify-session-token';
-import { getShop } from '@/lib/shop';
+import { getAuthenticatedShopAndToken } from '@/lib/verify-session-token';
+import { ensureShop } from '@/lib/shop';
 
 export async function GET(req: NextRequest, { params }: { params: { sessionId: string } }) {
   const { sessionId } = params;
   console.log('[CMX session-detail] GET', { sessionId });
 
-  const shopDomain = getAuthenticatedShop(req);
-  if (!shopDomain) {
+  const authed = getAuthenticatedShopAndToken(req);
+  if (!authed) {
     console.warn('[CMX session-detail] unauthorized');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const shop = await getShop(shopDomain);
+  const shop = await ensureShop(authed.shopDomain, authed.token);
   if (!shop) {
-    console.warn('[CMX session-detail] no shop:', shopDomain);
+    console.warn('[CMX session-detail] no shop:', authed.shopDomain);
     return NextResponse.json({ error: 'No shop' }, { status: 400 });
   }
+  console.log('[CMX session-detail] ensureShop ok id=%s', shop.id);
 
   const [cartRes, checkoutRes] = await Promise.all([
     supabase

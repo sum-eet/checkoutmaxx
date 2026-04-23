@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { getShop } from '@/lib/shop';
-import { getAuthenticatedShop } from '@/lib/verify-session-token';
+import { ensureShop } from '@/lib/shop';
+import { getAuthenticatedShopAndToken } from '@/lib/verify-session-token';
 import { shopify, sessionStorage } from '@/lib/shopify';
 import { Session } from '@shopify/shopify-api';
 
@@ -34,10 +34,12 @@ const THEMES_QUERY = `
 `;
 
 export async function GET(req: NextRequest) {
-  const shopDomain = getAuthenticatedShop(req);
-  if (!shopDomain) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
-  const shop = await getShop(shopDomain);
+  const authed = getAuthenticatedShopAndToken(req);
+  if (!authed) return NextResponse.json({ error: 'Missing shop' }, { status: 401 });
+  const shop = await ensureShop(authed.shopDomain, authed.token);
   if (!shop) return NextResponse.json({ error: 'Install required' }, { status: 400 });
+  console.log('[health] ensureShop ok id=%s shop=%s', shop.id, authed.shopDomain);
+  const shopDomain = authed.shopDomain;
   const shopId = shop.id;
 
   // ── 1. Activity checks ─────────────────────────────────────────────────────

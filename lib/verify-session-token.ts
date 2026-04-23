@@ -84,6 +84,15 @@ export function getShopFromPublicRequest(req: Request): string | null {
   return url.searchParams.get("shop");
 }
 
+// Returns shopDomain + raw JWT in one call — for routes that need both for ensureShop.
+export function getAuthenticatedShopAndToken(req: Request): { shopDomain: string; token: string } | null {
+  const shopDomain = getAuthenticatedShop(req);
+  if (!shopDomain) return null;
+  const token = getSessionTokenFromRequest(req);
+  if (!token) return null;
+  return { shopDomain, token };
+}
+
 // Extract the raw session token JWT from the request.
 export function getSessionTokenFromRequest(req: Request): string | null {
   const auth = req.headers.get("authorization");
