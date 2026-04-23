@@ -64,8 +64,8 @@ export default function WelcomePage() {
             </Banner>
 
             <InlineStack gap="300">
-              <Button variant="primary" url="/couponmaxx/analytics">
-                View analytics
+              <Button variant="primary" url="/couponmaxx/sessions">
+                View sessions
               </Button>
               <Button url="/couponmaxx/notifications">Configure alerts</Button>
             </InlineStack>

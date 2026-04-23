@@ -63,6 +63,30 @@ export async function createSubscription(
   return data.confirmationUrl;
 }
 
+export async function cancelSubscription(
+  shop: string,
+  accessToken: string,
+  subscriptionId: string
+): Promise<{ id: string; status: string }> {
+  const session = makeSession(shop, accessToken);
+  const client = new shopify.clients.Graphql({ session });
+
+  const response = await client.request(
+    `mutation appSubscriptionCancel($id: ID!) {
+      appSubscriptionCancel(id: $id) {
+        appSubscription { id status }
+        userErrors { field message }
+      }
+    }`,
+    { variables: { id: subscriptionId } }
+  );
+
+  const data = (response.data as any)?.appSubscriptionCancel;
+  if (!data) throw new Error('No response from appSubscriptionCancel');
+  if (data.userErrors?.length) throw new Error(data.userErrors[0].message);
+  return data.appSubscription;
+}
+
 export async function getActiveSubscription(
   shop: string,
   accessToken: string

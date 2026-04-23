@@ -44,21 +44,22 @@ async function getFreshToken(forceRefresh = false): Promise<string | null> {
   return null;
 }
 
-async function rawFetch(url: string, token: string): Promise<Response> {
+async function rawFetch(url: string, token: string, init: RequestInit = {}): Promise<Response> {
   const parsed = new URL(url, window.location.origin);
   if (!parsed.searchParams.has('id_token')) parsed.searchParams.set('id_token', token);
   return fetch(parsed.pathname + '?' + parsed.searchParams.toString(), {
-    headers: { Authorization: `Bearer ${token}` },
+    ...init,
+    headers: { ...(init.headers as Record<string, string> || {}), Authorization: `Bearer ${token}` },
   });
 }
 
-export async function fetcher(url: string): Promise<any> {
+export async function fetcher(url: string, init: RequestInit = {}): Promise<any> {
   console.log('[CMX Admin] fetch →', url);
 
   // Attempt 1 — fresh token from best available source.
   let token = await getFreshToken(false);
   if (token) {
-    const res = await rawFetch(url, token);
+    const res = await rawFetch(url, token, init);
     console.log('[CMX Admin] attempt 1 ←', { url, status: res.status });
     if (res.ok) return res.json();
     if (res.status !== 401) throw new Error(`HTTP ${res.status}`);
@@ -68,7 +69,7 @@ export async function fetcher(url: string): Promise<any> {
   // Attempt 2 — force App Bridge refresh.
   token = await getFreshToken(true);
   if (token) {
-    const res = await rawFetch(url, token);
+    const res = await rawFetch(url, token, init);
     console.log('[CMX Admin] attempt 2 ←', { url, status: res.status });
     if (res.ok) return res.json();
     console.warn('[CMX Admin] attempt 2 still failed', { status: res.status });

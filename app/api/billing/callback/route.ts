@@ -12,14 +12,14 @@ export async function GET(req: NextRequest) {
   const shop = req.nextUrl.searchParams.get("shop");
   if (!shop) {
     console.error("[billing/callback] BAIL: missing shop param");
-    return NextResponse.redirect(new URL("/couponmaxx/analytics", req.url));
+    return NextResponse.redirect(new URL("/couponmaxx/sessions", req.url));
   }
 
   const sessionId = shopify.session.getOfflineId(shop);
   const session = await sessionStorage.loadSession(sessionId);
   if (!session?.accessToken) {
     console.error("[billing/callback] BAIL: no session for shop=%s", shop);
-    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
+    return NextResponse.redirect(new URL(`/couponmaxx/sessions?shop=${shop}`, req.url));
   }
 
   let sub: { id: string; status: string } | null = null;
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const activeShop = await getShop(shop);
   if (!activeShop) {
     console.error("[billing/callback] active shop not found:", shop);
-    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
+    return NextResponse.redirect(new URL(`/couponmaxx/sessions?shop=${shop}`, req.url));
   }
 
   if (sub?.status === "ACTIVE") {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       .eq("id", activeShop.id);
     if (updateErr) console.error("[billing/callback] DB update ACTIVE failed:", updateErr.message);
     console.log("[billing/callback] ACTIVE: shop=%s (%dms)", shop, Date.now() - t0);
-    return NextResponse.redirect(new URL(`/couponmaxx/analytics?shop=${shop}`, req.url));
+    return NextResponse.redirect(new URL(`/couponmaxx/sessions?billing=active&shop=${shop}`, req.url));
   } else {
     const { error: updateErr } = await supabase
       .from("Shop")
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     if (updateErr) console.error("[billing/callback] DB update DECLINED failed:", updateErr.message);
     console.log("[billing/callback] DECLINED: shop=%s (%dms)", shop, Date.now() - t0);
     return NextResponse.redirect(
-      new URL(`/couponmaxx/analytics?billing=declined&shop=${shop}`, req.url)
+      new URL(`/couponmaxx/sessions?billing=declined&shop=${shop}`, req.url)
     );
   }
 }

@@ -13,5 +13,5 @@ export default function RootPage({
 
   // Just forward to the dashboard. ensureShop() in API routes handles
   // token exchange and Shop provisioning automatically.
-  redirect(`/couponmaxx/analytics${qs ? `?${qs}` : ""}`);
+  redirect(`/couponmaxx/sessions${qs ? `?${qs}` : ""}`);
 }
