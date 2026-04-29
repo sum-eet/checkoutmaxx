@@ -108,8 +108,8 @@ export default function PrivacyPage() {
         <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8 }}>7. Contact</h2>
         <p>
           For privacy questions or data requests, contact us at:{" "}
-          <a href="mailto:support@couponmaxx.app" style={{ color: "#2563eb" }}>
-            support@couponmaxx.app
+          <a href="mailto:sk200435@gmail.com" style={{ color: "#2563eb" }}>
+            sk200435@gmail.com
           </a>
         </p>
       </section>

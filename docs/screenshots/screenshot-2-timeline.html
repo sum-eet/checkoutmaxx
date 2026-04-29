@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1600">
+<title>CouponMaxx — Session Timeline</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F6F6F7; width: 1600px; height: 900px; overflow: hidden; display: flex; flex-direction: column; }
+
+  .topbar { height: 56px; background: #1A1A1A; display: flex; align-items: center; padding: 0 20px; flex-shrink: 0; gap: 16px; }
+  .topbar-logo { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-avatar { width: 32px; height: 32px; border-radius: 50%; background: #404040; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 13px; font-weight: 600; }
+
+  .layout { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #E1E3E5; padding: 16px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 14px; color: #202223; border-radius: 6px; margin: 0 8px; }
+  .sidebar-item.active { background: #E6F2EE; color: #008060; font-weight: 500; }
+  .sidebar-divider { height: 1px; background: #E1E3E5; margin: 8px 16px; }
+  .sidebar-app { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #202223; }
+
+  .main { flex: 1; overflow: hidden; }
+
+  .tabbar { background: #fff; border-bottom: 1px solid #E1E3E5; padding: 0 24px; display: flex; }
+  .tab { padding: 14px 16px; font-size: 14px; color: #6D7175; border-bottom: 3px solid transparent; margin-bottom: -1px; font-weight: 400; }
+  .tab.active { color: #202223; border-bottom-color: #008060; font-weight: 500; }
+
+  .page { padding: 24px 28px; }
+  .page-title { font-size: 20px; font-weight: 600; color: #202223; margin-bottom: 20px; }
+
+  .card { background: #fff; border-radius: 8px; border: 1px solid #E1E3E5; overflow: hidden; }
+  .card-header { padding: 16px 20px 12px; font-size: 14px; font-weight: 600; color: #202223; border-bottom: 1px solid #F1F2F3; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { border-bottom: 1px solid #E1E3E5; }
+  th { text-align: left; padding: 10px 14px; color: #6D7175; font-weight: 500; white-space: nowrap; font-size: 12px; }
+  td { padding: 11px 14px; color: #202223; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(1) { background: rgba(0,0,0,0.04); }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .badge-green { background: #E3F1EC; color: #008060; }
+  .badge-blue { background: #EAF2FD; color: #2C6ECB; }
+  .badge-yellow { background: #FFF5E5; color: #916A00; }
+
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+  td.subdued { color: #6D7175; }
+
+  /* Overlay */
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.28); z-index: 10; }
+
+  /* Drawer */
+  .drawer {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 440px;
+    background: #fff; z-index: 20; overflow-y: auto;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.14);
+    padding: 24px 24px 40px;
+  }
+  .drawer-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .drawer-title { font-size: 16px; font-weight: 600; color: #202223; }
+  .drawer-close { background: none; border: none; cursor: pointer; font-size: 22px; color: #6D7175; line-height: 1; padding: 0 4px; }
+
+  /* Cart contents */
+  .cart-section { margin-bottom: 20px; }
+  .cart-label { font-size: 11px; color: #6D7175; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+  .cart-summary { font-size: 13px; color: #6D7175; margin-bottom: 10px; }
+  .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #F3F4F6; font-size: 13px; }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-item-name { color: #202223; }
+  .cart-item-right { color: #6D7175; font-size: 12px; }
+
+  /* Timeline */
+  .timeline-label { font-size: 11px; color: #6D7175; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; margin-top: 4px; }
+  .timeline { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .timeline::before { content: ''; position: absolute; left: 7px; top: 8px; bottom: 8px; width: 2px; background: #E1E3E5; }
+  .tl-row { display: flex; gap: 16px; align-items: flex-start; padding: 6px 0; position: relative; }
+  .tl-dot { width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; border: 2px solid #fff; position: relative; z-index: 1; }
+  .dot-gray { background: #9CA3AF; }
+  .dot-green { background: #008060; }
+  .dot-red { background: #D82C0D; }
+  .dot-blue { background: #2C6ECB; }
+  .tl-content { flex: 1; }
+  .tl-event { font-size: 13px; color: #202223; }
+  .tl-time { font-size: 11px; color: #9CA3AF; margin-top: 1px; }
+  .tl-detail { font-size: 12px; color: #6D7175; margin-top: 2px; }
+  .tl-code { font-family: 'SF Mono', monospace; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo">CouponMaxx</span>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-avatar">SK</div>
+</div>
+
+<div class="layout">
+
+  <nav class="sidebar">
+    <div class="sidebar-app">CouponMaxx</div>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item active">Sessions</a>
+    <a class="sidebar-item">Discounts</a>
+    <a class="sidebar-item">Diagnostics</a>
+  </nav>
+
+  <main class="main">
+    <div class="tabbar">
+      <div class="tab active">Sessions</div>
+      <div class="tab">Discounts</div>
+      <div class="tab">Diagnostics</div>
+    </div>
+    <div class="page">
+      <div class="page-title">Sessions (last 7 days)</div>
+      <div class="card">
+        <div class="card-header">Cart sessions</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Started</th><th>Device / Country</th><th>Cart value</th><th>Products</th><th>Coupon attempts</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="background:#F0F9FF">
+              <td>Apr 29, 11:42 AM</td><td class="subdued">Mobile · US</td><td>$94.00</td>
+              <td>Hydro Flask 40oz, Insulated Mug</td>
+              <td><span class="mono" style="color:#D82C0D">SAVE10</span> <span style="color:#9CA3AF">→</span> <span class="mono" style="color:#008060">SALE20</span></td>
+              <td><span class="badge badge-green">Completed</span></td>
+            </tr>
+            <tr>
+              <td>Apr 29, 10:15 AM</td><td class="subdued">Desktop · CA</td><td>$47.00</td>
+              <td>Skin Serum</td>
+              <td><span class="mono" style="color:#D82C0D">DISCOUNT50</span></td>
+              <td><span class="badge badge-blue">Checkout started</span></td>
+            </tr>
+            <tr>
+              <td>Apr 29, 09:03 AM</td><td class="subdued">Mobile · GB</td><td>$132.00</td>
+              <td>Wireless Earbuds, Case</td>
+              <td style="color:#9CA3AF">—</td>
+              <td><span class="badge badge-yellow">Abandoned</span></td>
+            </tr>
+            <tr>
+              <td>Apr 28, 8:44 PM</td><td class="subdued">Mobile · US</td><td>$29.00</td>
+              <td>Face Wash</td>
+              <td><span class="mono" style="color:#008060">WELCOME10</span></td>
+              <td><span class="badge badge-green">Completed</span></td>
+            </tr>
+            <tr>
+              <td>Apr 28, 6:12 PM</td><td class="subdued">Desktop · AU</td><td>$216.00</td>
+              <td>Standing Desk Mat, Chair Pad</td>
+              <td><span class="mono" style="color:#008060">FREESHIP</span></td>
+              <td><span class="badge badge-blue">Checkout started</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Overlay -->
+  <div class="overlay"></div>
+
+  <!-- Drawer -->
+  <div class="drawer">
+    <div class="drawer-header">
+      <span class="drawer-title">Session timeline</span>
+      <button class="drawer-close">×</button>
+    </div>
+
+    <div class="cart-section">
+      <div class="cart-label">Cart contents</div>
+      <div class="cart-summary">2 items — $94.00</div>
+      <div class="cart-item">
+        <span class="cart-item-name">Hydro Flask 40oz</span>
+        <span class="cart-item-right">$62.00 ×1</span>
+      </div>
+      <div class="cart-item">
+        <span class="cart-item-name">Insulated Mug</span>
+        <span class="cart-item-right">$32.00 ×1</span>
+      </div>
+    </div>
+
+    <div class="timeline-label">Events</div>
+    <div class="timeline">
+
+      <div class="tl-row">
+        <div class="tl-dot dot-gray"></div>
+        <div class="tl-content">
+          <div class="tl-event">Page viewed</div>
+          <div class="tl-time">11:38 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-gray"></div>
+        <div class="tl-content">
+          <div class="tl-event">Product viewed</div>
+          <div class="tl-time">11:39 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-green"></div>
+        <div class="tl-content">
+          <div class="tl-event">Added to cart</div>
+          <div class="tl-detail">cart $62.00</div>
+          <div class="tl-time">11:40 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-gray"></div>
+        <div class="tl-content">
+          <div class="tl-event">Cart viewed</div>
+          <div class="tl-time">11:41 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-red"></div>
+        <div class="tl-content">
+          <div class="tl-event" style="color:#D82C0D">✗ Coupon rejected</div>
+          <div class="tl-detail"><span class="tl-code">SAVE10</span> · code not found</div>
+          <div class="tl-time">11:42 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-green"></div>
+        <div class="tl-content">
+          <div class="tl-event" style="color:#008060">✓ Coupon applied</div>
+          <div class="tl-detail"><span class="tl-code">SALE20</span> · cart $94.00</div>
+          <div class="tl-time">11:42 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-blue"></div>
+        <div class="tl-content">
+          <div class="tl-event">Checkout clicked</div>
+          <div class="tl-time">11:43 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-blue"></div>
+        <div class="tl-content">
+          <div class="tl-event">Checkout started</div>
+          <div class="tl-time">11:43 AM</div>
+        </div>
+      </div>
+
+      <div class="tl-row">
+        <div class="tl-dot dot-green"></div>
+        <div class="tl-content">
+          <div class="tl-event" style="color:#008060">Order completed</div>
+          <div class="tl-time">11:51 AM</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

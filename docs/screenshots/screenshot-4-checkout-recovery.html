@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1600">
+<title>CouponMaxx — Checkout Recovery</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #fff; width: 1600px; height: 900px; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Shopify checkout header */
+  .checkout-header {
+    height: 64px; background: #fff; border-bottom: 1px solid #E1E3E5;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .checkout-logo { font-size: 22px; font-weight: 700; color: #202223; letter-spacing: -0.5px; }
+  .checkout-logo span { color: #6D7175; font-weight: 400; font-size: 14px; margin-left: 6px; }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 14px 0; font-size: 13px; color: #6D7175;
+    background: #F9FAFB; border-bottom: 1px solid #E1E3E5;
+  }
+  .crumb { color: #6D7175; }
+  .crumb.active { color: #202223; font-weight: 500; }
+  .crumb-sep { color: #D1D5DB; }
+
+  /* Two-column layout */
+  .checkout-body {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* Left: order summary */
+  .order-summary {
+    width: 460px; background: #F9FAFB; border-left: 1px solid #E1E3E5;
+    padding: 32px 40px; order: 2; flex-shrink: 0; overflow-y: auto;
+  }
+  .summary-toggle { font-size: 14px; font-weight: 500; color: #2C6ECB; margin-bottom: 20px; display: flex; align-items: center; gap: 6px; }
+  .summary-item { display: flex; gap: 14px; margin-bottom: 16px; }
+  .summary-img { width: 52px; height: 52px; background: #E1E3E5; border-radius: 6px; flex-shrink: 0; position: relative; }
+  .summary-img-qty { position: absolute; top: -6px; right: -6px; background: #6D7175; color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+  .summary-name { font-size: 13px; color: #202223; font-weight: 500; flex: 1; }
+  .summary-price { font-size: 13px; color: #202223; font-weight: 500; }
+  .summary-divider { height: 1px; background: #E1E3E5; margin: 16px 0; }
+  .summary-line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; }
+  .summary-line .label { color: #6D7175; }
+  .summary-line .value { color: #202223; }
+  .summary-line.total { font-size: 16px; font-weight: 600; margin-top: 8px; }
+  .summary-line.total .value { font-size: 18px; }
+  .discount-line { color: #008060; }
+
+  /* Right: form */
+  .checkout-form {
+    flex: 1; padding: 40px 56px 40px 80px; overflow-y: auto; order: 1;
+    max-width: 600px;
+  }
+  .form-section { margin-bottom: 28px; }
+  .form-section-title { font-size: 16px; font-weight: 600; color: #202223; margin-bottom: 16px; }
+
+  .form-group { margin-bottom: 12px; }
+  .form-label { font-size: 12px; color: #6D7175; margin-bottom: 4px; display: block; }
+  .form-input {
+    width: 100%; padding: 10px 12px; border: 1px solid #C9CDD2; border-radius: 6px;
+    font-size: 14px; color: #202223; background: #fff;
+    outline: none;
+  }
+  .form-input:focus { border-color: #2C6ECB; box-shadow: 0 0 0 2px rgba(44,110,203,0.15); }
+  .form-input.filled { background: #fff; color: #202223; }
+  .form-row { display: flex; gap: 12px; }
+  .form-row .form-group { flex: 1; }
+
+  /* Shipping option */
+  .shipping-option {
+    border: 1px solid #C9CDD2; border-radius: 6px; padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px; background: #fff;
+  }
+  .shipping-option.selected { border-color: #2C6ECB; background: #EAF2FD; }
+  .shipping-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #2C6ECB; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .shipping-radio-inner { width: 8px; height: 8px; border-radius: 50%; background: #2C6ECB; }
+  .shipping-name { font-size: 13px; color: #202223; flex: 1; }
+  .shipping-eta { font-size: 12px; color: #6D7175; }
+  .shipping-price { font-size: 13px; color: #202223; font-weight: 500; }
+
+  /* CouponMaxx recovery widget */
+  .recovery-widget {
+    border: 1px solid #E1E3E5; border-radius: 8px; padding: 13px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 16px 0; background: #fff;
+  }
+  .recovery-text { font-size: 13px; color: #6D7175; }
+  .recovery-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; color: #202223; font-weight: 500; padding: 4px 8px;
+    border-radius: 4px; text-decoration: underline; text-decoration-color: #C9CDD2;
+  }
+  .recovery-btn:hover { background: #F6F6F7; }
+  .recovery-badge {
+    font-size: 10px; color: #6D7175; border: 1px solid #E1E3E5; border-radius: 4px;
+    padding: 1px 5px; margin-left: 8px; font-weight: 400;
+    vertical-align: middle;
+  }
+
+  /* Payment section (greyed) */
+  .payment-section { opacity: 0.45; }
+  .pay-card-row { display: flex; gap: 12px; }
+  .pay-card { flex: 1; height: 42px; background: #F3F4F6; border-radius: 6px; border: 1px solid #E1E3E5; }
+
+  /* Pay button */
+  .pay-btn {
+    width: 100%; padding: 14px; background: #008060; color: #fff;
+    border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 16px;
+  }
+  .pay-btn:hover { background: #006e52; }
+
+  .section-divider { height: 1px; background: #E1E3E5; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<!-- Checkout header -->
+<div class="checkout-header">
+  <span class="checkout-logo">drwater<span>.store checkout</span></span>
+</div>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb">
+  <span class="crumb">Cart</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Information</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb active">Shipping</span>
+  <span class="crumb-sep">›</span>
+  <span class="crumb">Payment</span>
+</div>
+
+<div class="checkout-body">
+
+  <!-- Form (left) -->
+  <div class="checkout-form">
+
+    <div class="form-section">
+      <div class="form-section-title">Contact</div>
+      <div class="form-group">
+        <input class="form-input filled" value="customer@example.com" readonly>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Shipping address</div>
+      <div class="form-group">
+        <input class="form-input filled" value="Jane Smith" readonly>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <input class="form-input filled" value="123 Main Street" readonly>
+        </div>
+        <div class="form-group">
+          <input class="form-input filled" value="Apt 4B" readonly>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <input class="form-input filled" value="San Francisco" readonly>
+        </div>
+        <div class="form-group" style="flex:0 0 90px">
+          <input class="form-input filled" value="CA" readonly>
+        </div>
+        <div class="form-group" style="flex:0 0 110px">
+          <input class="form-input filled" value="94103" readonly>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <div class="form-section-title">Shipping method</div>
+      <div class="shipping-option selected">
+        <div class="shipping-radio"><div class="shipping-radio-inner"></div></div>
+        <div class="shipping-name">
+          Standard shipping <span class="shipping-eta">5–7 business days</span>
+        </div>
+        <div class="shipping-price">Free</div>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- CouponMaxx Recovery Widget -->
+    <div class="recovery-widget">
+      <span class="recovery-text">
+        Looking for a discount?
+        <span class="recovery-badge">CouponMaxx</span>
+      </span>
+      <button class="recovery-btn">Claim</button>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- Payment (greyed out) -->
+    <div class="form-section payment-section">
+      <div class="form-section-title">Payment</div>
+      <div class="form-group">
+        <div class="form-label">Card number</div>
+        <div class="pay-card"></div>
+      </div>
+      <div class="pay-card-row">
+        <div class="form-group">
+          <div class="form-label">Expiry date</div>
+          <div class="pay-card" style="flex:1"></div>
+        </div>
+        <div class="form-group">
+          <div class="form-label">Security code</div>
+          <div class="pay-card" style="flex:1"></div>
+        </div>
+      </div>
+    </div>
+
+    <button class="pay-btn">Pay now — $94.00</button>
+
+  </div>
+
+  <!-- Order summary (right) -->
+  <div class="order-summary">
+    <div class="summary-toggle">▾ Show order summary</div>
+
+    <div class="summary-item">
+      <div class="summary-img">
+        <div class="summary-img-qty">1</div>
+      </div>
+      <div class="summary-name">Hydro Flask 40oz Wide Mouth<br><span style="color:#6D7175; font-weight:400; font-size:12px">Stone / 40 oz</span></div>
+      <div class="summary-price">$62.00</div>
+    </div>
+
+    <div class="summary-item">
+      <div class="summary-img">
+        <div class="summary-img-qty">1</div>
+      </div>
+      <div class="summary-name">Insulated Travel Mug<br><span style="color:#6D7175; font-weight:400; font-size:12px">Graphite</span></div>
+      <div class="summary-price">$32.00</div>
+    </div>
+
+    <div class="summary-divider"></div>
+
+    <div class="summary-line">
+      <span class="label">Subtotal</span>
+      <span class="value">$94.00</span>
+    </div>
+    <div class="summary-line">
+      <span class="label">Shipping</span>
+      <span class="value" style="color:#008060">Free</span>
+    </div>
+    <div class="summary-line discount-line">
+      <span class="label">Discount (SALE20)</span>
+      <span class="value">−$18.80</span>
+    </div>
+
+    <div class="summary-divider"></div>
+
+    <div class="summary-line total">
+      <span class="label">Total</span>
+      <span class="value">$75.20</span>
+    </div>
+    <div style="font-size:11px; color:#6D7175; margin-top:4px; text-align:right;">
+      Includes $6.89 in taxes
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

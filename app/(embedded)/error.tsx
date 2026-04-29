@@ -22,7 +22,7 @@ export default function EmbeddedError({
           tone="critical"
           action={{ content: "Try again", onAction: reset }}
         >
-          <p>An unexpected error occurred. If this keeps happening, contact support at support@couponmaxx.app.</p>
+          <p>An unexpected error occurred. If this keeps happening, contact support at sk200435@gmail.com.</p>
         </Banner>
       </BlockStack>
     </Page>

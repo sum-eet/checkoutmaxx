@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1600">
+<title>CouponMaxx — Discounts</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F6F6F7; width: 1600px; height: 900px; overflow: hidden; display: flex; flex-direction: column; }
+
+  .topbar { height: 56px; background: #1A1A1A; display: flex; align-items: center; padding: 0 20px; flex-shrink: 0; gap: 16px; }
+  .topbar-logo { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-avatar { width: 32px; height: 32px; border-radius: 50%; background: #404040; display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 13px; font-weight: 600; }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar { width: 220px; background: #fff; border-right: 1px solid #E1E3E5; padding: 16px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 14px; color: #202223; border-radius: 6px; margin: 0 8px; }
+  .sidebar-item.active { background: #E6F2EE; color: #008060; font-weight: 500; }
+  .sidebar-divider { height: 1px; background: #E1E3E5; margin: 8px 16px; }
+  .sidebar-app { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #202223; }
+
+  .main { flex: 1; overflow-y: auto; }
+
+  .tabbar { background: #fff; border-bottom: 1px solid #E1E3E5; padding: 0 24px; display: flex; }
+  .tab { padding: 14px 16px; font-size: 14px; color: #6D7175; border-bottom: 3px solid transparent; margin-bottom: -1px; font-weight: 400; }
+  .tab.active { color: #202223; border-bottom-color: #008060; font-weight: 500; }
+
+  .page { padding: 24px 28px; }
+  .page-title { font-size: 20px; font-weight: 600; color: #202223; margin-bottom: 20px; }
+
+  /* KPI grid */
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+  .kpi-card { background: #fff; border-radius: 8px; border: 1px solid #E1E3E5; padding: 16px 20px; }
+  .kpi-label { font-size: 12px; color: #6D7175; margin-bottom: 6px; }
+  .kpi-value { font-size: 28px; font-weight: 700; color: #202223; line-height: 1; }
+
+  .card { background: #fff; border-radius: 8px; border: 1px solid #E1E3E5; overflow: hidden; }
+  .card-header { padding: 16px 20px 12px; font-size: 14px; font-weight: 600; color: #202223; border-bottom: 1px solid #F1F2F3; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { border-bottom: 1px solid #E1E3E5; }
+  th { text-align: left; padding: 10px 14px; color: #6D7175; font-weight: 500; white-space: nowrap; font-size: 12px; }
+  td { padding: 10px 14px; color: #202223; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #F9FAFB; }
+
+  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+  .badge-green { background: #E3F1EC; color: #008060; }
+  .badge-red { background: #FFF0EE; color: #D82C0D; }
+
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; font-weight: 600; color: #374151; }
+  td.subdued { color: #6D7175; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-logo">CouponMaxx</span>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-avatar">SK</div>
+</div>
+
+<div class="layout">
+
+  <nav class="sidebar">
+    <div class="sidebar-app">CouponMaxx</div>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item">Sessions</a>
+    <a class="sidebar-item active">Discounts</a>
+    <a class="sidebar-item">Diagnostics</a>
+  </nav>
+
+  <main class="main">
+    <div class="tabbar">
+      <div class="tab">Sessions</div>
+      <div class="tab active">Discounts</div>
+      <div class="tab">Diagnostics</div>
+    </div>
+
+    <div class="page">
+      <div class="page-title">Discounts</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Claims today</div>
+          <div class="kpi-value">12</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Claims this week</div>
+          <div class="kpi-value">47</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cart views today</div>
+          <div class="kpi-value">83</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Cart views this hour</div>
+          <div class="kpi-value">9</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Checkout views today</div>
+          <div class="kpi-value">31</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Coupons tried today</div>
+          <div class="kpi-value">24</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Recent coupon attempts</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Code</th>
+              <th>Result</th>
+              <th>Reason</th>
+              <th>Source</th>
+              <th>Cart value</th>
+              <th>Device</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="subdued">Apr 29, 11:42 AM</td>
+              <td><span class="mono">SAVE10</span></td>
+              <td><span class="badge badge-red">✗ Failed</span></td>
+              <td class="subdued">code not found</td>
+              <td class="subdued">Cart</td>
+              <td>$94.00</td>
+              <td class="subdued">Mobile</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 29, 11:42 AM</td>
+              <td><span class="mono">SALE20</span></td>
+              <td><span class="badge badge-green">✓ Applied</span></td>
+              <td class="subdued">—</td>
+              <td class="subdued">Cart</td>
+              <td>$94.00</td>
+              <td class="subdued">Mobile</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 29, 10:15 AM</td>
+              <td><span class="mono">DISCOUNT50</span></td>
+              <td><span class="badge badge-red">✗ Failed</span></td>
+              <td class="subdued">minimum not met</td>
+              <td class="subdued">Cart</td>
+              <td>$47.00</td>
+              <td class="subdued">Desktop</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 28, 8:44 PM</td>
+              <td><span class="mono">WELCOME10</span></td>
+              <td><span class="badge badge-green">✓ Applied</span></td>
+              <td class="subdued">—</td>
+              <td class="subdued">Checkout</td>
+              <td>$29.00</td>
+              <td class="subdued">Mobile</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 28, 6:12 PM</td>
+              <td><span class="mono">FREESHIP</span></td>
+              <td><span class="badge badge-green">✓ Applied</span></td>
+              <td class="subdued">—</td>
+              <td class="subdued">Cart</td>
+              <td>$216.00</td>
+              <td class="subdued">Desktop</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 28, 3:22 PM</td>
+              <td><span class="mono">SAVE10</span></td>
+              <td><span class="badge badge-red">✗ Failed</span></td>
+              <td class="subdued">expired</td>
+              <td class="subdued">Cart</td>
+              <td>$58.00</td>
+              <td class="subdued">Mobile</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 28, 2:33 PM</td>
+              <td><span class="mono">SAVE10</span></td>
+              <td><span class="badge badge-green">✓ Applied</span></td>
+              <td class="subdued">—</td>
+              <td class="subdued">Cart</td>
+              <td>$73.00</td>
+              <td class="subdued">Tablet</td>
+            </tr>
+            <tr>
+              <td class="subdued">Apr 27, 5:01 PM</td>
+              <td><span class="mono">SUMMER15</span></td>
+              <td><span class="badge badge-red">✗ Failed</span></td>
+              <td class="subdued">code not found</td>
+              <td class="subdued">Cart</td>
+              <td>$61.00</td>
+              <td class="subdued">Mobile</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

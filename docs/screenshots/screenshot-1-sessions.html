@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1600">
+<title>CouponMaxx — Sessions</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F6F6F7; width: 1600px; height: 900px; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* Top nav */
+  .topbar {
+    height: 56px; background: #1A1A1A; display: flex; align-items: center;
+    padding: 0 20px; flex-shrink: 0; gap: 16px;
+  }
+  .topbar-logo { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: #404040;
+    display: flex; align-items: center; justify-content: center; color: #ccc; font-size: 13px; font-weight: 600;
+  }
+
+  /* Layout */
+  .layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px; background: #fff; border-right: 1px solid #E1E3E5;
+    padding: 16px 0; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px;
+  }
+  .sidebar-section { padding: 4px 12px 8px; font-size: 11px; font-weight: 600; color: #6D7175; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 8px; }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+    font-size: 14px; color: #202223; text-decoration: none; border-radius: 6px; margin: 0 8px;
+    cursor: pointer;
+  }
+  .sidebar-item:hover { background: #F6F6F7; }
+  .sidebar-item.active { background: #E6F2EE; color: #008060; font-weight: 500; }
+  .sidebar-item .icon { width: 18px; height: 18px; opacity: 0.6; }
+  .sidebar-item.active .icon { opacity: 1; }
+  .sidebar-divider { height: 1px; background: #E1E3E5; margin: 8px 16px; }
+  .sidebar-app { padding: 12px 16px; font-size: 13px; font-weight: 600; color: #202223; }
+
+  /* Main content */
+  .main { flex: 1; overflow-y: auto; padding: 0; }
+
+  /* Tab bar */
+  .tabbar {
+    background: #fff; border-bottom: 1px solid #E1E3E5; padding: 0 24px;
+    display: flex; gap: 0;
+  }
+  .tab {
+    padding: 14px 16px; font-size: 14px; color: #6D7175; cursor: pointer;
+    border-bottom: 3px solid transparent; margin-bottom: -1px; font-weight: 400;
+    white-space: nowrap;
+  }
+  .tab.active { color: #202223; border-bottom-color: #008060; font-weight: 500; }
+  .tab:hover:not(.active) { color: #202223; }
+
+  /* Page content */
+  .page { padding: 24px 28px; }
+  .page-title { font-size: 20px; font-weight: 600; color: #202223; margin-bottom: 20px; }
+
+  /* Card */
+  .card { background: #fff; border-radius: 8px; border: 1px solid #E1E3E5; overflow: hidden; }
+  .card-header { padding: 16px 20px 12px; font-size: 14px; font-weight: 600; color: #202223; border-bottom: 1px solid #F1F2F3; }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { border-bottom: 1px solid #E1E3E5; }
+  th { text-align: left; padding: 10px 14px; color: #6D7175; font-weight: 500; white-space: nowrap; font-size: 12px; }
+  td { padding: 11px 14px; color: #202223; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #F9FAFB; cursor: pointer; }
+  tbody tr.selected { background: #F0F9FF; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px;
+    font-size: 12px; font-weight: 500; white-space: nowrap;
+  }
+  .badge-green { background: #E3F1EC; color: #008060; }
+  .badge-blue { background: #EAF2FD; color: #2C6ECB; }
+  .badge-yellow { background: #FFF5E5; color: #916A00; }
+
+  /* Coupon mono */
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; color: #374151; }
+  .mono .arrow { color: #9CA3AF; margin: 0 2px; }
+
+  td.subdued { color: #6D7175; }
+</style>
+</head>
+<body>
+
+<!-- Top nav -->
+<div class="topbar">
+  <span class="topbar-logo">CouponMaxx</span>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-avatar">SK</div>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-app">CouponMaxx</div>
+    <div class="sidebar-divider"></div>
+    <a class="sidebar-item active">
+      <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path d="M2 4a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2 0v12h12V4H4zm2 3h8v1H6V7zm0 3h8v1H6v-1zm0 3h5v1H6v-1z"/></svg>
+      Sessions
+    </a>
+    <a class="sidebar-item">
+      <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm1 11H9v-4h2v4zm0-6H9V5h2v2z"/></svg>
+      Discounts
+    </a>
+    <a class="sidebar-item">
+      <svg class="icon" viewBox="0 0 20 20" fill="currentColor"><path d="M9 4a1 1 0 012 0v6a1 1 0 01-2 0V4zm1 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/></svg>
+      Diagnostics
+    </a>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Tab bar -->
+    <div class="tabbar">
+      <div class="tab active">Sessions</div>
+      <div class="tab">Discounts</div>
+      <div class="tab">Diagnostics</div>
+    </div>
+
+    <div class="page">
+      <div class="page-title">Sessions (last 7 days)</div>
+
+      <div class="card">
+        <div class="card-header">Cart sessions</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Device / Country</th>
+                <th>Cart value</th>
+                <th>Products</th>
+                <th>Coupon attempts</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="selected">
+                <td>Apr 29, 11:42 AM</td>
+                <td class="subdued">Mobile · US</td>
+                <td>$94.00</td>
+                <td>Hydro Flask 40oz, Insulated Mug</td>
+                <td><span class="mono"><span style="color:#D82C0D">SAVE10</span> <span class="arrow">→</span> <span style="color:#008060">SALE20</span></span></td>
+                <td><span class="badge badge-green">Completed</span></td>
+              </tr>
+              <tr>
+                <td>Apr 29, 10:15 AM</td>
+                <td class="subdued">Desktop · CA</td>
+                <td>$47.00</td>
+                <td>Skin Serum</td>
+                <td><span class="mono" style="color:#D82C0D">DISCOUNT50</span></td>
+                <td><span class="badge badge-blue">Checkout started</span></td>
+              </tr>
+              <tr>
+                <td>Apr 29, 09:03 AM</td>
+                <td class="subdued">Mobile · GB</td>
+                <td>$132.00</td>
+                <td>Wireless Earbuds, Case</td>
+                <td style="color:#9CA3AF">—</td>
+                <td><span class="badge badge-yellow">Abandoned</span></td>
+              </tr>
+              <tr>
+                <td>Apr 28, 8:44 PM</td>
+                <td class="subdued">Mobile · US</td>
+                <td>$29.00</td>
+                <td>Face Wash</td>
+                <td><span class="mono" style="color:#008060">WELCOME10</span></td>
+                <td><span class="badge badge-green">Completed</span></td>
+              </tr>
+              <tr>
+                <td>Apr 28, 6:12 PM</td>
+                <td class="subdued">Desktop · AU</td>
+                <td>$216.00</td>
+                <td>Standing Desk Mat, Chair Pad</td>
+                <td><span class="mono" style="color:#008060">FREESHIP</span></td>
+                <td><span class="badge badge-blue">Checkout started</span></td>
+              </tr>
+              <tr>
+                <td>Apr 28, 4:59 PM</td>
+                <td class="subdued">Mobile · US</td>
+                <td>$58.00</td>
+                <td>Yoga Mat</td>
+                <td style="color:#9CA3AF">—</td>
+                <td><span class="badge badge-yellow">Abandoned</span></td>
+              </tr>
+              <tr>
+                <td>Apr 28, 2:33 PM</td>
+                <td class="subdued">Tablet · US</td>
+                <td>$73.00</td>
+                <td>Reusable Bottle ×3</td>
+                <td><span class="mono" style="color:#008060">SAVE10</span></td>
+                <td><span class="badge badge-green">Completed</span></td>
+              </tr>
+              <tr>
+                <td>Apr 28, 11:11 AM</td>
+                <td class="subdued">Desktop · US</td>
+                <td>$41.00</td>
+                <td>Notebook, Pen Set</td>
+                <td style="color:#9CA3AF">—</td>
+                <td><span class="badge badge-yellow">Abandoned</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
