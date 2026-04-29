@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
   const weekStart = new Date(now);
-  weekStart.setDate(weekStart.getDate() - 7);
+  weekStart.setDate(weekStart.getDate() - 30);
 
   const [todayRes, weekRes, recentRes, cvTodayRes, cvHourRes, coViewsRes, couponsTriedRes] = await Promise.all([
     supabase

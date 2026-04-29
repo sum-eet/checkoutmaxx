@@ -216,7 +216,7 @@ export default function SessionsPage() {
 
   return (
     <>
-      <Page title="Sessions (last 7 days)">
+      <Page title="Sessions (last 30 days)">
         <BlockStack gap="400">
           {error && <Banner tone="critical">{error}</Banner>}
 
@@ -228,7 +228,7 @@ export default function SessionsPage() {
                   <Spinner size="small" />
                 </div>
               ) : !sessions.length ? (
-                <Text tone="subdued" as="p">No sessions in the last 7 days.</Text>
+                <Text tone="subdued" as="p">No sessions in the last 30 days.</Text>
               ) : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

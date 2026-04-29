@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   console.log('[CMX sessions] ensureShop ok id=%s', shop.id);
 
   const since = new Date();
-  since.setDate(since.getDate() - 7);
+  since.setDate(since.getDate() - 30);
 
   const { data: cartRows, error: cartErr } = await supabase
     .from('CartEvent')

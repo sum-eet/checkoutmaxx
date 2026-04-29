@@ -86,7 +86,7 @@ export default function DiscountsPage() {
           <div style={{ flex: 1 }}>
             <Card>
               <BlockStack gap="100">
-                <Text variant="bodySm" tone="subdued" as="p">Claims this week</Text>
+                <Text variant="bodySm" tone="subdued" as="p">Claims (30 days)</Text>
                 <Text variant="heading2xl" as="p">
                   {loading ? '—' : String(data?.counts.week ?? 0)}
                 </Text>
