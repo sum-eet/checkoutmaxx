@@ -7,7 +7,6 @@ const TABS = [
   { id: 'sessions',    label: 'Sessions',    href: '/couponmaxx/sessions' },
   { id: 'discounts',   label: 'Discounts',   href: '/couponmaxx/discounts' },
   { id: 'diagnostics', label: 'Diagnostics', href: '/couponmaxx/diagnostics' },
-  { id: 'billing',     label: 'Billing',     href: '/couponmaxx/billing' },
 ];
 
 export default function CouponMaxxLayout({ children }: { children: React.ReactNode }) {

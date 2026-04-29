@@ -1,62 +1,10 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
-import { shopify, sessionStorage } from "@/lib/shopify";
-import { getActiveSubscription } from "@/lib/billing";
-import { supabase } from "@/lib/supabase";
-import { getShop } from "@/lib/shop";
 
+// Billing disabled — CouponMaxx is free. Dormant for v1.1 reactivation.
+// Original implementation in git history at commit b33c3a2 / lib/billing.ts.
 export async function GET(req: NextRequest) {
-  const t0 = Date.now();
-  console.log("[billing/callback] START");
-
-  const shop = req.nextUrl.searchParams.get("shop");
-  if (!shop) {
-    console.error("[billing/callback] BAIL: missing shop param");
-    return NextResponse.redirect(new URL("/couponmaxx/sessions", req.url));
-  }
-
-  const sessionId = shopify.session.getOfflineId(shop);
-  const session = await sessionStorage.loadSession(sessionId);
-  if (!session?.accessToken) {
-    console.error("[billing/callback] BAIL: no session for shop=%s", shop);
-    return NextResponse.redirect(new URL(`/couponmaxx/sessions?shop=${shop}`, req.url));
-  }
-
-  let sub: { id: string; status: string } | null = null;
-  try {
-    sub = await getActiveSubscription(shop, session.accessToken);
-  } catch (err: any) {
-    console.error("[billing/callback] getActiveSubscription failed:", err.message);
-  }
-  console.log("[billing/callback] sub=%s status=%s (%dms)", sub?.id ?? "NULL", sub?.status ?? "NULL", Date.now() - t0);
-
-  const activeShop = await getShop(shop);
-  if (!activeShop) {
-    console.error("[billing/callback] active shop not found:", shop);
-    return NextResponse.redirect(new URL(`/couponmaxx/sessions?shop=${shop}`, req.url));
-  }
-
-  if (sub?.status === "ACTIVE") {
-    const { error: updateErr } = await supabase
-      .from("Shop")
-      .update({
-        subscriptionStatus: "ACTIVE",
-        billingPlan: "pro",
-        // trialEndsAt is managed by Shopify — do not set it manually here
-      })
-      .eq("id", activeShop.id);
-    if (updateErr) console.error("[billing/callback] DB update ACTIVE failed:", updateErr.message);
-    console.log("[billing/callback] ACTIVE: shop=%s (%dms)", shop, Date.now() - t0);
-    return NextResponse.redirect(new URL(`/couponmaxx/sessions?billing=active&shop=${shop}`, req.url));
-  } else {
-    const { error: updateErr } = await supabase
-      .from("Shop")
-      .update({ subscriptionStatus: "DECLINED", billingPlan: "free" })
-      .eq("id", activeShop.id);
-    if (updateErr) console.error("[billing/callback] DB update DECLINED failed:", updateErr.message);
-    console.log("[billing/callback] DECLINED: shop=%s (%dms)", shop, Date.now() - t0);
-    return NextResponse.redirect(
-      new URL(`/couponmaxx/sessions?billing=declined&shop=${shop}`, req.url)
-    );
-  }
+  console.log("[billing/callback] GATED — billing disabled, redirect to sessions. shop=%s",
+    req.nextUrl.searchParams.get("shop"));
+  return NextResponse.redirect(new URL("/couponmaxx/sessions", req.url));
 }

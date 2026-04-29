@@ -170,7 +170,6 @@ export default function SessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [billingBanner, setBillingBanner] = useState<'active' | 'declined' | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailEvents, setDetailEvents] = useState<TimelineEvent[]>([]);
@@ -191,11 +190,6 @@ export default function SessionsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get('billing');
-    if (p === 'active' || p === 'declined') setBillingBanner(p as 'active' | 'declined');
-  }, []);
 
   async function openDetail(sessionId: string) {
     setSelectedId(sessionId);
@@ -224,8 +218,6 @@ export default function SessionsPage() {
     <>
       <Page title="Sessions (last 7 days)">
         <BlockStack gap="400">
-          {billingBanner === 'active' && <Banner tone="success" onDismiss={() => setBillingBanner(null)}>You&apos;re on Pro. Thanks!</Banner>}
-          {billingBanner === 'declined' && <Banner tone="warning" onDismiss={() => setBillingBanner(null)}>Subscription not activated. You can upgrade anytime from the Billing tab.</Banner>}
           {error && <Banner tone="critical">{error}</Banner>}
 
           <Card>
