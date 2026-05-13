@@ -204,7 +204,7 @@ async function processEvent({
   }
 
   const safePayload = sanitizePayload(rawPayloadIn);
-  const effectiveSessionId = sessionId || "unknown";
+  const effectiveSessionId = sessionId || `anon_${crypto.randomUUID()}`;
 
   const { error: insertError } = await supabase.from("CheckoutEvent").insert({
     id: crypto.randomUUID(),
@@ -237,7 +237,7 @@ async function processEvent({
 
   // PRD-1 §4.3.1 — synthesize checkout_started for accelerated checkouts
   // (Shop Pay / Apple Pay / Google Pay can skip the checkout_started event)
-  if (eventType !== "checkout_started" && effectiveSessionId !== "unknown") {
+  if (eventType !== "checkout_started" && sessionId) {
     try {
       await prisma.checkoutEvent.upsert({
         where: {
