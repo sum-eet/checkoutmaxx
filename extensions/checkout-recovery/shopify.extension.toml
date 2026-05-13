@@ -5,20 +5,12 @@ uid = "600deb5a-0084-db1f-cf54-0e2c2e15d1dcd25b12e0"
 type = "ui_extension"
 name = "CouponMaxx Checkout Recovery"
 handle = "checkout-recovery"
+network_access = true
 
 [[extensions.targeting]]
-module = "./src/Checkout.jsx"
+module = "./src/Checkout.tsx"
 target = "purchase.checkout.reductions.render-after"
 
-[extensions.settings]
-  [[extensions.settings.fields]]
-  key = "discount_code"
-  type = "single_line_text_field"
-  name = "Discount code"
-  description = "Discount code offered to shoppers via the Claim button. Must match an active discount created in Shopify admin."
-
-  [[extensions.settings.fields]]
-  key = "discount_label"
-  type = "single_line_text_field"
-  name = "Discount label (optional)"
-  description = "Short human label shown with the code. e.g. '10% off'."
+[[extensions.capabilities]]
+name = "network_access"
+allowed_domains = ["couponmaxx.vercel.app"]
