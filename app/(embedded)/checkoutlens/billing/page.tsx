@@ -36,12 +36,13 @@ async function doUpgrade(plan: "standard" | "plus"): Promise<void> {
 }
 
 async function doCancel(): Promise<void> {
-  await fetcher("/api/billing/cancel", { method: "POST" });
+  const body = await fetcher("/api/billing/cancel", { method: "POST" });
+  if (body?.confirmationUrl) window.top!.location.href = body.confirmationUrl;
 }
 
 export default function BillingPage() {
   const { tier, plan, subscriptionStatus, trialEndsAt, currentPeriodEnd, isLoading, features, isPlus } = useFeatures();
-  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState<"standard" | "plus" | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
@@ -52,13 +53,13 @@ export default function BillingPage() {
 
   async function handleUpgrade(p: "standard" | "plus") {
     setError(null);
-    setUpgradeLoading(true);
+    setUpgradingPlan(p);
     try {
       await doUpgrade(p);
     } catch (err: any) {
       console.error("[PRD-3:billing/page] upgrade error:", err?.message);
       setError(err?.message ?? "Upgrade failed.");
-      setUpgradeLoading(false);
+      setUpgradingPlan(null);
     }
   }
 
@@ -105,14 +106,14 @@ export default function BillingPage() {
                 tier="standard"
                 current={isOnStandard}
                 onUpgrade={handleUpgrade}
-                upgradeLoading={upgradeLoading}
+                upgradeLoading={upgradingPlan === "standard"}
               />
               <PlanCard
                 tier="plus"
                 current={isOnPlus}
                 disabled={isLoading ? false : !isPlus && !isOnPlus}
                 onUpgrade={handleUpgrade}
-                upgradeLoading={upgradeLoading}
+                upgradeLoading={upgradingPlan === "plus"}
               />
             </InlineGrid>
           </BlockStack>
