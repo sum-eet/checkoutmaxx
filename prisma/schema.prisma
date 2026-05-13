@@ -48,10 +48,11 @@ model Shop {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  cartEvents     CartEvent[]
-  checkoutEvents CheckoutEvent[]
-  recoveryRule   RecoveryRule?
-  recoveryIssues RecoveryIssue[]
+  cartEvents       CartEvent[]
+  checkoutEvents   CheckoutEvent[]
+  recoveryRule     RecoveryRule?
+  recoveryIssues   RecoveryIssue[]
+  onboardingState  OnboardingState?
 }
 
 model RecoveryRule {
@@ -87,6 +88,19 @@ model RecoveryIssue {
 
   @@unique([shopId, sessionId])
   @@index([shopId, redeemedAt])
+}
+
+model OnboardingState {
+  id             String    @id @default(cuid())
+  shopId         String    @unique
+  step1Completed DateTime?
+  step2Completed DateTime?
+  step3Completed DateTime?
+  step4Completed DateTime?
+  dismissedAt    DateTime?
+  startedAt      DateTime  @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id])
 }
 
 model CartEvent {
