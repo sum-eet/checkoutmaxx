@@ -15,6 +15,7 @@
     recoveryUrl: script && script.dataset.recoveryUrl
       ? script.dataset.recoveryUrl
       : 'https://couponmaxx.vercel.app/api/couponmaxx/cx',
+    recoveryCheckUrl: 'https://couponmaxx.vercel.app/api/checkoutlens/recovery/check',
   };
 
   console.log('[CMX Recovery] script loaded, CONFIG:', CONFIG);
@@ -460,11 +461,40 @@
     console.log('[CMX Recovery] watchDiscountSubmit: form submit listener active');
   }
 
+  // ── PRD-2: Recovery check — fires after each cart_coupon_failed ───────────
+  // Calls /api/checkoutlens/recovery/check so the extension can surface a
+  // personalised code. Separate from callApi (legacy CX endpoint).
+  function callRecoveryCheck(detail) {
+    var sid = detail.sessionId || sessionStorage.getItem('_cmx_sid') || ('cart_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
+    var cartToken = null;
+    try {
+      var cartMeta = window.Shopify && window.Shopify.checkout && window.Shopify.checkout.token;
+      if (cartMeta) cartToken = cartMeta;
+    } catch (e) {}
+    console.log('[CMX Recovery] callRecoveryCheck sid=%s cartToken=%s', sid, cartToken);
+    fetch(CONFIG.recoveryCheckUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shopDomain: CONFIG.shopDomain, sessionId: sid, cartToken: cartToken }),
+    })
+      .then(function (r) {
+        console.log('[CMX Recovery] recoveryCheck status:', r.status);
+        return r.ok ? r.json() : null;
+      })
+      .then(function (data) {
+        if (data) console.log('[CMX Recovery] recoveryCheck result:', data.status);
+      })
+      .catch(function (err) {
+        console.warn('[CMX Recovery] recoveryCheck error:', err);
+      });
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────────
 
   window.addEventListener('cmx:coupon_failed', function (e) {
     console.log('[CMX Recovery] cmx:coupon_failed event received:', e.detail);
     callApi(e.detail);
+    callRecoveryCheck(e.detail);
   });
 
   if (document.readyState === 'loading') {
