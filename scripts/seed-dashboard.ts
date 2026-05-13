@@ -13,8 +13,13 @@
  *   DRY_RUN      — set to "1" to print plan without writing
  */
 
-import { config } from "dotenv";
-config({ path: ".env.local" });
+// Load .env.local if dotenv is available (dev only — not in prod)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require("dotenv").config({ path: ".env.local" });
+} catch {
+  // dotenv not installed — rely on environment already being set
+}
 
 // Must come after dotenv so DATABASE_URL is set
 import { PrismaClient } from "@prisma/client";
