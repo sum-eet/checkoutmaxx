@@ -39,20 +39,29 @@ register(({ analytics, browser, init }) => {
     return checkout.token || checkout.id || null;
   }
 
-  function send(eventType, payload) {
-    const body = JSON.stringify({
+  // Build the full ingest body per PRD-1 §4.1 spec.
+  // country is resolved server-side from address > header; pixel sends what it can from payload.
+  function buildIngestBody(eventType, payload) {
+    const checkout = payload?.checkout ?? payload;
+    return JSON.stringify({
       shopDomain,
       eventType,
       sessionId: currentSessionId,
       occurredAt: new Date().toISOString(),
       deviceType: getDeviceType(),
-      country:
-        payload?.checkout?.shippingAddress?.countryCode ||
-        payload?.checkout?.shippingAddress?.country ||
-        null,
-      data: payload,
+      discountCode:
+        checkout?.discountApplications
+          ?.filter((d) => d.type === "DISCOUNT_CODE")
+          ?.map((d) => d.title)?.[0] ?? null,
+      totalPrice: checkout?.totalPrice?.amount ?? null,
+      currency: checkout?.currencyCode ?? null,
+      shippingPrice: checkout?.shippingLine?.price?.amount ?? null,
+      rawPayload: payload,
     });
+  }
 
+  function send(eventType, payload) {
+    const body = buildIngestBody(eventType, payload);
     browser.sendBeacon(INGEST_URL, body);
   }
 
@@ -105,34 +114,37 @@ register(({ analytics, browser, init }) => {
     send("product_removed_from_cart", event.data);
   });
 
-  // Checkout events
+  // ─── Funnel events (PRD-1 §4.1) ─────────────────────────────────────────────
+  // All 5 steps send the full ingest body including shippingPrice, discountCode,
+  // totalPrice so the server can enrich without an extra lookup.
+
   analytics.subscribe("checkout_started", (event) => {
     currentSessionId = extractSessionId(event.data?.checkout);
+    console.log("[CMX Pixel] checkout_started session:", currentSessionId);
     send("checkout_started", event.data);
 
-    // Session init ping — fires once on checkout_started
-    // Confirms: pixel loaded → sendBeacon working → ingest endpoint reachable → DB alive
+    // Session init ping — confirms pixel→beacon→ingest→DB pipeline is live
     try {
-      const pingPayload = JSON.stringify({
-        sessionId: currentSessionId,
-        source: 'checkout',
-        shopDomain,
-        country: event.data?.checkout?.shippingAddress?.countryCode ?? null,
-        device: getDeviceType(),
-        pageUrl: '/checkout',
-        occurredAt: new Date().toISOString(),
-      });
       browser.sendBeacon(
         'https://couponmaxx.vercel.app/api/session/ping',
-        pingPayload
+        JSON.stringify({
+          sessionId: currentSessionId,
+          source: 'checkout',
+          shopDomain,
+          country: event.data?.checkout?.shippingAddress?.countryCode ?? null,
+          device: getDeviceType(),
+          pageUrl: '/checkout',
+          occurredAt: new Date().toISOString(),
+        })
       );
-      console.log('[CheckoutMaxx] Checkout active — session:', currentSessionId);
     } catch (e) {
       // Never let the ping crash the pixel
     }
   });
 
   analytics.subscribe("checkout_contact_info_submitted", (event) => {
+    if (!currentSessionId) currentSessionId = extractSessionId(event.data?.checkout);
+    console.log("[CMX Pixel] checkout_contact_info_submitted session:", currentSessionId);
     send("checkout_contact_info_submitted", event.data);
   });
 
@@ -141,25 +153,21 @@ register(({ analytics, browser, init }) => {
   });
 
   analytics.subscribe("checkout_shipping_info_submitted", (event) => {
+    if (!currentSessionId) currentSessionId = extractSessionId(event.data?.checkout);
+    console.log("[CMX Pixel] checkout_shipping_info_submitted session:", currentSessionId);
     send("checkout_shipping_info_submitted", event.data);
   });
 
   analytics.subscribe("payment_info_submitted", (event) => {
+    if (!currentSessionId) currentSessionId = extractSessionId(event.data?.checkout);
+    console.log("[CMX Pixel] payment_info_submitted session:", currentSessionId);
     send("payment_info_submitted", event.data);
   });
 
   analytics.subscribe("checkout_completed", (event) => {
-    const checkout = event.data?.checkout;
-    send("checkout_completed", {
-      ...event.data,
-      discountCodes:
-        checkout?.discountApplications
-          ?.filter((d) => d.type === "DISCOUNT_CODE")
-          ?.map((d) => d.title) || [],
-      totalPrice: checkout?.totalPrice?.amount,
-      currency: checkout?.currencyCode,
-      gateway: checkout?.transactions?.[0]?.gateway,
-    });
+    if (!currentSessionId) currentSessionId = extractSessionId(event.data?.checkout);
+    console.log("[CMX Pixel] checkout_completed session:", currentSessionId);
+    send("checkout_completed", event.data);
   });
 
   analytics.subscribe("alert_displayed", (event) => {
