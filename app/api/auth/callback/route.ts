@@ -144,6 +144,15 @@ export async function GET(req: NextRequest) {
         console.error("[AUTH] BG: webhook error", err?.message);
       }
     })(),
+    (async () => {
+      try {
+        const { refreshShopPlan } = await import("@/lib/billing/plusGate");
+        await refreshShopPlan(shopIdCapture);
+        console.log("[AUTH] BG: shop plan refreshed shopId=%s", shopIdCapture);
+      } catch (err: any) {
+        console.error("[AUTH] BG: shop plan refresh error", err?.message);
+      }
+    })(),
   ]));
 
   // Redirect to embedded admin

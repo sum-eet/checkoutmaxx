@@ -47,6 +47,8 @@ export async function registerWebhooks(session: Session) {
   const webhooks = [
     { topic: "APP_UNINSTALLED", address: `${base}/api/webhooks/app-uninstalled` },
     { topic: "APP_SUBSCRIPTIONS_UPDATE", address: `${base}/api/webhooks/app-subscriptions-update` },
+    { topic: "ORDERS_CREATE", address: `${base}/api/webhooks/orders-create` },
+    { topic: "SHOP_UPDATE", address: `${base}/api/webhooks/shop-update` },
   ];
 
   for (const { topic, address } of webhooks) {
