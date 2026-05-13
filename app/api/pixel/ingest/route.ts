@@ -1,147 +1,10 @@
-// export const dynamic = "force-dynamic";
-// import { NextRequest, NextResponse } from "next/server";
-// import { Prisma } from "@prisma/client";
-// import prisma from "@/lib/prisma";
-// import { sanitizePayload } from "@/lib/sanitize";
-
-// const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-// const RATE_LIMIT = 500;
-// const WINDOW_MS = 60_000;
-
-// // CORS headers — required for sendBeacon cross-origin requests
-// const CORS = {
-//   "Access-Control-Allow-Origin": "*",
-//   "Access-Control-Allow-Methods": "POST, OPTIONS",
-//   "Access-Control-Allow-Headers": "Content-Type",
-// };
-
-// export async function OPTIONS() {
-//   return new NextResponse(null, { status: 204, headers: CORS });
-// }
-
-// export async function POST(req: NextRequest) {
-//   const start = Date.now();
-
-//   // sendBeacon sends as text/plain — must parse manually
-//   let text: string;
-//   try {
-//     text = await req.text();
-//   } catch {
-//     return NextResponse.json({ error: "Failed to read body" }, { status: 400, headers: CORS });
-//   }
-
-//   let body: {
-//     shopDomain: string;
-//     eventType: string;
-//     sessionId: string | null;
-//     occurredAt: string;
-//     deviceType: string | null;
-//     country: string | null;
-//     data: Record<string, unknown>;
-//   };
-
-//   try {
-//     body = JSON.parse(text);
-//   } catch {
-//     return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: CORS });
-//   }
-
-//   const { shopDomain, eventType, sessionId, occurredAt, deviceType, country, data } = body;
-
-//   if (!shopDomain || !eventType) {
-//     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: CORS });
-//   }
-
-//   // Rate limiting — 500 requests per minute per shop/IP
-//   const key = shopDomain || req.headers.get("x-forwarded-for") || "unknown";
-//   const now = Date.now();
-//   const entry = rateLimitMap.get(key);
-//   if (entry && now < entry.resetAt) {
-//     if (entry.count >= RATE_LIMIT) {
-//       return NextResponse.json({ ok: false }, { status: 429, headers: CORS });
-//     }
-//     entry.count++;
-//   } else {
-//     rateLimitMap.set(key, { count: 1, resetAt: now + WINDOW_MS });
-//   }
-
-//   // Look up shop — must exist and be active
-//   const shop = await prisma.shop.findUnique({ where: { shopDomain } });
-//   if (!shop || !shop.isActive) {
-//     return NextResponse.json({ ok: false }, { status: 404, headers: CORS });
-//   }
-
-//   // Extract enrichment fields based on event type
-//   let discountCode: string | null = null;
-//   let totalPrice: number | null = null;
-//   let gatewayName: string | null = null;
-//   let errorMessage: string | null = null;
-//   let extensionId: string | null = null;
-
-//   if (eventType === "checkout_completed") {
-//     const codes = data.discountCodes as string[] | undefined;
-//     discountCode = codes?.[0] ?? null;
-//     const price = data.totalPrice as string | number | undefined;
-//     totalPrice = price != null ? parseFloat(String(price)) || null : null;
-//     gatewayName = (data.gateway as string | undefined) ?? null;
-//   }
-
-//   if (eventType === "alert_displayed") {
-//     const alert = (data as any)?.alert;
-//     errorMessage = alert?.message || (data as any)?.message || null;
-//     // alert.value contains the actual code the user typed when target is cart.discountCode
-//     if (alert?.target === "cart.discountCode" && alert?.value) {
-//       discountCode = alert.value as string;
-//     }
-//   }
-
-//   if (eventType === "ui_extension_errored") {
-//     errorMessage = (data as any)?.error?.message ?? null;
-//     extensionId = (data as any)?.extensionId ?? null;
-//   }
-
-//   // Sanitize PII from raw payload before storage (Guardrail #3)
-//   const safePayload = sanitizePayload(data);
-
-//   // Write to DB — single insert, stays well under 200ms
-//   // Alert evaluation happens in background cron jobs, never here
-//   try {
-//     await prisma.checkoutEvent.create({
-//       data: {
-//         shopId: shop.id,
-//         sessionId: sessionId || "unknown",
-//         eventType,
-//         deviceType: deviceType ?? null,
-//         country: country ?? null,
-//         discountCode,
-//         totalPrice,
-//         currency: (data.currency as string | undefined) ?? null,
-//         gatewayName,
-//         errorMessage,
-//         extensionId,
-//         rawPayload: safePayload as Prisma.InputJsonValue,
-//         occurredAt: new Date(occurredAt),
-//       },
-//     });
-//   } catch (err) {
-//     console.error("[ingest] DB write failed:", err);
-//     // Still return 200 — don't block the pixel
-//     return NextResponse.json({ ok: false, error: "db" }, { status: 200, headers: CORS });
-//   }
-
-//   const elapsed = Date.now() - start;
-//   if (elapsed > 180) {
-//     console.warn(`[ingest] Slow response: ${elapsed}ms`);
-//   }
-
-//   return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
-// }
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
 import { getShop } from "@/lib/shop";
+import prisma from "@/lib/prisma";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 500;
@@ -158,7 +21,6 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  // Parse body synchronously before responding
   let text: string;
   try {
     text = await req.text();
@@ -166,14 +28,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to read body" }, { status: 400, headers: CORS });
   }
 
+  // PRD-1 §4.1 body shape: eventType, sessionId, deviceType, discountCode?,
+  // totalPrice?, currency?, shippingPrice?, occurredAt, rawPayload, shopDomain
+  // Legacy shape used `data` instead of `rawPayload` — handle both.
   let body: {
     shopDomain: string;
     eventType: string;
     sessionId: string | null;
     occurredAt: string;
     deviceType: string | null;
-    country: string | null;
-    data: Record<string, unknown>;
+    discountCode?: string | null;
+    totalPrice?: number | null;
+    currency?: string | null;
+    shippingPrice?: number | null;
+    // PRD-1 new field
+    rawPayload?: Record<string, unknown>;
+    // legacy field name kept for old pixel versions
+    data?: Record<string, unknown>;
+    // legacy country field (old pixel resolved country client-side)
+    country?: string | null;
   };
 
   try {
@@ -182,13 +55,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: CORS });
   }
 
-  const { shopDomain, eventType, sessionId, occurredAt, deviceType, country, data } = body;
+  const {
+    shopDomain,
+    eventType,
+    sessionId,
+    occurredAt,
+    deviceType,
+    discountCode: bodyDiscountCode,
+    totalPrice: bodyTotalPrice,
+    currency: bodyCurrency,
+    shippingPrice: bodyShippingPrice,
+  } = body;
+
+  // Support both new `rawPayload` and legacy `data` field names
+  const rawPayloadIn: Record<string, unknown> = (body.rawPayload ?? body.data ?? {}) as Record<string, unknown>;
 
   if (!shopDomain || !eventType) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400, headers: CORS });
   }
 
-  // Rate limiting — synchronous, no DB needed
   const key = shopDomain || req.headers.get("x-forwarded-for") || "unknown";
   const now = Date.now();
   const entry = rateLimitMap.get(key);
@@ -201,8 +86,27 @@ export async function POST(req: NextRequest) {
     rateLimitMap.set(key, { count: 1, resetAt: now + WINDOW_MS });
   }
 
-  // Respond immediately — Web Pixel must not be blocked waiting for DB
-  waitUntil(processEvent({ shopDomain, eventType, sessionId, occurredAt, deviceType, country, data }));
+  // PRD-1 §4.1 country priority: shippingAddress > billingAddress > x-vercel-ip-country
+  // Must capture header BEFORE waitUntil (request headers unavailable in background)
+  const headerCountry = req.headers.get("x-vercel-ip-country");
+
+  waitUntil(
+    processEvent({
+      shopDomain,
+      eventType,
+      sessionId,
+      occurredAt,
+      deviceType,
+      bodyDiscountCode: bodyDiscountCode ?? null,
+      bodyTotalPrice: bodyTotalPrice ?? null,
+      bodyCurrency: bodyCurrency ?? null,
+      bodyShippingPrice: bodyShippingPrice ?? null,
+      rawPayloadIn,
+      headerCountry,
+      // legacy: old pixel sent resolved country
+      legacyCountry: body.country ?? null,
+    })
+  );
   return NextResponse.json({ ok: true }, { status: 200, headers: CORS });
 }
 
@@ -212,74 +116,107 @@ async function processEvent({
   sessionId,
   occurredAt,
   deviceType,
-  country,
-  data,
+  bodyDiscountCode,
+  bodyTotalPrice,
+  bodyCurrency,
+  bodyShippingPrice,
+  rawPayloadIn,
+  headerCountry,
+  legacyCountry,
 }: {
   shopDomain: string;
   eventType: string;
   sessionId: string | null;
   occurredAt: string;
   deviceType: string | null;
-  country: string | null;
-  data: Record<string, unknown>;
+  bodyDiscountCode: string | null;
+  bodyTotalPrice: number | null;
+  bodyCurrency: string | null;
+  bodyShippingPrice: number | null;
+  rawPayloadIn: Record<string, unknown>;
+  headerCountry: string | null;
+  legacyCountry: string | null;
 }) {
   const start = Date.now();
-
-  console.log("[pixel/ingest] hit", { shopDomain, eventType, sessionId: sessionId ?? null });
+  console.log("[PRD-1:pixel/ingest] hit", { shopDomain, eventType, sessionId });
 
   const shop = await getShop(shopDomain);
-  console.log("[pixel/ingest] shop_lookup", { shopDomain, found: !!shop, shopId: shop?.id ?? null });
+  console.log("[PRD-1:pixel/ingest] shop_lookup", { shopDomain, found: !!shop, shopId: shop?.id ?? null });
 
-  if (!shop) {
-    return;
-  }
+  if (!shop) return;
 
-  // Extract enrichment fields
-  let discountCode: string | null = null;
-  let totalPrice: number | null = null;
+  // PRD-1 §4.1 country resolution: shippingAddress → billingAddress → x-vercel-ip-country
+  const checkout = (rawPayloadIn as any)?.checkout;
+  const addrCountry =
+    checkout?.shippingAddress?.countryCode ??
+    checkout?.billingAddress?.countryCode ??
+    null;
+  const country = addrCountry ?? legacyCountry ?? headerCountry ?? null;
+  const countrySource = addrCountry
+    ? "address"
+    : legacyCountry
+    ? "legacy"
+    : headerCountry
+    ? "header"
+    : "null";
+  console.log("[PRD-1:pixel/ingest] country source=%s value=%s", countrySource, country);
+
+  // Prefer explicit body fields; fall back to extracting from rawPayload for legacy pixels
+  let discountCode: string | null = bodyDiscountCode;
+  let totalPrice: number | null = bodyTotalPrice;
+  let currency: string | null = bodyCurrency;
+  let shippingPrice: number | null = bodyShippingPrice;
   let gatewayName: string | null = null;
   let errorMessage: string | null = null;
   let extensionId: string | null = null;
 
   if (eventType === "checkout_completed") {
-    const codes = data.discountCodes as string[] | undefined;
-    discountCode = codes?.[0] ?? null;
-    const price = data.totalPrice as string | number | undefined;
-    totalPrice = price != null ? parseFloat(String(price)) || null : null;
-    gatewayName = (data.gateway as string | undefined) ?? null;
+    if (!discountCode) {
+      const codes = (rawPayloadIn as any)?.discountCodes as string[] | undefined;
+      discountCode = codes?.[0] ?? checkout?.discountApplications?.filter((d: any) => d.type === "DISCOUNT_CODE")?.[0]?.title ?? null;
+    }
+    if (totalPrice == null) {
+      const price = (rawPayloadIn as any)?.totalPrice ?? checkout?.totalPrice?.amount;
+      totalPrice = price != null ? parseFloat(String(price)) || null : null;
+    }
+    if (!currency) {
+      currency = (rawPayloadIn as any)?.currency ?? checkout?.currencyCode ?? null;
+    }
+    if (shippingPrice == null) {
+      const sp = checkout?.shippingLine?.price?.amount;
+      shippingPrice = sp != null ? parseFloat(String(sp)) || null : null;
+    }
+    gatewayName = (rawPayloadIn as any)?.gateway ?? checkout?.transactions?.[0]?.gateway ?? null;
   }
 
   if (eventType === "alert_displayed") {
-    const alert = (data as any)?.alert;
-    console.log("[pixel/ingest] alert_displayed detail", {
-      target: alert?.target,
-      value: alert?.value,
-      message: alert?.message,
-      sessionId,
-    });
-    errorMessage = alert?.message || (data as any)?.message || null;
+    const alert = (rawPayloadIn as any)?.alert;
+    console.log("[PRD-1:pixel/ingest] alert_displayed", { target: alert?.target, value: alert?.value, message: alert?.message, sessionId });
+    errorMessage = alert?.message || null;
     if (alert?.target === "cart.discountCode" && alert?.value) {
       discountCode = alert.value as string;
     }
   }
 
   if (eventType === "ui_extension_errored") {
-    errorMessage = (data as any)?.error?.message ?? null;
-    extensionId = (data as any)?.extensionId ?? null;
+    errorMessage = (rawPayloadIn as any)?.error?.message ?? null;
+    extensionId = (rawPayloadIn as any)?.extensionId ?? null;
   }
 
-  const safePayload = sanitizePayload(data);
+  const safePayload = sanitizePayload(rawPayloadIn);
+  const effectiveSessionId = sessionId || "unknown";
 
   const { error: insertError } = await supabase.from("CheckoutEvent").insert({
     id: crypto.randomUUID(),
     shopId: shop.id,
-    sessionId: sessionId || "unknown",
+    sessionId: effectiveSessionId,
     eventType,
     deviceType: deviceType ?? null,
-    country: country ?? null,
+    country,
     discountCode,
     totalPrice,
-    currency: (data.currency as string | undefined) ?? null,
+    shippingPrice,
+    currency,
     gatewayName,
     errorMessage,
     extensionId,
@@ -288,52 +225,75 @@ async function processEvent({
   });
 
   if (insertError) {
-    console.error("[pixel/ingest] insert_fail", { code: (insertError as any).code, message: insertError.message, shopId: shop.id, eventType });
+    console.error("[PRD-1:pixel/ingest] insert_fail", {
+      code: (insertError as any).code,
+      message: insertError.message,
+      shopId: shop.id,
+      eventType,
+    });
   } else {
-    console.log("[pixel/ingest] ok", { shopId: shop.id, eventType, sessionId: sessionId ?? null });
+    console.log("[PRD-1:pixel/ingest] inserted", { shopId: shop.id, eventType, sessionId: effectiveSessionId });
   }
 
-  // Mirror cart-page wrongcode rejections into CartEvent so sessions UI sees them.
-  // `alert_displayed` with target=cart.discountCode is Shopify's signal for
-  // cart discount field errors. The UI extension can't intercept the native
-  // input; this pixel event is the only way to capture it.
+  // PRD-1 §4.3.1 — synthesize checkout_started for accelerated checkouts
+  // (Shop Pay / Apple Pay / Google Pay can skip the checkout_started event)
+  if (eventType !== "checkout_started" && effectiveSessionId !== "unknown") {
+    try {
+      await prisma.checkoutEvent.upsert({
+        where: {
+          shopId_sessionId_eventType: {
+            shopId: shop.id,
+            sessionId: effectiveSessionId,
+            eventType: "checkout_started",
+          },
+        },
+        update: {},
+        create: {
+          shopId: shop.id,
+          sessionId: effectiveSessionId,
+          eventType: "checkout_started",
+          deviceType: deviceType ?? null,
+          country,
+          occurredAt: new Date(occurredAt),
+          rawPayload: { synthesized: true },
+        },
+      });
+      console.log("[PRD-1:pixel/ingest] synthesized checkout_started upsert ok", { sessionId: effectiveSessionId, shopId: shop.id });
+    } catch (e: any) {
+      console.error("[PRD-1:pixel/ingest] synthesized checkout_started upsert failed", e.message);
+    }
+  }
+
+  // Mirror alert_displayed cart discount errors to CartEvent for sessions UI
   if (
     eventType === "alert_displayed" &&
-    (data as any)?.alert?.target === "cart.discountCode" &&
-    (data as any)?.alert?.value
+    (rawPayloadIn as any)?.alert?.target === "cart.discountCode" &&
+    (rawPayloadIn as any)?.alert?.value
   ) {
-    const alert = (data as any).alert;
+    const alert = (rawPayloadIn as any).alert;
     const { error: mirrorErr } = await supabase.from("CartEvent").insert({
       id: crypto.randomUUID(),
       shopId: shop.id,
-      sessionId: sessionId || "unknown",
+      sessionId: effectiveSessionId,
       cartToken: "",
       eventType: "cart_coupon_failed",
       couponCode: alert.value as string,
       couponSuccess: false,
       couponFailReason: (alert.message as string) || "rejected",
       device: deviceType ?? null,
-      country: country ?? null,
+      country,
       occurredAt: new Date(occurredAt).toISOString(),
     });
     if (mirrorErr) {
-      console.error("[pixel/ingest] alert_displayed → CartEvent mirror FAILED", mirrorErr);
+      console.error("[PRD-1:pixel/ingest] alert mirror failed", mirrorErr);
     } else {
-      console.log("[pixel/ingest] alert_displayed mirrored to CartEvent cart_coupon_failed", {
-        code: alert.value,
-        sessionId,
-        shopId: shop.id,
-      });
+      console.log("[PRD-1:pixel/ingest] alert mirrored to CartEvent", { code: alert.value, sessionId: effectiveSessionId });
     }
   }
 
-  // When an order completes, write a CartEvent so the session builder can
-  // detect it. CheckoutEvent.sessionId is the Shopify checkout token, not the
-  // cart monitor session ID — so we correlate by finding the most recent
-  // cart_checkout_clicked for this shop within the last 30 minutes.
+  // Mirror checkout_completed to CartEvent for session builder correlation
   if (eventType === "checkout_completed") {
     const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-
     const { data: recentCart } = await supabase
       .from("CartEvent")
       .select("sessionId, cartToken, country, device, utmSource, utmMedium, utmCampaign")
@@ -360,14 +320,15 @@ async function processEvent({
         utmCampaign: recentCart.utmCampaign ?? null,
         occurredAt: new Date(occurredAt).toISOString(),
       });
-
       if (cartInsertError) {
-        console.error("[pixel/ingest] CartEvent mirror write failed:", cartInsertError);
+        console.error("[PRD-1:pixel/ingest] CartEvent checkout_completed mirror failed", cartInsertError);
       } else {
-        console.log(`[pixel/ingest] checkout_completed mirrored to CartEvent session ${recentCart.sessionId}`);
+        console.log("[PRD-1:pixel/ingest] checkout_completed mirrored to CartEvent", { cartSessionId: recentCart.sessionId });
       }
     } else {
-      console.warn(`[pixel/ingest] checkout_completed received but no cart_checkout_clicked found within 30min for shop ${shopDomain}`);
+      console.warn("[PRD-1:pixel/ingest] checkout_completed — no recent cart_checkout_clicked for shop", shopDomain);
     }
   }
+
+  console.log("[PRD-1:pixel/ingest] done", { shopId: shop.id, eventType, ms: Date.now() - start });
 }
