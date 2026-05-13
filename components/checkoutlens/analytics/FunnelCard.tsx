@@ -53,7 +53,7 @@ export default function FunnelCard({ steps, loading, error }: FunnelCardProps) {
   }
 
   const chartData = steps.map((s) => ({
-    name: s.label,
+    key: s.label,
     value: s.sessions,
   }));
 
@@ -71,7 +71,6 @@ export default function FunnelCard({ steps, loading, error }: FunnelCardProps) {
         <div style={{ height: 280 }}>
           <FunnelChartNext
             data={[{ data: chartData, name: "Funnel" }]}
-            labelPosition="bottom"
           />
         </div>
         <DataTable
