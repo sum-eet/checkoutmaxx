@@ -100,10 +100,13 @@ model CheckoutEvent {
   errorMessage String?
   extensionId  String?
 
+  shippingPrice Float?
+
   rawPayload Json
   occurredAt DateTime
   receivedAt DateTime @default(now())
 
+  @@unique([shopId, sessionId, eventType])
   @@index([shopId, eventType, occurredAt])
   @@index([shopId, sessionId])
   @@index([shopId, occurredAt])

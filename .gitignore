@@ -35,7 +35,7 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-prisma/migrations/
+# prisma/migrations/ — unignored so migration files are tracked in git
 
 # Preview / walkthrough — commit manually when ready
 app/preview/
