@@ -41,11 +41,52 @@ model Shop {
   trialEndsAt        DateTime?
   billingPlan        String    @default("free")
 
+  planDisplayName String?
+  isPlus          Boolean   @default(false)
+  planCheckedAt   DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   cartEvents     CartEvent[]
   checkoutEvents CheckoutEvent[]
+  recoveryRule   RecoveryRule?
+  recoveryIssues RecoveryIssue[]
+}
+
+model RecoveryRule {
+  id               String   @id @default(cuid())
+  shopId           String   @unique
+  enabled          Boolean  @default(false)
+  threshold        Int      @default(2)
+  codeStrategy     String
+  staticCode       String?
+  generatedPercent Int?
+  expiryMinutes    Int      @default(60)
+  allowStacking    Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  shop             Shop     @relation(fields: [shopId], references: [id])
+}
+
+model RecoveryIssue {
+  id              String    @id @default(cuid())
+  shopId          String
+  sessionId       String
+  cartToken       String?
+  code            String
+  source          String
+  discountNodeId  String?
+  expiresAt       DateTime
+  issuedAt        DateTime  @default(now())
+  claimedAt       DateTime?
+  redeemedAt      DateTime?
+  redeemedOrderId String?
+  redeemedTotal   Int?
+  shop            Shop      @relation(fields: [shopId], references: [id])
+
+  @@unique([shopId, sessionId])
+  @@index([shopId, redeemedAt])
 }
 
 model CartEvent {
