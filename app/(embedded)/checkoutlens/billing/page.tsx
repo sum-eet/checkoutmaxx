@@ -17,6 +17,7 @@ import {
   InlineGrid,
   Badge,
 } from "@shopify/polaris";
+import { fetcher } from "@/lib/admin-fetch";
 import { useFeatures } from "@/hooks/useFeatures";
 import { PlanCard } from "@/components/billing/PlanCard";
 
@@ -26,48 +27,24 @@ function formatDate(d: Date | null): string {
 }
 
 async function doUpgrade(plan: "standard" | "plus"): Promise<void> {
-  const token = (window as any).__shopifySessionToken ?? "";
-  const res = await fetch("/api/billing/create", {
+  const body = await fetcher("/api/billing/create", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan }),
   });
-  const body = await res.json();
-  if (!res.ok) {
-    throw new Error(body?.message ?? body?.error ?? `billing/create returned ${res.status}`);
-  }
-  if (body.confirmationUrl) {
-    window.top!.location.href = body.confirmationUrl;
-  }
+  if (body?.confirmationUrl) window.top!.location.href = body.confirmationUrl;
 }
 
 async function doCancel(): Promise<void> {
-  const token = (window as any).__shopifySessionToken ?? "";
-  const res = await fetch("/api/billing/cancel", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error ?? `billing/cancel returned ${res.status}`);
-  }
+  await fetcher("/api/billing/cancel", { method: "POST" });
 }
 
 export default function BillingPage() {
-  const { tier, plan, subscriptionStatus, trialEndsAt, currentPeriodEnd, isLoading, features } = useFeatures();
+  const { tier, plan, subscriptionStatus, trialEndsAt, currentPeriodEnd, isLoading, features, isPlus } = useFeatures();
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
-
-  // Read isPlus from /api/billing/me — included in features response
-  // We'll check via a dedicated call if needed, but use hasFeature("recovery") as Plus proxy
-  const isPlus = !!features?.recovery !== undefined
-    ? undefined  // We need explicit isPlus from server
-    : false;
 
   const isOnPlus = tier === "plus";
   const isOnStandard = tier === "standard";
@@ -133,7 +110,7 @@ export default function BillingPage() {
               <PlanCard
                 tier="plus"
                 current={isOnPlus}
-                disabled={isLoading ? false : !features?.recovery && !isOnPlus}
+                disabled={isLoading ? false : !isPlus && !isOnPlus}
                 onUpgrade={handleUpgrade}
                 upgradeLoading={upgradeLoading}
               />

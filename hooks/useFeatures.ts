@@ -7,6 +7,7 @@
 
 import useSWR from "swr";
 import type { Tier } from "@/lib/billing/gate";
+import { fetcher as adminFetch } from "@/lib/admin-fetch";
 
 interface BillingMe {
   tier: Tier;
@@ -15,21 +16,11 @@ interface BillingMe {
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   features: Record<string, boolean>;
-}
-
-function fetcher(url: string): Promise<BillingMe> {
-  return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${(window as any).__shopifySessionToken ?? ""}`,
-    },
-  }).then((r) => {
-    if (!r.ok) throw new Error(`/api/billing/me returned ${r.status}`);
-    return r.json();
-  });
+  isPlus: boolean;
 }
 
 export function useFeatures() {
-  const { data, isLoading, error } = useSWR<BillingMe>("/api/billing/me", fetcher, {
+  const { data, isLoading, error } = useSWR<BillingMe>("/api/billing/me", adminFetch, {
     dedupingInterval: 5 * 60_000,
     revalidateOnFocus: false,
   });
@@ -41,6 +32,7 @@ export function useFeatures() {
     trialEndsAt: data?.trialEndsAt ? new Date(data.trialEndsAt) : null,
     currentPeriodEnd: data?.currentPeriodEnd ? new Date(data.currentPeriodEnd) : null,
     features: data?.features ?? {},
+    isPlus: data?.isPlus ?? false,
     has: (key: string): boolean => !!data?.features?.[key],
     isLoading,
     error,
