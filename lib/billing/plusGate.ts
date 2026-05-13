@@ -39,8 +39,15 @@ export async function refreshShopPlan(shopId: string): Promise<void> {
 
     const isPlus: boolean = plan.shopifyPlus === true;
     const planDisplayName: string = plan.displayName ?? "";
+    const partnerDevelopment: boolean = plan.partnerDevelopment === true;
 
-    console.log("[PRD-2:plusGate] refreshShopPlan isPlus=%s displayName=%s shopId=%s", isPlus, planDisplayName, shopId);
+    console.log(
+      "[PRD-2:plusGate] refreshShopPlan isPlus=%s displayName=%s partnerDevelopment=%s shopId=%s",
+      isPlus,
+      planDisplayName,
+      partnerDevelopment,
+      shopId,
+    );
 
     // When downgrading from Plus, disable any active recovery rule
     if (!isPlus) {
@@ -50,13 +57,11 @@ export async function refreshShopPlan(shopId: string): Promise<void> {
         data: { enabled: false },
       });
       console.log("[PRD-2:plusGate] refreshShopPlan: disabled recovery rules on downgrade shopId=%s", shopId);
-      // TODO(PRD-3): send plan_downgraded email via Resend
     }
 
-    // TODO(PRD-2-merge): remove (prisma as any) cast once isPlus/planDisplayName/planCheckedAt are in generated client
-    await (prisma as any).shop.update({
+    await prisma.shop.update({
       where: { id: shopId },
-      data: { isPlus, planDisplayName, planCheckedAt: new Date() },
+      data: { isPlus, planDisplayName, planCheckedAt: new Date(), partnerDevelopment },
     });
     console.log("[PRD-2:plusGate] refreshShopPlan: updated shopId=%s isPlus=%s", shopId, isPlus);
   } catch (err: any) {
