@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import {
   Page,
   BlockStack,
@@ -23,6 +24,8 @@ import { UpgradeKpiCard } from "@/components/checkoutlens/dashboard/UpgradeKpiCa
 import { HeatmapGrid } from "@/components/checkoutlens/dashboard/HeatmapGrid";
 
 import type { DashboardPayload, DashboardKpis } from "@/lib/analytics/dashboardAggregator";
+import { WelcomeModal } from "@/components/checkoutlens/onboarding/WelcomeModal";
+import type { OnboardingResult } from "@/lib/onboarding/recompute";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -107,9 +110,26 @@ const PRESET_LABELS: Record<string, string> = {
 // Main dashboard component
 // ---------------------------------------------------------------------------
 
+async function onboardingFetcher(url: string) {
+  const token = getSessionToken();
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 function DashboardInner() {
   const [shopTimezone, setShopTimezone] = useState(DEFAULT_TZ);
   const [currency, setCurrency] = useState("USD");
+
+  // PRD-4: fetch onboarding state for WelcomeModal
+  const { data: onboardingResult } = useSWR<OnboardingResult>(
+    "/api/checkoutlens/onboarding/state",
+    onboardingFetcher,
+    { revalidateOnFocus: false }
+  );
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   // Initialise date range to last_30d using shop timezone
   const [range, setRange] = useState<DateRange>(() => {
@@ -187,6 +207,14 @@ function DashboardInner() {
 
   return (
     <Page title="Checkout Lens">
+      {/* PRD-4: Welcome modal — shown once on fresh install */}
+      <WelcomeModal
+        onboardingResult={onboardingResult ?? null}
+        onStart={() => {
+          console.log("[PRD-4:DashboardPage] WelcomeModal start clicked — setup guide visible");
+          setShowSetupGuide(true);
+        }}
+      />
       <PolarisVizProvider>
         <BlockStack gap="400">
           {/* Header row: period label + date picker */}
