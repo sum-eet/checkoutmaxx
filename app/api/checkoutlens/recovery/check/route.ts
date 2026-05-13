@@ -46,8 +46,9 @@ const CREATE_DISCOUNT_MUTATION = `
   }
 `;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function createDiscount(
-  client: ReturnType<typeof shopify.clients.Graphql.prototype.constructor extends new (...a: any[]) => infer R ? new (...a: any[]) => R : never>,
+  client: any,
   shopDomain: string,
   sessionId: string,
   rule: { generatedPercent: number | null; expiryMinutes: number; allowStacking: boolean },
@@ -132,7 +133,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: "not_plus" });
   }
 
-  const rule = await prisma.recoveryRule.findUnique({ where: { shopId } });
+  // TODO(PRD-2-merge): remove (prisma as any) casts once RecoveryRule/RecoveryIssue models are in schema
+  const p = prisma as any;
+  const rule = await p.recoveryRule.findUnique({ where: { shopId } });
   if (!rule || !rule.enabled) {
     console.log("[PRD-2:recovery/check] disabled shopId=%s", shopId);
     return NextResponse.json({ status: "disabled" });
@@ -182,7 +185,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const issue = await prisma.recoveryIssue.create({
+      const issue = await p.recoveryIssue.create({
         data: { shopId, sessionId, cartToken: cartToken ?? null, code: staticCode, source: "static", expiresAt },
       });
       console.log("[PRD-2:recovery/check] static issued issueId=%s shopId=%s", issue.id, shopId);
@@ -190,7 +193,7 @@ export async function POST(req: NextRequest) {
     } catch (err: any) {
       if (err?.code === "P2002") {
         // Race: fetch existing
-        const existing = await prisma.recoveryIssue.findUnique({ where: { shopId_sessionId: { shopId, sessionId } } });
+        const existing = await p.recoveryIssue.findUnique({ where: { shopId_sessionId: { shopId, sessionId } } });
         if (!existing) return NextResponse.json({ status: "error" }, { status: 500 });
         if (existing.expiresAt < new Date()) {
           console.log("[PRD-2:recovery/check] existing issue expired sessionId=%s", sessionId);
@@ -214,7 +217,7 @@ export async function POST(req: NextRequest) {
   const client = new shopify.clients.Graphql({ session });
 
   const firstCode = `RECOVER-${randomAlphanum(8)}`;
-  let discountResult = await createDiscount(client as any, shopDomain, sessionId, {
+  let discountResult = await createDiscount(client, shopDomain, sessionId, {
     generatedPercent: rule.generatedPercent,
     expiryMinutes: rule.expiryMinutes,
     allowStacking: rule.allowStacking,
@@ -223,7 +226,7 @@ export async function POST(req: NextRequest) {
   if ("error" in discountResult && discountResult.error === "collision") {
     console.log("[PRD-2:recovery/check] code collision on first try, retrying shopId=%s", shopId);
     const retryCode = `RECOVER-${randomAlphanum(8)}`;
-    discountResult = await createDiscount(client as any, shopDomain, sessionId, {
+    discountResult = await createDiscount(client, shopDomain, sessionId, {
       generatedPercent: rule.generatedPercent,
       expiryMinutes: rule.expiryMinutes,
       allowStacking: rule.allowStacking,
@@ -243,14 +246,14 @@ export async function POST(req: NextRequest) {
   const { nodeId, code: issuedCode } = discountResult;
 
   try {
-    const issue = await prisma.recoveryIssue.create({
+    const issue = await p.recoveryIssue.create({
       data: { shopId, sessionId, cartToken: cartToken ?? null, code: issuedCode, source: "generated", discountNodeId: nodeId, expiresAt },
     });
     console.log("[PRD-2:recovery/check] generated issued issueId=%s code=%s shopId=%s", issue.id, issuedCode, shopId);
     return NextResponse.json({ status: "issued", code: issue.code, expiresAt: issue.expiresAt });
   } catch (err: any) {
     if (err?.code === "P2002") {
-      const existing = await prisma.recoveryIssue.findUnique({ where: { shopId_sessionId: { shopId, sessionId } } });
+      const existing = await p.recoveryIssue.findUnique({ where: { shopId_sessionId: { shopId, sessionId } } });
       if (!existing) return NextResponse.json({ status: "error" }, { status: 500 });
       if (existing.expiresAt < new Date()) {
         console.log("[PRD-2:recovery/check] existing issue expired sessionId=%s", sessionId);

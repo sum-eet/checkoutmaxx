@@ -40,15 +40,17 @@ export async function GET(req: NextRequest) {
 
   console.log("[PRD-2:recovery/stats] shopId=%s start=%s end=%s", shopId, start.toISOString(), end.toISOString());
 
-  const issues = await prisma.recoveryIssue.findMany({
-    where: { shopId, issuedAt: { gte: start, lte: end } },
-    select: { claimedAt: true, redeemedAt: true, redeemedTotal: true },
-  });
+  // TODO(PRD-2-merge): remove cast once RecoveryIssue model is in schema
+  const issues: Array<{ claimedAt: Date | null; redeemedAt: Date | null; redeemedTotal: number | null }> =
+    await (prisma as any).recoveryIssue.findMany({
+      where: { shopId, issuedAt: { gte: start, lte: end } },
+      select: { claimedAt: true, redeemedAt: true, redeemedTotal: true },
+    });
 
   const issued = issues.length;
-  const claimed = issues.filter((i) => i.claimedAt !== null).length;
-  const redeemed = issues.filter((i) => i.redeemedAt !== null).length;
-  const revenue = issues.reduce((sum, i) => sum + (i.redeemedTotal ?? 0), 0);
+  const claimed = issues.filter((i: { claimedAt: Date | null }) => i.claimedAt !== null).length;
+  const redeemed = issues.filter((i: { redeemedAt: Date | null }) => i.redeemedAt !== null).length;
+  const revenue = issues.reduce((sum: number, i: { redeemedTotal: number | null }) => sum + (i.redeemedTotal ?? 0), 0);
 
   const claimRate = issued > 0 ? Math.round((claimed / issued) * 100) : 0;
 

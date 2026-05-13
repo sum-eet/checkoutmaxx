@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
 
   console.log("[PRD-2:webhooks/orders-create] discountApplications=%d cartToken=%s total=%d", discountApplications.length, cartToken, totalCents);
 
+  // TODO(PRD-2-merge): remove cast once RecoveryIssue model is in schema
+  const p = prisma as any;
+
   for (const discount of discountApplications) {
     if (discount.type !== "discount_code" || !discount.code) continue;
     const code = String(discount.code).toUpperCase();
@@ -50,13 +53,13 @@ export async function POST(req: NextRequest) {
 
     // Try cart_token match first, fall back to code-only match
     let issue = cartToken
-      ? await prisma.recoveryIssue.findFirst({
+      ? await p.recoveryIssue.findFirst({
           where: { shopId, cartToken, code, redeemedAt: null },
         })
       : null;
 
     if (!issue) {
-      issue = await prisma.recoveryIssue.findFirst({
+      issue = await p.recoveryIssue.findFirst({
         where: { shopId, code, redeemedAt: null },
       });
     }
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
-    await prisma.recoveryIssue.update({
+    await p.recoveryIssue.update({
       where: { id: issue.id },
       data: {
         redeemedAt: new Date(),

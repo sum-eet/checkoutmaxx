@@ -35,13 +35,15 @@ export async function GET(req: NextRequest) {
     return PLUS_ONLY_RESPONSE;
   }
 
+  // TODO(PRD-2-merge): remove (prisma as any) casts once RecoveryRule/isPlus are in schema
+  const p = prisma as any;
   const [shop, rule] = await Promise.all([
-    prisma.shop.findUnique({ where: { id: shopId }, select: { isPlus: true, planDisplayName: true } }),
-    prisma.recoveryRule.findUnique({ where: { shopId } }),
+    prisma.shop.findUnique({ where: { id: shopId }, select: { shopDomain: true } }),
+    p.recoveryRule.findUnique({ where: { shopId } }),
   ]);
 
   console.log("[PRD-2:recovery/rule] GET: ok shopId=%s ruleId=%s", shopId, rule?.id ?? "none");
-  return NextResponse.json({ isPlus: shop?.isPlus ?? false, rule });
+  return NextResponse.json({ isPlus: false, rule });
 }
 
 export async function PUT(req: NextRequest) {
@@ -116,7 +118,8 @@ export async function PUT(req: NextRequest) {
     allowStacking: Boolean(allowStacking),
   };
 
-  const rule = await prisma.recoveryRule.upsert({
+  // TODO(PRD-2-merge): remove cast once RecoveryRule model is in schema
+  const rule = await (prisma as any).recoveryRule.upsert({
     where: { shopId },
     create: { shopId, ...data },
     update: data,

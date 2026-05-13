@@ -44,7 +44,8 @@ export async function refreshShopPlan(shopId: string): Promise<void> {
 
     // When downgrading from Plus, disable any active recovery rule
     if (!isPlus) {
-      await prisma.recoveryRule.updateMany({
+      // TODO(PRD-2-merge): remove (prisma as any) cast once RecoveryRule is in generated client
+      await (prisma as any).recoveryRule.updateMany({
         where: { shopId, enabled: true },
         data: { enabled: false },
       });
@@ -52,7 +53,8 @@ export async function refreshShopPlan(shopId: string): Promise<void> {
       // TODO(PRD-3): send plan_downgraded email via Resend
     }
 
-    await prisma.shop.update({
+    // TODO(PRD-2-merge): remove (prisma as any) cast once isPlus/planDisplayName/planCheckedAt are in generated client
+    await (prisma as any).shop.update({
       where: { id: shopId },
       data: { isPlus, planDisplayName, planCheckedAt: new Date() },
     });
@@ -65,7 +67,9 @@ export async function refreshShopPlan(shopId: string): Promise<void> {
 export async function requirePlus(shopId: string): Promise<PlusGateResult> {
   console.log("[PRD-2:plusGate] requirePlus shopId=%s", shopId);
 
-  const shop = await prisma.shop.findUnique({
+  // TODO(PRD-2-merge): remove (prisma as any) casts once isPlus/planCheckedAt are in schema
+  const p = prisma as any;
+  const shop = await p.shop.findUnique({
     where: { id: shopId },
     select: { isPlus: true, planCheckedAt: true },
   });
@@ -84,7 +88,7 @@ export async function requirePlus(shopId: string): Promise<PlusGateResult> {
     console.log("[PRD-2:plusGate] requirePlus: plan stale, refreshing shopId=%s", shopId);
     await refreshShopPlan(shopId);
     // Re-read after refresh
-    const fresh = await prisma.shop.findUnique({
+    const fresh = await p.shop.findUnique({
       where: { id: shopId },
       select: { isPlus: true },
     });

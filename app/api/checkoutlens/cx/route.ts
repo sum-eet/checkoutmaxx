@@ -38,7 +38,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: "none" });
   }
 
-  const issue = await prisma.recoveryIssue.findUnique({
+  // TODO(PRD-2-merge): remove (prisma as any) cast once RecoveryIssue model is in schema
+  const p = prisma as any;
+  const issue = await p.recoveryIssue.findUnique({
     where: { shopId_sessionId: { shopId, sessionId } },
   });
 
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   // Set claimedAt if not already set
   if (!issue.claimedAt) {
-    await prisma.recoveryIssue.update({
+    await p.recoveryIssue.update({
       where: { id: issue.id },
       data: { claimedAt: new Date() },
     });

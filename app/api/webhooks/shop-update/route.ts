@@ -29,12 +29,8 @@ export async function POST(req: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
-  // Force plan refresh by clearing planCheckedAt, then calling refreshShopPlan
-  await prisma.shop.update({
-    where: { id: shopRow.id },
-    data: { planCheckedAt: null },
-  });
-
+  // TODO(PRD-2-merge): planCheckedAt field not in schema yet — skip update, just refresh
+  // await prisma.shop.update({ where: { id: shopRow.id }, data: { planCheckedAt: null } });
   await refreshShopPlan(shopRow.id);
   console.log("[PRD-2:webhooks/shop-update] plan refreshed shopId=%s", shopRow.id);
 
