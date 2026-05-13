@@ -253,8 +253,9 @@ export default function RecoveryPage() {
 
       {/* App Bridge Save Bar — rendered as a custom element, managed via window.shopify.saveBar */}
       <ui-save-bar id="recovery-rule-savebar">
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <button
-          variant="primary"
+          {...({ variant: "primary" } as any)}
           onClick={save}
           disabled={saving}
         >
