@@ -1,24 +1,31 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * PRD-3 — POST /api/webhooks/app-subscriptions-update
+ * Handles all APP_SUBSCRIPTIONS_UPDATE events from Shopify.
+ * Verifies HMAC first. Syncs subscription status and billing plan.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
-import { getShop } from "@/lib/shop";
+import { createHmac } from "crypto";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
-  console.log("[billing/webhook] ====== APP_SUBSCRIPTIONS_UPDATE HIT ======");
+  console.log("[PRD-3:webhook/app-subscriptions-update] ====== HIT ======");
 
   const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
   if (!hmacHeader) {
-    console.error("[billing/webhook] NO HMAC HEADER");
+    console.error("[PRD-3:webhook/app-subscriptions-update] NO HMAC HEADER");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const rawBody = await req.text();
-  const { createHmac } = await import("crypto");
   const secret = process.env.SHOPIFY_API_SECRET!;
   const computed = createHmac("sha256", secret).update(rawBody, "utf8").digest("base64");
 
   if (computed !== hmacHeader) {
-    console.error("[billing/webhook] HMAC MISMATCH");
+    console.error("[PRD-3:webhook/app-subscriptions-update] HMAC MISMATCH");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,44 +33,108 @@ export async function POST(req: NextRequest) {
   try {
     body = JSON.parse(rawBody);
   } catch {
-    console.error("[billing/webhook] INVALID JSON BODY");
+    console.error("[PRD-3:webhook/app-subscriptions-update] INVALID JSON");
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  // Payload: { app_subscription: { status, name, ... }, shop_domain: "..." }
-  const shop = body?.shop_domain as string | undefined;
-  const status = body?.app_subscription?.status as string | undefined;
+  const shopDomain = (req.headers.get("x-shopify-shop-domain") ?? body?.shop_domain) as string | undefined;
+  const appSub = body?.app_subscription;
+  const status = appSub?.status as string | undefined;
+  const adminGraphqlApiId = appSub?.admin_graphql_api_id as string | undefined;
+  const currentPeriodEnd = appSub?.current_period_end as string | undefined;
 
-  if (!shop || !status) {
-    console.error("[billing/webhook] MISSING FIELDS: shop=%s status=%s", shop, status);
+  if (!shopDomain || !status) {
+    console.error(
+      "[PRD-3:webhook/app-subscriptions-update] MISSING FIELDS shop=%s status=%s",
+      shopDomain,
+      status,
+    );
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  console.log("[billing/webhook] shop=%s status=%s", shop, status);
+  console.log(
+    "[PRD-3:webhook/app-subscriptions-update] shop=%s status=%s adminGid=%s",
+    shopDomain,
+    status,
+    adminGraphqlApiId,
+  );
 
-  const activeShop = await getShop(shop);
-  if (!activeShop) {
-    console.error("[billing/webhook] active shop not found:", shop);
-    return NextResponse.json({ error: "Shop not found" }, { status: 404 });
+  // Build the GID from the numeric id Shopify sends
+  const gid = adminGraphqlApiId
+    ? `gid://shopify/AppSubscription/${adminGraphqlApiId}`
+    : null;
+
+  // Find shop
+  const shop = await prisma.shop.findFirst({
+    where: { shopDomain },
+    select: { id: true, subscriptionId: true, billingPlan: true },
+  });
+
+  if (!shop) {
+    console.warn("[PRD-3:webhook/app-subscriptions-update] shop not found domain=%s", shopDomain);
+    // Return 200 — Shopify retries on 4xx/5xx
+    return NextResponse.json({ ok: true, warn: "shop_not_found" });
   }
 
-  const updatePayload: Record<string, string | null> =
-    status === "ACTIVE"
-      ? { subscriptionStatus: "ACTIVE", billingPlan: "pro" }
-      : status === "DECLINED" || status === "EXPIRED" || status === "CANCELLED"
-      ? { subscriptionStatus: status, billingPlan: "free" }
-      : { subscriptionStatus: status };
+  // Build update payload based on status
+  let updateData: Record<string, unknown> = {};
 
-  const { error: updateErr } = await supabase
-    .from("Shop")
-    .update(updatePayload)
-    .eq("id", activeShop.id);
+  switch (status) {
+    case "ACTIVE":
+      updateData = {
+        subscriptionStatus: "ACTIVE",
+        currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : undefined,
+        // DO NOT change billingPlan here — /callback already set the correct value.
+        // If billingPlan is still "pending_*", it means callback hasn't run yet;
+        // leave it so the first /api/billing/me poll after redirect still sees the correct plan.
+      };
+      break;
 
-  if (updateErr) {
-    console.error("[billing/webhook] DB update failed:", updateErr.message);
-    return NextResponse.json({ error: "DB update failed" }, { status: 500 });
+    case "CANCELLED":
+      updateData = {
+        subscriptionStatus: "CANCELLED",
+        // Keep billingPlan — merchant retains access until EXPIRED fires.
+      };
+      break;
+
+    case "EXPIRED":
+    case "DECLINED":
+    case "FROZEN":
+    case "PAUSED":
+      // Downgrade to free, preserve all data
+      updateData = {
+        subscriptionStatus: status,
+        billingPlan: "free",
+        planChangedAt: new Date(),
+      };
+      break;
+
+    case "PENDING":
+      // No-op
+      console.log("[PRD-3:webhook/app-subscriptions-update] PENDING no-op shopId=%s", shop.id);
+      return NextResponse.json({ ok: true });
+
+    default:
+      console.warn("[PRD-3:webhook/app-subscriptions-update] unknown status=%s shopId=%s", status, shop.id);
+      updateData = { subscriptionStatus: status };
   }
 
-  console.log("[billing/webhook] ====== DONE: shop=%s status=%s ======", shop, status);
+  // Adopt the subscription GID if it matches or if we had none
+  if (gid && (!shop.subscriptionId || shop.subscriptionId === gid)) {
+    updateData.subscriptionId = gid;
+  }
+
+  await prisma.shop.update({
+    where: { id: shop.id },
+    data: updateData,
+  });
+
+  console.log(
+    "[PRD-3:webhook/app-subscriptions-update] done shopId=%s status=%s billingPlan=%s",
+    shop.id,
+    status,
+    updateData.billingPlan ?? "(unchanged)",
+  );
+
   return NextResponse.json({ ok: true });
 }

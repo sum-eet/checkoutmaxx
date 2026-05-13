@@ -153,6 +153,16 @@ export async function GET(req: NextRequest) {
         console.error("[AUTH] BG: shop plan refresh error", err?.message);
       }
     })(),
+    (async () => {
+      try {
+        // PRD-3: reconcile billing state on reinstall
+        const { reconcileOnInstall } = await import("@/lib/billing/reconcile");
+        await reconcileOnInstall(shopIdCapture);
+        console.log("[AUTH] BG: billing reconciled shopId=%s", shopIdCapture);
+      } catch (err: any) {
+        console.error("[AUTH] BG: billing reconcile error", err?.message);
+      }
+    })(),
   ]));
 
   // Redirect to embedded admin
