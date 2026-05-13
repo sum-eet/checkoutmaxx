@@ -6,6 +6,7 @@ import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { requirePlus } from "@/lib/billing/plusGate";
 import { prisma } from "@/lib/prisma";
+import { recomputeOnboarding } from "@/lib/onboarding/recompute";
 
 const PLUS_ONLY_RESPONSE = NextResponse.json(
   { error: "plus_only", upgrade_url: "https://www.shopify.com/plus" },
@@ -126,5 +127,15 @@ export async function PUT(req: NextRequest) {
   });
 
   console.log("[PRD-2:recovery/rule] PUT: saved ruleId=%s shopId=%s enabled=%s", rule.id, shopId, rule.enabled);
+
+  // PRD-4: recompute onboarding state when recovery rule is toggled (step4 check)
+  try {
+    await recomputeOnboarding(shopId);
+    console.log("[PRD-4:recovery/rule] PUT: onboarding recomputed shopId=%s", shopId);
+  } catch (err: any) {
+    // Non-fatal: onboarding must not block rule saves
+    console.error("[PRD-4:recovery/rule] PUT: recompute error (non-fatal)", err.message);
+  }
+
   return NextResponse.json({ rule });
 }

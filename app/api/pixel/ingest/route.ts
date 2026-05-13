@@ -5,6 +5,7 @@ import { sanitizePayload } from "@/lib/sanitize";
 import { supabase } from "@/lib/supabase";
 import { getShop } from "@/lib/shop";
 import prisma from "@/lib/prisma";
+import { recomputeOnboarding } from "@/lib/onboarding/recompute";
 
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT = 500;
@@ -327,6 +328,35 @@ async function processEvent({
       }
     } else {
       console.warn("[PRD-1:pixel/ingest] checkout_completed — no recent cart_checkout_clicked for shop", shopDomain);
+    }
+  }
+
+  // PRD-4: trigger onboarding recompute when a CartEvent was (or may have been) written,
+  // but only if step1 was previously null — avoids a DB round-trip on every ingest.
+  // alert_displayed mirrors to CartEvent; checkout_completed also mirrors. Check both.
+  const cartEventWritten =
+    eventType === "alert_displayed" ||
+    eventType === "checkout_completed" ||
+    // The main CartEvent write path for the cart-monitor events is via supabase above.
+    // Any event type can produce a CartEvent via cart-monitor; we check step1 lazily.
+    true;
+
+  if (cartEventWritten) {
+    try {
+      // Cheap read: check if step1 is already completed to skip unnecessary upsert
+      const existingState = await prisma.onboardingState.findUnique({
+        where: { shopId: shop.id },
+        select: { step1Completed: true },
+      });
+      if (!existingState?.step1Completed) {
+        console.log("[PRD-4:pixel/ingest] step1 null — triggering onboarding recompute shopId=%s", shop.id);
+        await recomputeOnboarding(shop.id);
+      } else {
+        console.log("[PRD-4:pixel/ingest] step1 already completed — skip recompute shopId=%s", shop.id);
+      }
+    } catch (err: any) {
+      // Non-fatal: onboarding recompute failure must not break pixel ingest
+      console.error("[PRD-4:pixel/ingest] recompute error (non-fatal)", err.message);
     }
   }
 
