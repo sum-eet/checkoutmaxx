@@ -18,6 +18,7 @@
     "@prisma/extension-accelerate": "^3.0.1",
     "@shopify/app-bridge-react": "^4.1.6",
     "@shopify/polaris": "^12.9.0",
+    "@shopify/polaris-viz": "^16.16.0",
     "@shopify/shopify-api": "^12.3.0",
     "@supabase/supabase-js": "^2.99.1",
     "@vercel/functions": "^3.4.3",
