@@ -6,7 +6,7 @@ import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { recomputeOnboarding } from "@/lib/onboarding/recompute";
 
-// TODO(PRD-3): add requireFeature(shopId, "onboarding") if onboarding becomes a gated feature.
+// PRD-3: onboarding is a free feature — no feature gate required.
 
 export async function GET(req: NextRequest) {
   console.log("[PRD-4:onboarding/state] GET entry url=%s", req.url);

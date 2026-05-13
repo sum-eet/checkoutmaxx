@@ -1,10 +1,12 @@
 "use client";
 
+// PRD-3: TrendCard is wrapped in FeatureGate with feature="trend_chart"
+
 import { Card, BlockStack, Text, EmptyState, SkeletonBodyText } from "@shopify/polaris";
 import { LineChart } from "@shopify/polaris-viz";
 import type { TrendBucket } from "@/lib/analytics/checkoutTrend";
-
-// TODO(PRD-3): wrap in FeatureGate with feature="trend_chart", fallback=<UpgradeCard requiredTier="standard" />
+import { FeatureGate } from "@/components/billing/FeatureGate";
+import { UpgradeCard } from "@/components/billing/UpgradeCard";
 
 interface TrendCardProps {
   buckets: TrendBucket[] | null;
@@ -12,7 +14,7 @@ interface TrendCardProps {
   error?: boolean;
 }
 
-export default function TrendCard({ buckets, loading, error }: TrendCardProps) {
+function TrendCardInner({ buckets, loading, error }: TrendCardProps) {
   if (loading) {
     return (
       <Card>
@@ -72,5 +74,16 @@ export default function TrendCard({ buckets, loading, error }: TrendCardProps) {
         </div>
       </BlockStack>
     </Card>
+  );
+}
+
+export default function TrendCard(props: TrendCardProps) {
+  return (
+    <FeatureGate
+      feature="trend_chart"
+      fallback={<UpgradeCard requiredTier="standard" feature="trend_chart" />}
+    >
+      <TrendCardInner {...props} />
+    </FeatureGate>
   );
 }

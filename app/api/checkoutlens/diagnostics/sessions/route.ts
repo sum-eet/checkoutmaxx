@@ -6,7 +6,7 @@ import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { prisma } from "@/lib/prisma";
 
-// TODO(PRD-3): add requireFeature guard if sessions diagnostic becomes gated.
+// PRD-3: diagnostics/sessions is a free feature — no feature gate required.
 
 /**
  * GET /api/checkoutlens/diagnostics/sessions?window=1h

@@ -22,6 +22,8 @@ import type { DateRange } from "@/components/checkoutlens/DateRangePicker";
 import { KpiCard } from "@/components/checkoutlens/dashboard/KpiCard";
 import { UpgradeKpiCard } from "@/components/checkoutlens/dashboard/UpgradeKpiCard";
 import { HeatmapGrid } from "@/components/checkoutlens/dashboard/HeatmapGrid";
+import { FeatureGate } from "@/components/billing/FeatureGate";
+import { UpgradeCard } from "@/components/billing/UpgradeCard";
 
 import type { DashboardPayload, DashboardKpis } from "@/lib/analytics/dashboardAggregator";
 import { WelcomeModal } from "@/components/checkoutlens/onboarding/WelcomeModal";
@@ -252,17 +254,19 @@ function DashboardInner() {
               sparkline={kpi?.aovSpark ?? []}
               loading={loading}
             />
-            {/*
-              TODO(PRD-3): wrap in <FeatureGate feature="recovery" fallback={<UpgradeKpiCard>}>
-              For now render unconditionally so the card is visible in all tiers.
-            */}
-            <KpiCard
-              title="Recovered sales"
-              value={recoveredValue === "—" && !sparse ? "$0" : recoveredValue}
-              delta={sparse ? null : (kpi?.recoveredDelta ?? null)}
-              sparkline={kpi?.recoveredSpark ?? []}
-              loading={loading}
-            />
+            {/* PRD-3: recovery KPI gated to Plus tier */}
+            <FeatureGate
+              feature="recovery"
+              fallback={<UpgradeKpiCard title="Recovered sales" onUpgrade={() => { window.top!.location.href = "/checkoutlens/billing"; }} />}
+            >
+              <KpiCard
+                title="Recovered sales"
+                value={recoveredValue === "—" && !sparse ? "$0" : recoveredValue}
+                delta={sparse ? null : (kpi?.recoveredDelta ?? null)}
+                sparkline={kpi?.recoveredSpark ?? []}
+                loading={loading}
+              />
+            </FeatureGate>
           </InlineGrid>
 
           {/* Checkout funnel */}

@@ -6,7 +6,7 @@ import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { prisma } from "@/lib/prisma";
 
-// TODO(PRD-3): add requireFeature guard if needed.
+// PRD-3: onboarding is a free feature — no feature gate required.
 
 /**
  * POST /api/checkoutlens/onboarding/dismiss

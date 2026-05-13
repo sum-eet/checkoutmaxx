@@ -1,11 +1,11 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { supabase } from "@/lib/supabase";
 import { getCheckoutTrend } from "@/lib/analytics/checkoutTrend";
-
-// TODO(PRD-3): requireFeature(shopId, "trend_chart")
+import { requireFeature } from "@/lib/billing/gate";
 
 export async function GET(req: NextRequest) {
   console.log("[PRD-1:analytics/trend] GET", req.url);
@@ -20,6 +20,13 @@ export async function GET(req: NextRequest) {
   if (!shop) {
     console.warn("[PRD-1:analytics/trend] no shop", authed.shopDomain);
     return NextResponse.json({ error: "No shop" }, { status: 400 });
+  }
+
+  // PRD-3: server-side feature gate (throws 402 if not on Standard+)
+  try {
+    await requireFeature(shop.id, "trend_chart");
+  } catch (gateResponse) {
+    return gateResponse as Response;
   }
 
   // Fetch shop timezone for correct bucket boundaries

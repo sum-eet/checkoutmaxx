@@ -29,7 +29,13 @@ export async function GET(req: NextRequest) {
   }
   const shopId = shopRow.id;
 
-  // TODO(PRD-3): requireFeature(shopId, "recovery")
+  // PRD-3: requireFeature gate (replaces TODO(PRD-3) marker)
+  const { requireFeature } = await import("@/lib/billing/gate");
+  try {
+    await requireFeature(shopId, "recovery");
+  } catch (gateResponse) {
+    return gateResponse as Response;
+  }
   const gate = await requirePlus(shopId);
   if (!gate.ok) {
     console.log("[PRD-2:recovery/rule] GET: plus gate fail reason=%s shopId=%s", gate.reason, shopId);
@@ -63,7 +69,13 @@ export async function PUT(req: NextRequest) {
   }
   const shopId = shopRow.id;
 
-  // TODO(PRD-3): requireFeature(shopId, "recovery")
+  // PRD-3: requireFeature gate (replaces TODO(PRD-3) marker)
+  const { requireFeature: requireFeaturePUT } = await import("@/lib/billing/gate");
+  try {
+    await requireFeaturePUT(shopId, "recovery");
+  } catch (gateResponse) {
+    return gateResponse as Response;
+  }
   const gate = await requirePlus(shopId);
   if (!gate.ok) {
     console.log("[PRD-2:recovery/rule] PUT: plus gate fail reason=%s shopId=%s", gate.reason, shopId);

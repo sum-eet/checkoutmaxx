@@ -1,10 +1,10 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { getCheckoutFunnel } from "@/lib/analytics/checkoutFunnel";
-
-// TODO(PRD-3): requireFeature(shopId, "segmentation_filters") for country/device/discountUsage params
+import { requireFeature } from "@/lib/billing/gate";
 
 export async function GET(req: NextRequest) {
   console.log("[PRD-1:analytics/funnel] GET", req.url);
@@ -27,6 +27,16 @@ export async function GET(req: NextRequest) {
   const country = searchParams.get("country") || undefined;
   const device = (searchParams.get("device") as "mobile" | "tablet" | "desktop") || undefined;
   const discountUsage = (searchParams.get("discountUsage") as "used" | "failed" | "none") || undefined;
+
+  // PRD-3: only gate segmentation params — base funnel (no filters) is free
+  const hasSegmentation = !!(country || device || discountUsage);
+  if (hasSegmentation) {
+    try {
+      await requireFeature(shop.id, "segmentation_filters");
+    } catch (gateResponse) {
+      return gateResponse as Response;
+    }
+  }
 
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });

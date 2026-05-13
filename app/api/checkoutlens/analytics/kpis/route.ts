@@ -1,10 +1,10 @@
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { getKpis } from "@/lib/analytics/kpis";
-
-// TODO(PRD-3): requireFeature(shopId, "custom_date_range") for non-default date ranges
+import { requireFeature } from "@/lib/billing/gate";
 
 export async function GET(req: NextRequest) {
   console.log("[PRD-1:analytics/kpis] GET", req.url);
@@ -27,6 +27,19 @@ export async function GET(req: NextRequest) {
   const country = searchParams.get("country") || undefined;
   const device = (searchParams.get("device") as "mobile" | "tablet" | "desktop") || undefined;
   const discountUsage = (searchParams.get("discountUsage") as "used" | "failed" | "none") || undefined;
+
+  // PRD-3: custom date range (anything other than the default last-30d) requires Standard+
+  // We detect "custom" as start param being explicitly provided with a range > 30d
+  const DEFAULT_30D_MS = 30 * 86400 * 1000;
+  const rangeMs = end.getTime() - start.getTime();
+  const isCustomRange = searchParams.has("start") && rangeMs > DEFAULT_30D_MS + 60_000; // 1 min tolerance
+  if (isCustomRange) {
+    try {
+      await requireFeature(shop.id, "custom_date_range");
+    } catch (gateResponse) {
+      return gateResponse as Response;
+    }
+  }
 
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return NextResponse.json({ error: "Invalid date range" }, { status: 400 });

@@ -6,7 +6,7 @@ import { getAuthenticatedShopAndToken } from "@/lib/verify-session-token";
 import { ensureShop } from "@/lib/shop";
 import { recomputeOnboarding } from "@/lib/onboarding/recompute";
 
-// TODO(PRD-3): add requireFeature guard if needed.
+// PRD-3: onboarding is a free feature — no feature gate required.
 
 export async function POST(req: NextRequest) {
   console.log("[PRD-4:onboarding/recompute] POST entry");

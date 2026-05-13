@@ -4,7 +4,7 @@ import { Card, BlockStack, Text, DataTable, EmptyState, SkeletonBodyText } from 
 import { FunnelChartNext } from "@shopify/polaris-viz";
 import type { FunnelStep } from "@/lib/analytics/checkoutFunnel";
 
-// TODO(PRD-3): wrap in FeatureGate if FunnelCard gets gated
+// PRD-3: FunnelCard is free-tier (no gate). Segmentation params are gated server-side via requireFeature("segmentation_filters").
 
 interface FunnelCardProps {
   steps: FunnelStep[] | null;
