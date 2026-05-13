@@ -284,6 +284,7 @@ function DashboardInner() {
                       })),
                     },
                   ]}
+                  percentageFormatter={(v) => v.toFixed(2) + "%"}
                 />
               ) : (
                 <EmptyState heading="Not enough data" image="" />

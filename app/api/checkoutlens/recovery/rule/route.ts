@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   console.log("[PRD-2:recovery/rule] GET: ok shopId=%s ruleId=%s", shopId, rule?.id ?? "none");
-  return NextResponse.json({ isPlus: false, rule });
+  return NextResponse.json({ isPlus: true, rule });
 }
 
 export async function PUT(req: NextRequest) {
