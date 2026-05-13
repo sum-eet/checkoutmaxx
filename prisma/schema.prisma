@@ -41,9 +41,12 @@ model Shop {
   trialEndsAt        DateTime?
   billingPlan        String    @default("free")
 
-  planDisplayName String?
-  isPlus          Boolean   @default(false)
-  planCheckedAt   DateTime?
+  planDisplayName    String?
+  isPlus             Boolean   @default(false)
+  planCheckedAt      DateTime?
+  partnerDevelopment Boolean   @default(false)
+  currentPeriodEnd   DateTime?
+  planChangedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -101,6 +104,29 @@ model OnboardingState {
   startedAt      DateTime  @default(now())
 
   shop Shop @relation(fields: [shopId], references: [id])
+}
+
+model FeatureFlag {
+  id           String   @id @default(cuid())
+  featureKey   String   @unique
+  tierRequired String
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  overrides    FeatureFlagOverride[]
+}
+
+model FeatureFlagOverride {
+  id         String      @id @default(cuid())
+  featureKey String
+  shopId     String
+  enabled    Boolean
+  reason     String?
+  expiresAt  DateTime?
+  createdAt  DateTime    @default(now())
+  flag       FeatureFlag @relation(fields: [featureKey], references: [featureKey])
+
+  @@unique([featureKey, shopId])
 }
 
 model CartEvent {
