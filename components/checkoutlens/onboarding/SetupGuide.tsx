@@ -19,7 +19,7 @@ import {
   Spinner,
   Badge,
 } from "@shopify/polaris";
-import { CheckCircleIcon, CircleIcon } from "@shopify/polaris-icons";
+import { CheckCircleIcon, QuestionCircleIcon } from "@shopify/polaris-icons";
 import type { OnboardingResult, OnboardingStepResult } from "@/lib/onboarding/recompute";
 
 const SESSION_DISMISSED_KEY = "cl:setup_dismissed";
@@ -220,13 +220,13 @@ function StepRow({ step, sessionCount, diagnosticsPolling, onReinstallPixel }: S
       {/* Status icon */}
       <div style={{ flexShrink: 0, paddingTop: 2 }}>
         <Icon
-          source={effectiveCompleted ? CheckCircleIcon : CircleIcon}
+          source={effectiveCompleted ? CheckCircleIcon : QuestionCircleIcon}
           tone={effectiveCompleted ? "success" : "subdued"}
         />
       </div>
 
       {/* Content */}
-      <BlockStack gap="100" inlineSize="grow">
+      <BlockStack gap="100">
         <InlineStack gap="200" blockAlign="center">
           <Text as="span" variant="bodyMd" fontWeight="semibold">
             {step.title}
